@@ -78,6 +78,7 @@ a:hover{ color:var(--amber); }
   display:inline-flex; align-items:center; gap:7px;
   font-family:var(--mono); font-size:12px; color:var(--ink-2);
   border:1px solid var(--rule-2); border-radius:999px; padding:6px 12px;
+  white-space:nowrap;
 }
 .gh-pill svg{ width:16px; height:16px; flex:none; }
 .gh-pill:hover{ color:var(--amber); border-color:rgba(255,184,107,.4); }
@@ -232,6 +233,9 @@ footer .meta a:hover{ color:var(--amber); }
   .steps, .grid{ grid-template-columns:1fr; }
   .byo{ grid-template-columns:1fr 1fr; }
   .top .hint{ display:none; }
+  /* one line up top: just the repo pill, centered */
+  .top{ justify-content:center; }
+  .top .brand{ display:none; }
   section{ padding:44px 0; }
 }
 @media (max-width:440px){
@@ -262,9 +266,8 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="orb" aria-hidden="true"></div>
     <div class="eyebrow">OPEN SOURCE · SELF-HOSTED · MIT</div>
     <h1>A prompt bar that <em>edits</em> the site it's on.</h1>
-    <p class="lede">Tap the bar below, ask for a change — typed, dictated, or photographed. Your own server
-      runs a real Claude Code session against the site's repo, commits, and pushes to <code>main</code>.
-      Bring the Claude Code subscription you already have; everything else is yours to run.</p>
+    <p class="lede">Ask for a change — typed, dictated, or photographed. A real Claude Code session on
+      your own server edits the repo and pushes to <code>main</code>.</p>
 
     <div class="cta-row">
       <a class="btn primary" href="https://github.com/vibhasjain/agent-keyboard">
