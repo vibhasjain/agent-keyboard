@@ -1,0 +1,49 @@
+# Fly config for the Agent Keyboard server. To self-host, rename `app` to your
+# own Fly app and create the volume it mounts:
+#   fly apps create your-app
+#   fly volumes create agent_data --region iad --size 3 -a your-app
+#
+# Everything owner-specific lives in Fly secrets, NOT here. Required:
+#   fly secrets set CLAUDE_CODE_OAUTH_TOKEN=... SUPABASE_URL=... SUPABASE_ANON_KEY=... \
+#     SUPABASE_SERVICE_KEY=... ALLOWED_EMAIL=... GH_TOKEN=... \
+#     SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
+# Optional: OPENAI_API_KEY (voice), ALLOWED_USER_ID, EXTRA_ORIGINS. See SELF_HOSTING.md.
+app = "agent-keyboard"
+primary_region = "iad"
+
+# Build runs with the repo root as context (so the widget/ dir is available to
+# the Dockerfile's widget stage):
+#   flyctl deploy . --config server/fly.toml --dockerfile server/Dockerfile
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  HOME = "/data"
+  IS_SANDBOX = "1"
+  NODE_ENV = "production"
+  CLAUDE_MODEL = "opus"
+  GIT_AUTHOR_NAME = "Agent Keyboard"
+  GIT_COMMITTER_NAME = "Agent Keyboard"
+  GIT_AUTHOR_EMAIL = "agent@agentkeyboard.com"
+  GIT_COMMITTER_EMAIL = "agent@agentkeyboard.com"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Keep one machine warm so the in-process job registry + site mutex are always
+  # available; the durable checkouts and session JSONLs persist on the volume.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+# Persistent volume holds HOME=/data: per-site git checkouts (FIXED cwd paths,
+# session-hash stable) and the Claude Code session JSONLs (memory + compaction).
+[[mounts]]
+  source = "agent_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"

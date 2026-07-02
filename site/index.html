@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a0a" />
+<title>Agent Keyboard — an open-source prompt bar that edits the site it's on</title>
+<meta name="description" content="One script tag on your static site. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session against the site's repo and pushes to main. Self-hosted, single-owner, MIT." />
+
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Agent Keyboard — an open-source prompt bar that edits the site it's on" />
+<meta property="og:description" content="One script tag on your static site. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session against the site's repo and pushes to main. Self-hosted, single-owner, MIT." />
+<meta property="og:url" content="https://agentkeyboard.com/" />
+<meta property="og:image" content="https://agentkeyboard.com/og.jpg?v=6" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Agent Keyboard — an open-source prompt bar that edits the site it's on" />
+<meta name="twitter:description" content="One script tag on your static site. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session against the site's repo and pushes to main. Self-hosted, single-owner, MIT." />
+<meta name="twitter:image" content="https://agentkeyboard.com/og.jpg?v=6" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#0a0a0a; --bg-2:#111110; --bg-3:#161513;
+  --ink:#f5f1ea; --ink-2:#b8b2a7; --ink-3:#6f6a61;
+  --rule:#211f1c; --rule-2:#2a2723;
+  --amber:#ffb86b; --amber-2:#f9a26c; --amber-deep:#c4651a;
+  --warm:#e7d3b8; --violet:#b794f6; --ok:#6dd396;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+  --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --wrap:960px;
+}
+*{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; }
+body{
+  min-height:100vh;
+  /* room for the fixed widget bar at the bottom */
+  padding-bottom:calc(96px + env(safe-area-inset-bottom,0px));
+  font-family:var(--sans); color:var(--ink);
+  line-height:1.6; -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,184,107,.10), transparent 60%),
+    radial-gradient(ellipse 90% 60% at 50% 110%, rgba(255,184,107,.06), transparent 60%),
+    var(--bg);
+  background-attachment:fixed;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity:.035; mix-blend-mode:overlay;
+}
+::selection{ background:var(--amber); color:#1a1208; }
+a{ color:var(--amber-2); text-decoration:none; }
+a:hover{ color:var(--amber); }
+
+.wrap{ position:relative; z-index:1; max-width:var(--wrap); margin:0 auto; padding:0 22px; }
+
+/* ---- top bar ---- */
+.top{ display:flex; align-items:center; justify-content:space-between; gap:14px; padding:22px 0 8px; }
+.brand{ display:flex; align-items:center; gap:11px; }
+.brand .dot{
+  width:22px; height:22px; border-radius:50%;
+  background:radial-gradient(circle at 32% 28%, #fff5e2, var(--amber) 40%, var(--amber-deep) 96%);
+  box-shadow:0 2px 10px rgba(255,134,60,.5);
+}
+.brand b{ font-weight:600; font-size:15px; letter-spacing:.01em; }
+.top-right{ display:flex; align-items:center; gap:16px; }
+.gh-pill{
+  display:inline-flex; align-items:center; gap:7px;
+  font-family:var(--mono); font-size:12px; color:var(--ink-2);
+  border:1px solid var(--rule-2); border-radius:999px; padding:6px 12px;
+}
+.gh-pill svg{ width:16px; height:16px; flex:none; }
+.gh-pill:hover{ color:var(--amber); border-color:rgba(255,184,107,.4); }
+.top .hint{ font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+.top .hint b{ color:var(--amber); font-weight:500; }
+
+/* ---- hero ---- */
+.hero{ padding:60px 0 40px; text-align:center; }
+.hero .orb{
+  width:104px; height:104px; border-radius:50%; margin:0 auto 34px;
+  background:radial-gradient(circle at 32% 28%, #fff5e2, var(--amber) 38%, var(--amber-deep) 95%);
+  box-shadow:0 10px 40px rgba(255,134,60,.4), 0 0 0 8px rgba(255,184,107,.06), 0 0 0 18px rgba(255,184,107,.03);
+  animation:breathe 3s ease-in-out infinite;
+}
+@keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
+.eyebrow{ font-family:var(--mono); font-size:12px; letter-spacing:.18em; text-transform:uppercase; color:var(--amber); margin-bottom:20px; }
+h1{
+  font-family:var(--serif); font-weight:400; letter-spacing:-.01em;
+  font-size:clamp(40px, 8vw, 76px); line-height:1.02; margin:0 auto; max-width:14ch;
+}
+h1 em{ font-style:italic; color:var(--warm); }
+.lede{ max-width:60ch; margin:26px auto 0; font-size:clamp(16px,2.3vw,19px); color:var(--ink-2); }
+.lede code{ font-family:var(--mono); font-size:.86em; color:var(--warm); }
+
+/* ---- cta row ---- */
+.cta-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin:32px auto 0; }
+.btn{
+  display:inline-flex; align-items:center; gap:9px;
+  font-family:var(--mono); font-size:13px; letter-spacing:.01em;
+  padding:12px 20px; border-radius:12px; border:1px solid var(--rule-2);
+  color:var(--ink-2); cursor:pointer; transition:box-shadow .2s ease, border-color .2s ease, color .2s ease;
+}
+.btn svg{ width:16px; height:16px; flex:none; }
+.btn.primary{ color:var(--amber); border-color:rgba(255,184,107,.45); }
+.btn.primary:hover{ color:var(--amber); border-color:var(--amber); box-shadow:0 6px 26px rgba(255,184,107,.18); }
+.btn.ghost:hover{ color:var(--warm); border-color:var(--rule-2); }
+
+/* ---- install line ---- */
+.install{
+  max-width:760px; margin:34px auto 0; display:flex; align-items:center; gap:12px;
+  background:var(--bg-2); border:1px solid var(--rule-2); border-radius:14px;
+  padding:14px 16px; overflow-x:auto;
+}
+.install code{ font-family:var(--mono); font-size:13px; color:var(--warm); white-space:nowrap; }
+.k{ color:var(--violet); } .a{ color:var(--amber); } .s{ color:var(--ok); } .c{ color:var(--ink-3); }
+.copybtn{
+  margin-left:auto; flex:none; font-family:var(--mono); font-size:11px; cursor:pointer;
+  color:var(--ink-2); background:transparent; border:1px solid var(--rule-2); border-radius:8px; padding:5px 9px;
+}
+.copybtn:hover{ color:var(--amber); border-color:rgba(255,184,107,.4); }
+.install-cap{ font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin:12px auto 0; }
+
+/* ---- corner callout ---- */
+.callout{ max-width:620px; margin:26px auto 0; font-family:var(--mono); font-size:12.5px; color:var(--ink-3); }
+.callout b{ color:var(--warm); font-weight:500; }
+.callout .arrow{ color:var(--amber); }
+
+/* ---- section scaffolding ---- */
+section{ padding:58px 0; }
+.kicker{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px; text-align:center; }
+h2{ font-family:var(--serif); font-weight:400; font-size:clamp(28px,5vw,42px); line-height:1.08; text-align:center; max-width:22ch; margin:0 auto; }
+h2 em{ font-style:italic; color:var(--warm); }
+.sub{ max-width:60ch; margin:18px auto 0; text-align:center; color:var(--ink-2); font-size:16px; }
+.sub code{ font-family:var(--mono); font-size:.84em; color:var(--amber); }
+
+/* ---- demo: terminal transcript ---- */
+.demo-card{
+  max-width:680px; margin:36px auto 0;
+  background:linear-gradient(135deg, rgba(12,12,11,.96), rgba(17,17,16,.96));
+  border:1px solid var(--rule-2); border-radius:18px; padding:24px;
+  font-family:var(--mono); font-size:13px; line-height:1.75;
+}
+.tline{ display:grid; grid-template-columns:18px 1fr; align-items:start; }
+.tmark{ user-select:none; }
+.tline.prompt .tmark{ color:var(--ink-3); } .tline.prompt .tbody{ color:var(--ink-2); }
+.tline.tool .tmark{ color:var(--ok); } .tline.tool .tbody{ color:var(--ink-3); }
+.tline.think .tmark{ color:var(--violet); } .tline.think .tbody{ color:var(--violet); font-style:italic; }
+.tline.reply .tmark{ color:var(--amber); } .tline.reply .tbody{ color:var(--ink); }
+.tline.push .tmark{ color:var(--ok); } .tline.push .tbody{ color:var(--ok); }
+.demo-card .tline{ opacity:0; animation:tin .5s ease forwards; }
+.demo-card .tline:nth-child(1){ animation-delay:0ms; }
+.demo-card .tline:nth-child(2){ animation-delay:90ms; }
+.demo-card .tline:nth-child(3){ animation-delay:180ms; }
+.demo-card .tline:nth-child(4){ animation-delay:270ms; }
+.demo-card .tline:nth-child(5){ animation-delay:360ms; }
+.demo-card .tline:nth-child(6){ animation-delay:450ms; }
+.demo-card .tline:nth-child(7){ animation-delay:540ms; }
+@keyframes tin{ from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:none; } }
+.honesty{ max-width:680px; margin:16px auto 0; text-align:center; font-family:var(--mono); font-size:11.5px; color:var(--ink-3); }
+.honesty .arrow{ color:var(--amber); }
+.receipts{ text-align:center; margin-top:26px; font-size:14.5px; color:var(--ink-2); }
+
+/* ---- steps ---- */
+.steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:44px; }
+.step{ background:var(--bg-2); border:1px solid var(--rule); border-radius:18px; padding:24px 22px; }
+.step .n{ font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:.1em; }
+.step h3{ font-family:var(--serif); font-weight:400; font-size:24px; margin:12px 0 8px; }
+.step p{ font-size:14.5px; color:var(--ink-2); }
+.step p code{ font-family:var(--mono); font-size:.82em; color:var(--amber); }
+.step.edit .n{ color:var(--violet); }
+.step.ship .n{ color:var(--ok); }
+.archstrip{ text-align:center; margin-top:30px; font-family:var(--mono); font-size:12.5px; color:var(--ink-3); overflow-x:auto; }
+.archstrip .ar{ color:var(--amber); }
+
+/* ---- self-host ---- */
+.term{ position:relative; max-width:820px; margin:34px auto 0; }
+.term pre{
+  background:var(--bg-2); border:1px solid var(--rule-2); border-radius:16px;
+  padding:22px 20px; overflow-x:auto; font-family:var(--mono); font-size:13px; line-height:1.8; color:var(--ink-2);
+}
+.term .copybtn{ position:absolute; top:12px; right:12px; margin:0; }
+.footnote{ text-align:center; margin-top:18px; font-size:14px; color:var(--ink-3); }
+.byo{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; max-width:820px; margin:28px auto 0; }
+.byo-cell{ border:1px solid var(--rule); border-radius:12px; padding:15px 14px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--ink-3); }
+.byo-cell b{ display:block; color:var(--warm); font-weight:500; margin-bottom:5px; }
+
+/* ---- feature grid ---- */
+.grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:40px; }
+.feat{ border:1px solid var(--rule); border-radius:14px; padding:20px; background:var(--bg-2); }
+.feat h4{ font-size:14.5px; font-weight:600; margin-bottom:7px; }
+.feat p{ font-size:13.5px; color:var(--ink-3); }
+.feat p .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-2); white-space:nowrap; }
+
+/* ---- faq ---- */
+.faq{ max-width:760px; margin:40px auto 0; }
+.qa{ border-top:1px solid var(--rule); padding:22px 4px; }
+.qa:last-child{ border-bottom:1px solid var(--rule); }
+.qa h3{ font-family:var(--serif); font-weight:400; font-size:23px; color:var(--warm); margin-bottom:8px; }
+.qa p{ color:var(--ink-2); font-size:15px; }
+.qa code{ font-family:var(--mono); font-size:12.5px; color:var(--amber); }
+.qa .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-3); white-space:nowrap; }
+
+/* ---- footer ---- */
+footer{ border-top:1px solid var(--rule); padding:32px 0 10px; text-align:center; }
+footer .mark{ font-family:var(--serif); font-style:italic; font-size:20px; color:var(--warm); }
+footer .meta{ margin-top:10px; font-family:var(--mono); font-size:11px; color:var(--ink-3); }
+footer .meta a{ color:var(--ink-3); }
+footer .meta a:hover{ color:var(--amber); }
+
+@media (max-width:720px){
+  .steps, .grid{ grid-template-columns:1fr; }
+  .byo{ grid-template-columns:1fr 1fr; }
+  .top .hint{ display:none; }
+  section{ padding:44px 0; }
+}
+@media (max-width:440px){
+  .byo{ grid-template-columns:1fr; }
+}
+@media (prefers-reduced-motion: reduce){
+  .hero .orb{ animation:none; }
+  .demo-card .tline{ opacity:1; animation:none; }
+  html{ scroll-behavior:auto; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><span class="dot"></span><b>Agent Keyboard</b></div>
+    <div class="top-right">
+      <a class="gh-pill" href="https://github.com/vibhasjain/agent-keyboard">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        vibhasjain/agent-keyboard
+      </a>
+      <div class="hint">the orb, bottom-right, is <b>live</b> ↘</div>
+    </div>
+  </div>
+
+  <header class="hero">
+    <div class="orb" aria-hidden="true"></div>
+    <div class="eyebrow">OPEN SOURCE · SELF-HOSTED · MIT</div>
+    <h1>A prompt bar that <em>edits</em> the site it's on.</h1>
+    <p class="lede">Tap the orb, ask for a change — typed, dictated, or photographed. Your own server
+      runs a real Claude Code session against the site's repo, commits, and pushes to <code>main</code>.
+      Bring the Claude Code subscription you already have; everything else is yours to run.</p>
+
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/vibhasjain/agent-keyboard">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        Star on GitHub
+      </a>
+      <a class="btn ghost" href="#selfhost">Run your own ↓</a>
+    </div>
+
+    <div class="install">
+      <code><span class="a">&lt;script</span> <span class="k">src</span>=<span class="s">"https://agent-keyboard.fly.dev/widget.js"</span> <span class="k">data-site</span>=<span class="s">"halo"</span> <span class="k">defer</span><span class="a">&gt;&lt;/script&gt;</span></code>
+      <button class="copybtn" data-copy="&lt;script src=&quot;https://agent-keyboard.fly.dev/widget.js&quot; data-site=&quot;halo&quot; defer&gt;&lt;/script&gt;">copy</button>
+    </div>
+    <p class="install-cap">the exact tag running on this page</p>
+
+    <p class="callout"><b>This bar is live — it edits this very site.</b> <span class="arrow">↘</span></p>
+  </header>
+</div>
+
+<section id="demo">
+  <div class="wrap">
+    <div class="kicker">The demo is the product</div>
+    <h2>This page <em>edits itself</em>.</h2>
+    <p class="sub">The orb in the corner is the production widget, embedded with <code>data-site="halo"</code> —
+      pointed at this site's own repo. The repo is public now, so its commits are too.</p>
+
+    <div class="demo-card" aria-hidden="true">
+      <div class="tline prompt"><span class="tmark">&gt;</span><span class="tbody">make the hero headline bigger on phones</span></div>
+      <div class="tline tool"><span class="tmark">●</span><span class="tbody">reading index.html</span></div>
+      <div class="tline tool"><span class="tmark">●</span><span class="tbody">editing index.html</span></div>
+      <div class="tline tool"><span class="tmark">●</span><span class="tbody"><span class="a">$</span> git commit -am "Hero: larger phone headline"</span></div>
+      <div class="tline think"><span class="tmark">✻</span><span class="tbody">Pushing to main… (0:47)</span></div>
+      <div class="tline reply"><span class="tmark">●</span><span class="tbody">Bumped the small-screen headline from 40px to 46px. Looks right on an iPhone now.</span></div>
+      <div class="tline push"><span class="tmark">●</span><span class="tbody">pushed 3f2a91c — refresh to see it</span></div>
+    </div>
+    <p class="honesty">a restaged session — same widget, same glyphs. the real one is in the corner. <span class="arrow">↘</span></p>
+    <p class="receipts"><a href="https://github.com/vibhasjain/agent-keyboard/commits/main">Every change it ships lands on main in the open — see the commits →</a></p>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>Ask for a change. <em>Watch it ship.</em></h2>
+    <div class="steps">
+      <div class="step ask">
+        <div class="n">01 · ASK</div>
+        <h3>Ask</h3>
+        <p>Type, dictate, or photograph the change — from your phone, anywhere.</p>
+      </div>
+      <div class="step edit">
+        <div class="n">02 · EDIT</div>
+        <h3>Edit</h3>
+        <p>Your server drives the real Claude Code CLI against a durable checkout of the repo — it edits,
+          then commits as "Agent Keyboard."</p>
+      </div>
+      <div class="step ship">
+        <div class="n">03 · SHIP</div>
+        <h3>Ship</h3>
+        <p>Pushes to <code>main</code>; your site redeploys. Refresh — it's changed.</p>
+      </div>
+    </div>
+    <p class="archstrip">phone <span class="ar">→</span> your server <span class="ar">→</span> claude code cli
+      <span class="ar">→</span> git push <span class="ar">→</span> your host redeploys</p>
+  </div>
+</section>
+
+<section id="selfhost">
+  <div class="wrap">
+    <div class="kicker">Self-host</div>
+    <h2>Run your own.</h2>
+    <p class="sub">It's a small Express server, a ~15&nbsp;KB widget, and your git repo. The full guide is
+      in the README; here's the shape of it.</p>
+
+    <div class="term">
+      <button class="copybtn" data-copy="git clone https://github.com/vibhasjain/agent-keyboard.git">copy</button>
+<pre><span class="a">$</span> git clone https://github.com/vibhasjain/agent-keyboard.git
+<span class="c"># a free Supabase project does auth — one user: you</span>
+<span class="a">$</span> fly launch --config server/fly.toml
+<span class="a">$</span> fly secrets set CLAUDE_CODE_OAUTH_TOKEN=… GH_TOKEN=… \
+    SUPABASE_URL=… SUPABASE_ANON_KEY=… SUPABASE_SERVICE_KEY=… \
+    ALLOWED_EMAIL=you@example.com \
+    SITES='[{"id":"mysite","repo":"https://github.com/you/mysite.git","branch":"main","domain":"mysite.com"}]'
+<span class="c"># one tag, before &lt;/body&gt;, on any page you want to edit:</span>
+<span class="a">&lt;script</span> <span class="k">src</span>=<span class="s">"https://YOUR-APP.fly.dev/widget.js"</span> <span class="k">data-site</span>=<span class="s">"mysite"</span> <span class="k">defer</span><span class="a">&gt;&lt;/script&gt;</span></pre>
+    </div>
+    <p class="footnote"><a href="https://github.com/vibhasjain/agent-keyboard#readme">Full walkthrough in the README →</a></p>
+
+    <div class="byo">
+      <div class="byo-cell"><b>a Claude Code subscription</b>its OAuth token does the editing</div>
+      <div class="byo-cell"><b>a free Supabase project</b>auth + job history</div>
+      <div class="byo-cell"><b>anywhere that runs Docker</b>a small Fly VM is plenty</div>
+      <div class="byo-cell"><b>optional: an OpenAI key</b>only for hold-to-dictate</div>
+    </div>
+  </div>
+</section>
+
+<section id="bar">
+  <div class="wrap">
+    <div class="kicker">What's in the bar</div>
+    <h2>Small on the page. <em>Serious underneath.</em></h2>
+    <div class="grid">
+      <div class="feat"><h4>Fire-and-forget</h4><p>Close the tab — the job keeps running on your server. Reopen and the bar re-attaches to the stream.</p></div>
+      <div class="feat"><h4>Any input</h4><p>Type it, hold to dictate it, or attach a photo of what you mean.</p></div>
+      <div class="feat"><h4>One tag, ~15&nbsp;KB</h4><p>Zero dependencies, Shadow-DOM isolated — it can't clash with your CSS and your CSS can't break it.</p></div>
+      <div class="feat"><h4>Memory</h4><p>One long-running session per site. It remembers your last ask, and compacts itself when it gets long — shown inline as <span class="comp">· session compacted ·</span></p></div>
+      <div class="feat"><h4>An allowlist, not a free-for-all</h4><p>The server only touches repos you list in its config. It can't wander.</p></div>
+      <div class="feat"><h4>Your keys, your box</h4><p>Your Claude token, your Supabase, your VM. Nothing phones home to anyone.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="kicker">Questions</div>
+    <h2>The honest version.</h2>
+    <div class="faq">
+      <div class="qa">
+        <h3>How does it actually work?</h3>
+        <p>One tag adds the bar; your prompts go to your server. A real Claude Code session edits a durable
+          checkout of the repo, commits, and pushes to <code>main</code> — then your host redeploys.</p>
+      </div>
+      <div class="qa">
+        <h3>Why single-owner?</h3>
+        <p>By design. Each deployment allow-lists exactly one email — yours — and only that account can
+          drive it. It's a personal tool for your own sites, not a CMS and not multi-tenant. Fork it if
+          you want it to be.</p>
+      </div>
+      <div class="qa">
+        <h3>An agent pushing straight to main — is that fine?</h3>
+        <p>It pushes to a repo you own, from an allowlist you wrote, with every commit attributed to
+          "Agent Keyboard." Git is the undo button: <code>git revert</code>, done. It runs on this very
+          site, and the history is public.</p>
+      </div>
+      <div class="qa">
+        <h3>What does it cost to run?</h3>
+        <p>Mostly things you already pay for: the Claude Code subscription does the editing, Supabase's
+          free tier does auth, and a small Fly VM (a few dollars a month) does the hosting. The OpenAI
+          key is optional and only for voice.</p>
+      </div>
+      <div class="qa">
+        <h3>Does it remember what I've asked?</h3>
+        <p>Yes — one long-running session per site, with memory. When it grows long it auto-compacts,
+          shown inline as <span class="comp">· session compacted ·</span>.</p>
+      </div>
+      <div class="qa">
+        <h3>What if I close the tab mid-change?</h3>
+        <p>The job keeps running on the server. Come back and the bar re-attaches.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="mark">Agent Keyboard</div>
+    <div class="meta">MIT · built by <a href="https://github.com/vibhasjain">@vibhasjain</a> · <a href="https://github.com/vibhasjain/agent-keyboard">github.com/vibhasjain/agent-keyboard</a></div>
+    <div class="meta">© 2026 · agentkeyboard.com · built by asking — this site edits itself.</div>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('.copybtn').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var text = btn.getAttribute('data-copy');
+      navigator.clipboard.writeText(text).then(function(){
+        var prev = btn.textContent;
+        btn.textContent = 'copied';
+        setTimeout(function(){ btn.textContent = prev; }, 1400);
+      }).catch(function(){});
+    });
+  });
+</script>
+
+<!-- The live product: this exact page's editor. Owner-gated. -->
+<script src="https://agent-keyboard.fly.dev/widget.js" data-site="halo" defer></script>
+</body>
+</html>

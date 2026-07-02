@@ -1,0 +1,22 @@
+name: Deploy agent-keyboard
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", "widget/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency: agent-keyboard-deploy
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master
+      # Build context = repo root so the Dockerfile can bake widget/ into the image.
+      # The target app comes from server/fly.toml, so forks deploy their own app unchanged.
+      - run: flyctl deploy . --config server/fly.toml --dockerfile server/Dockerfile --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

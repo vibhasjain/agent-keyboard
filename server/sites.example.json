@@ -1,0 +1,14 @@
+[
+  {
+    "id": "blog",
+    "repo": "https://github.com/you/blog.git",
+    "branch": "main",
+    "domain": "blog.example.com"
+  },
+  {
+    "id": "portfolio",
+    "repo": "https://github.com/you/portfolio.git",
+    "branch": "production",
+    "domain": "example.com"
+  }
+]

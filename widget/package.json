@@ -1,0 +1,17 @@
+{
+  "name": "agent-keyboard-widget",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Embeddable Agent Keyboard prompt bar for static sites.",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --dev",
+    "check": "tsc --noEmit",
+    "mock": "node dev/mock-server.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "agent-keyboard-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Agent Keyboard — embeddable prompt bar that drives the real Claude Code CLI against per-site git checkouts.",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "parse-check": "tsx src/dev/parse-check.ts"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "sharp": "^0.33.5",
+    "tsx": "^4.19.2",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

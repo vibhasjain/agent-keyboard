@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Agent Keyboard — hostile host page</title>
+<style>
+  /* ==========================================================================
+     HOSTILE HOST PAGE. Deliberately aggressive global CSS to prove the widget's
+     shadow-DOM isolation holds up. If the bar renders and works here, it works
+     anywhere. None of this should leak past the shadow boundary.
+     ========================================================================== */
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: content-box;          /* box-sizing chaos */
+    font-family: "Comic Sans MS", cursive;
+    letter-spacing: 0.03em;
+  }
+  html { font-size: 22px; }            /* oversized root — must NOT zoom our 16px inputs */
+  body {
+    all: unset;                        /* nuke inherited defaults */
+    display: block;
+    background: repeating-linear-gradient(45deg, #ececff, #ececff 24px, #e2e2f7 24px, #e2e2f7 48px);
+    color: #202028;
+    min-height: 300vh;                 /* long scrolling page */
+  }
+  /* hostile to form controls — our shadow inputs must survive this */
+  button, input, textarea, select {
+    all: unset !important;
+  }
+  a { color: inherit !important; }
+  /* giant z-index bars to fight the widget for stacking */
+  .fake-header, .fake-footer {
+    position: fixed; left: 0; right: 0;
+    z-index: 2000000 !important;
+    background: #12123a; color: #fff;
+    padding: 14px 18px; font-weight: 700;
+  }
+  .fake-header { top: 0; }
+  .fake-footer { bottom: 0; opacity: .95; }
+  .content { max-width: 680px; margin: 90px auto; padding: 0 20px; }
+  .content h1 { font-size: 2.2rem; margin-bottom: 12px; }
+  .content p { margin-bottom: 14px; line-height: 1.6; }
+  .devbar {
+    position: fixed; top: 54px; left: 50%; transform: translateX(-50%);
+    z-index: 2000001 !important;
+    background: #000; color: #0f0; font-family: monospace !important;
+    padding: 8px 10px; border-radius: 8px; display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  .devbar button {
+    all: revert !important;
+    font-family: monospace !important;
+    background: #0f0 !important; color: #000 !important;
+    padding: 4px 8px !important; border-radius: 5px !important; cursor: pointer !important;
+    border: none !important;
+  }
+</style>
+</head>
+<body>
+  <div class="fake-header">HOSTILE HOST · z-index 2,000,000 · Comic Sans everything</div>
+
+  <div class="devbar">
+    <button id="dev-login">dev login</button>
+    <button id="dev-logout">clear session</button>
+    <button id="dev-clear-job">clear active-job</button>
+    <button id="dev-reset">reset used flag</button>
+  </div>
+
+  <div class="content">
+    <h1>Fake marketing site</h1>
+    <p>This page exists only to host the Agent Keyboard widget under maximally hostile
+       conditions: <code>all: unset !important</code> on every form control, box-sizing
+       chaos, a 22px root font, Comic Sans, and z-index:2,000,000 bars top and bottom.</p>
+    <p>The amber orb should sit at the bottom-right, above the footer bar, fully styled
+       and interactive — none of the page CSS crossing the shadow boundary.</p>
+    <p>Use <b>dev login</b> (top bar) to inject a fake session, then tap the orb to
+       compose. The mock server streams a scripted job over ~8 seconds.</p>
+    <p style="height:120vh"></p>
+    <p>Scroll target near the bottom.</p>
+  </div>
+
+  <div class="fake-footer">FOOTER BAR · the orb must float above me</div>
+
+  <script>
+    // Dev auth bypass: the widget's auth.ts treats a localhost data-api as dev and
+    // accepts any stored session. The mock server ignores Authorization anyway.
+    const SESSION = {
+      access_token: 'dev', refresh_token: 'dev',
+      expires_at: 9999999999, email: 'dev@example.com',
+    };
+    document.getElementById('dev-login').onclick = () => {
+      localStorage.setItem('agent-keyboard-auth', JSON.stringify(SESSION));
+      location.reload();
+    };
+    document.getElementById('dev-logout').onclick = () => {
+      localStorage.removeItem('agent-keyboard-auth');
+      location.reload();
+    };
+    document.getElementById('dev-clear-job').onclick = () => {
+      Object.keys(localStorage).filter(k => k.includes(':active-job')).forEach(k => localStorage.removeItem(k));
+      location.reload();
+    };
+    document.getElementById('dev-reset').onclick = () => {
+      Object.keys(localStorage).filter(k => k.startsWith('ak:')).forEach(k => localStorage.removeItem(k));
+      location.reload();
+    };
+  </script>
+
+  <!-- THE embed: one script tag. data-api points at the local mock. -->
+  <script src="/widget.js" data-site="halo" data-api="http://localhost:8098" defer></script>
+</body>
+</html>
