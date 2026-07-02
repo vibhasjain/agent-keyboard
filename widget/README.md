@@ -1,8 +1,8 @@
 # Agent Keyboard widget
 
 The embeddable prompt bar. A single self-contained IIFE that mounts a Shadow-DOM-isolated bar on any
-page: an amber orb that expands into a compose pill, streams the agent's progress, and re-attaches to
-running jobs after a reload.
+page: a slim composer that streams the agent's progress in a pill, expands into a full terminal-style
+transcript, and re-attaches to running jobs after a reload.
 
 - **Zero runtime dependencies.** TypeScript → one `dist/widget.js` via esbuild.
 - **~15 KB gzip.** The whole bar — styles, auth, SSE reader, photo upload, voice — ships in that.

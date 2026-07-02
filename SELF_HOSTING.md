@@ -209,7 +209,7 @@ Two things must line up or the bar won't work:
 
 ## 8. First run (2 min)
 
-1. Load the page. An amber orb appears in the corner.
+1. Load the page. The bar appears at the bottom.
 2. Tap it, then sign in with the Supabase email + password from step 2.
 3. Ask for something trivial and safe — "change the footer year to 2026".
 4. Watch the ticker: *syncing → thinking → editing →* the streamed reply.

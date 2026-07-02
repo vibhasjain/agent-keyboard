@@ -5,10 +5,10 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 ![Self-hosted](https://img.shields.io/badge/deploy-self--hosted-ffb86b.svg)
 
-One `<script>` tag turns a static site into something you change by asking. The owner taps the amber
-orb, signs in, and describes a change — typed, dictated, or photographed. A real **Claude Code**
-session edits that site's own git repo, commits as `Agent Keyboard`, and pushes to `main`; wherever
-you deploy from redeploys. Every step streams live, and the job is fire-and-forget — close the tab and
+One `<script>` tag turns a static site into something you change by asking. The owner taps the bar,
+signs in, and describes a change — typed, dictated, or photographed. A real **Claude Code** session
+edits that site's own git repo, commits as `Agent Keyboard`, and pushes to `main`; wherever you
+deploy from redeploys. Every step streams live, and the job is fire-and-forget — close the tab and
 it keeps running server-side; reopen and the bar re-attaches.
 
 ```html
@@ -21,7 +21,18 @@ the script is served from.
 
 **[agentkeyboard.com](https://agentkeyboard.com) runs this widget on itself** (`data-site="halo"`) —
 the marketing site edits its own repo. When you see a commit here authored by `Agent Keyboard`, it was
-made from the bar in the corner of that page.
+made from the bar at the bottom of that page.
+
+<p align="center">
+  <img src="site/shots/chat-transcript.png" alt="The expanded transcript of a real session on agentkeyboard.com: a prompt, green tool lines, and the reply" width="440">
+</p>
+<p align="center">
+  <sub>A real session — this exact exchange added a comment to the site you're reading about.</sub>
+</p>
+
+| Sign in — a prompt, not a form | A job running | At rest |
+|---|---|---|
+| <img src="site/shots/bar-login.png" alt="Terminal-style email/password prompt" width="280"> | <img src="site/shots/bar-working.png" alt="Thinking state with live timer" width="280"> | <img src="site/shots/bar-resting.png" alt="Composer with photo, voice, send" width="280"> |
 
 ## What this is
 
@@ -36,7 +47,7 @@ static sites you deploy from git, you can fork it and point it at your own repos
 
 ```mermaid
 flowchart LR
-  A["Browser widget<br/>orb → compose"] -->|"POST /sites/:id/messages"| B["Your server (Fly)"]
+  A["Browser widget<br/>bar → compose"] -->|"POST /sites/:id/messages"| B["Your server (Fly)"]
   B -->|"verify JWT — one email"| C["Supabase auth"]
   B -->|"per-site checkout<br/>on /data volume"| D["git checkout"]
   D -->|"claude -p (edit)"| E["Claude Code CLI"]

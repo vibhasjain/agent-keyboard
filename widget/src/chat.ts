@@ -279,15 +279,24 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   )
   io.observe(sentinel)
 
+  // Re-opening the chat always lands at the bottom (latest messages), even if
+  // the user had scrolled up before collapsing — track the collapsed→expanded
+  // transition and force it.
+  let wasExpanded = false
   const render = () => {
     const expanded = getState().ui.mode === 'expanded'
     show(overlay, expanded)
-    if (!expanded) return
+    if (!expanded) {
+      wasExpanded = false
+      return
+    }
     if (footer.firstChild !== deps.composerEl) footer.appendChild(deps.composerEl)
     if (!loaded && !loading) {
       void loadHistory()
       return
     }
+    const justOpened = !wasExpanded
+    wasExpanded = true
     const pinned = isPinned()
     const key = staticKey()
     if (key !== renderedKey) {
@@ -295,7 +304,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       renderedKey = key
     }
     updateLive()
-    if (pinned) toBottom()
+    if (justOpened || pinned) toBottom()
   }
 
   subscribe(render)

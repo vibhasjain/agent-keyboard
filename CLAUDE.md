@@ -10,7 +10,7 @@ This file orients any agent (or human) working in this repo. Read it before touc
 ## What Agent Keyboard is (shipped, real)
 
 A floating **prompt bar** you embed on a static site with a single `<script>` tag. The site's owner
-taps the amber orb, signs in, and asks for a change — by typing, holding to dictate, or attaching a
+taps the bar, signs in, and asks for a change — by typing, holding to dictate, or attaching a
 photo. The request goes to a small server that drives the **real Claude Code CLI** against a durable
 git checkout of that site's repo, makes the edit, commits as `Agent Keyboard`, and **pushes to
 `main`**. Wherever the site already deploys from (Netlify, etc.) redeploys. The bar streams every
@@ -38,7 +38,7 @@ their own server. See `README.md` and `SELF_HOSTING.md`.
 
 ```
 owner's site ──<script src="…/widget.js" data-site="mysite">──┐
-   (widget: orb → compose → SSE)                          │
+   (widget: bar → compose → SSE)                          │
                                                           ▼
               Fly app "agent-keyboard" (server/) ── auth (Supabase JWT, owner only)
                     │  per-site git checkout on /data volume  (FIXED cwd, session-stable)
@@ -99,8 +99,8 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 done = green, error = `#f97066` (red, outside the palette, used sparingly).
 
 **Brand mark:** a glowing amber orb — `radial-gradient(circle at 32% 28%, #fff5e2, var(--amber) 38%,
-var(--amber-deep) 95%)` with a breathing animation. The signature element is the 52px floating orb
-that expands into a pill with a live status **ticker**.
+var(--amber-deep) 95%)` with a breathing animation. The orb is brand only (favicon, site hero); the
+widget's persistent surface is the slim **bar**, which streams in a pill with a live status **ticker**.
 
 ### Typography
 - **Instrument Serif** — display / wordmark / italic accents.
@@ -115,7 +115,7 @@ that expands into a pill with a live status **ticker**.
 ---
 
 ## Terminology
-- **Orb / halo button** — the persistent trigger; expands to a **pill**.
+- **Bar** — the widget's persistent surface (slim composer); streams in a **pill**, expands to the full transcript. The **orb** is the brand mark only, not the trigger.
 - **Ticker** — single-line status text: syncing → thinking → editing → the streamed reply.
 - **Site** — an allow-listed repo/domain the bar can edit (an entry in the `SITES` env var).
 - **Fire-and-forget** — the job survives the browser closing; the bar re-attaches on return.
