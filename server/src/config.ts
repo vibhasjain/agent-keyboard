@@ -10,11 +10,29 @@ export interface Site {
   repo: string; // https clone URL ending .git (token is injected at clone/sync time)
   branch: string;
   domain: string; // bare host, no scheme
+  // Optional safety valve: publish the agent's commit to THIS branch (a review
+  // branch) instead of the deploy `branch`. Absent = push straight to `branch`.
+  // May contain the literal {ts} placeholder, substituted per job with a UTC
+  // stamp (e.g. "agent-keyboard/{ts}" → a fresh branch each change). See claude.ts.
+  pushBranch?: string;
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/i;
 // A bare host: dot-separated alnum/hyphen labels — no scheme, no slash, no port.
 const HOST_RE = /^(?!-)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
+
+// A conservative git branch name: alnum plus - _ . /, optionally carrying the
+// literal {ts} placeholder (replaced with a timestamp at job time). Rejects the
+// shapes `git check-ref-format` forbids that a fat-finger is likely to produce.
+const BRANCH_RE = /^[A-Za-z0-9._/-]+$/;
+function isValidBranchName(name: string): boolean {
+  const probe = name.replace(/\{ts\}/g, "00000000-000000");
+  if (!BRANCH_RE.test(probe)) return false;
+  if (probe.startsWith("-") || probe.startsWith("/") || probe.endsWith("/")) return false;
+  if (probe.includes("..") || probe.includes("//")) return false;
+  if (probe.endsWith(".lock")) return false;
+  return true;
+}
 
 const SITES_EXAMPLE =
   `SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'`;
@@ -56,7 +74,7 @@ export function loadSites(): Site[] {
     if (typeof entry !== "object" || entry === null) {
       throw new Error(`${at} must be an object, e.g. ${SITES_EXAMPLE}`);
     }
-    const { id, repo, branch, domain } = entry as Record<string, unknown>;
+    const { id, repo, branch, domain, pushBranch } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !ID_RE.test(id)) {
       throw new Error(`${at}.id ${JSON.stringify(id)} must be a slug like "blog" (letters, digits, hyphens)`);
     }
@@ -76,8 +94,27 @@ export function loadSites(): Site[] {
         `${at}.domain must be a bare host with no scheme or path (e.g. "blog.example.com"), got ${JSON.stringify(domain)}`,
       );
     }
+    let pushBranchClean: string | undefined;
+    if (pushBranch !== undefined && pushBranch !== null && pushBranch !== "") {
+      if (typeof pushBranch !== "string" || !pushBranch.trim()) {
+        throw new Error(
+          `${at}.pushBranch, if set, must be a non-empty branch name (e.g. "agent-keyboard" or "agent-keyboard/{ts}"), got ${JSON.stringify(pushBranch)}`,
+        );
+      }
+      if (!isValidBranchName(pushBranch)) {
+        throw new Error(
+          `${at}.pushBranch ${JSON.stringify(pushBranch)} is not a valid git branch name (letters, digits, and . _ / - only; may contain the {ts} placeholder)`,
+        );
+      }
+      if (pushBranch === branch) {
+        throw new Error(
+          `${at}.pushBranch must differ from branch ${JSON.stringify(branch)} — point it at a separate review branch, or omit it to push straight to ${JSON.stringify(branch)}`,
+        );
+      }
+      pushBranchClean = pushBranch;
+    }
     seen.add(id);
-    sites.push({ id, repo, branch, domain });
+    sites.push({ id, repo, branch, domain, ...(pushBranchClean ? { pushBranch: pushBranchClean } : {}) });
   });
   return sites;
 }

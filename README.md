@@ -24,10 +24,17 @@ the marketing site edits its own repo. When you see a commit here authored by `A
 made from the bar at the bottom of that page.
 
 <p align="center">
+  <img src="site/shots/demo.gif" alt="A real session, recorded live: typing a prompt into the bar on agentkeyboard.com, the job streaming, the green pushed state, and the resulting Agent Keyboard commit on GitHub" width="360">
+</p>
+<p align="center">
+  <sub>A real session, recorded live — the commit it lands (<code>c4f6277</code>) is in this repo's history.</sub>
+</p>
+
+<p align="center">
   <img src="site/shots/chat-transcript.png" alt="The expanded transcript of a real session on agentkeyboard.com: a prompt, green tool lines, and the reply" width="440">
 </p>
 <p align="center">
-  <sub>A real session — this exact exchange added a comment to the site you're reading about.</sub>
+  <sub>The expanded transcript of another real exchange.</sub>
 </p>
 
 | Sign in — a prompt, not a form | A job running | At rest |
@@ -142,6 +149,10 @@ SITES=[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","do
 - `branch` — the branch your host deploys from.
 - `domain` — bare host (no scheme). Drives CORS (`https://domain` and `https://www.domain` are
   auto-allowed) and the `[Sent from …]` context handed to the agent.
+- `pushBranch` *(optional)* — publish the agent's commit to this branch instead of pushing straight to
+  `branch`. Use it when you'd rather review changes than deploy them live: nothing redeploys until you
+  merge the branch yourself. A `{ts}` placeholder becomes a UTC timestamp, so `"agent-keyboard/{ts}"`
+  gives each change its own branch. Must differ from `branch`. See [SELF_HOSTING.md](./SELF_HOSTING.md#a-review-step-instead-of-straight-to-main).
 
 A pretty-printed multi-site example lives in [`server/sites.example.json`](./server/sites.example.json).
 
@@ -163,6 +174,9 @@ Concentric rings, honestly stated:
 
 One thing to know: **your prompts become commit messages.** If a target repo is public, what you typed
 is visible in its history.
+
+**Full threat model:** [SECURITY.md](./SECURITY.md) — what an unauthenticated attacker can and can't
+reach, where the trust boundaries sit, and the residual risks stated plainly.
 
 ## Develop
 

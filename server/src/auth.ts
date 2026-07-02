@@ -16,6 +16,15 @@ const ALLOWED_EMAIL = (process.env.ALLOWED_EMAIL ?? "").toLowerCase().trim();
 const ALLOWED_USER_ID = (process.env.ALLOWED_USER_ID ?? "").trim();
 
 const CACHE_TTL_MS = 60_000;
+// Cap the verification cache so a flood of unique tokens from an unauthenticated
+// caller can't grow it without bound; once full, entries evict FIFO (the Map
+// preserves insertion order). A no-token request never reaches here — it's a
+// bare 401 in requireOwner — so this only bounds token-bearing traffic.
+const CACHE_MAX = 500;
+// A Supabase access token is a JWT: three non-empty base64url segments. Anything
+// else is rejected locally, without spending an outbound /auth/v1/user call — so
+// a garbage token is as cheap to reject as no token at all.
+const JWT_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 
 export interface AuthedUser {
   id: string;
@@ -35,6 +44,7 @@ function bearer(req: Request): string {
 
 /** Verify a Supabase token → the allowed owner, or null. Cached 60s per token. */
 async function verify(token: string): Promise<AuthedUser | null> {
+  if (!JWT_RE.test(token)) return null; // not a JWT — reject before any I/O or caching
   const now = Date.now();
   const hit = cache.get(token);
   if (hit && now - hit.at < CACHE_TTL_MS) return hit.user;
@@ -56,6 +66,10 @@ async function verify(token: string): Promise<AuthedUser | null> {
     // Network / Supabase down: treat as unauthenticated, but don't cache the
     // failure (so a transient blip doesn't lock the owner out for 60s).
     return null;
+  }
+  if (cache.size >= CACHE_MAX) {
+    const oldest = cache.keys().next().value; // FIFO evict to bound memory
+    if (oldest !== undefined) cache.delete(oldest);
   }
   cache.set(token, { user, at: now });
   return user;

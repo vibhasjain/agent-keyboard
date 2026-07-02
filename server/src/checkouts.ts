@@ -131,15 +131,22 @@ export interface GitSummary {
  * Describe what a turn did to the checkout. Called after the CLI exits, inside
  * the same site lock. `changed` = HEAD moved; `pushed` = there are no local
  * commits ahead of origin (i.e. everything the agent committed is on the
- * remote); `dirty` = uncommitted leftovers.
+ * remote); `dirty` = uncommitted leftovers. `pushBranch` is the branch the agent
+ * was told to push to — the deploy `site.branch` by default, or a review branch
+ * (config.ts pushBranch, resolved in claude.ts). "Ahead of origin" and the
+ * reported `branch` are measured against it so the reply names the right branch.
  */
-export async function gitSummary(site: Site, preJobSha: string): Promise<GitSummary> {
+export async function gitSummary(
+  site: Site,
+  preJobSha: string,
+  pushBranch: string = site.branch,
+): Promise<GitSummary> {
   const dir = checkoutPath(site.id);
   // Refresh the remote ref so "ahead of origin" reflects the agent's push.
-  await git(dir, ["fetch", "origin", site.branch]).catch(() => {});
+  await git(dir, ["fetch", "origin", pushBranch]).catch(() => {});
   const headSha = (await git(dir, ["rev-parse", "HEAD"]).catch(() => preJobSha)).trim();
   const ahead = (
-    await git(dir, ["rev-list", `origin/${site.branch}..HEAD`]).catch(() => "")
+    await git(dir, ["rev-list", `origin/${pushBranch}..HEAD`]).catch(() => "")
   ).trim();
   const status = (await git(dir, ["status", "--porcelain"]).catch(() => "")).trim();
   // Ignore our own staging dir when judging "dirty".
@@ -148,7 +155,7 @@ export async function gitSummary(site: Site, preJobSha: string): Promise<GitSumm
     changed: headSha !== preJobSha,
     pushed: ahead === "",
     headSha,
-    branch: site.branch,
+    branch: pushBranch,
     dirty: dirtyLines.length > 0,
   };
 }

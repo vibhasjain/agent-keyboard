@@ -221,6 +221,32 @@ fire-and-forget path working.
 
 ---
 
+## A review step instead of straight-to-main
+
+By default the agent pushes to your deploy `branch`, so an accepted change goes live on the next
+redeploy. If you'd rather look before it ships, add an optional `pushBranch` to that site's `SITES`
+entry. The agent then commits as usual but publishes to `pushBranch` — a branch your host does **not**
+deploy from — and nothing goes live until you merge it yourself (open a PR from it, review, merge).
+
+```jsonc
+{ "id": "blog", "repo": "https://github.com/you/blog.git", "branch": "main",
+  "domain": "blog.example.com", "pushBranch": "agent-keyboard/{ts}" }
+```
+
+- `pushBranch` must differ from `branch`. Everything else about a job is unchanged — the checkout still
+  syncs from your live `branch` each turn, so every change starts from what's actually deployed.
+- A `{ts}` placeholder is replaced with a UTC timestamp per job (`agent-keyboard/20260702-181500`),
+  giving each change its own branch — clean for one-PR-per-change review, and it never needs a force
+  push. A static name like `"agent-keyboard"` keeps a single rolling review branch instead (the agent
+  force-updates it each turn; that branch is agent-only, so nothing else is clobbered).
+- The reply names the branch it pushed to, so you can tell at a glance that a change is staged for
+  review rather than live.
+
+This is a safety valve, not a full PR workflow — the agent publishes the branch; opening and merging
+the PR is on you.
+
+---
+
 ## 9. Troubleshooting
 
 | Symptom | Cause | Fix |

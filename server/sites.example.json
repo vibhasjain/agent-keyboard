@@ -9,6 +9,7 @@
     "id": "portfolio",
     "repo": "https://github.com/you/portfolio.git",
     "branch": "production",
-    "domain": "example.com"
+    "domain": "example.com",
+    "pushBranch": "agent-keyboard/{ts}"
   }
 ]

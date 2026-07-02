@@ -64,17 +64,52 @@ function markerPathFor(conversationId: string): string {
   return join(CONVERSATIONS_DIR, safe);
 }
 
+/** A compact UTC stamp (YYYYMMDD-HHMMSS) — substituted for {ts} in a pushBranch. */
+function timestampSlug(d = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return (
+    `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
+    `-${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`
+  );
+}
+
+/**
+ * The branch this job's commit should land on. No site.pushBranch → the deploy
+ * branch (push-to-main, the default). Set → the configured review branch, with
+ * {ts} substituted ONCE here so the prompt and gitSummary agree for the whole
+ * job (retries included). Never returns site.branch when pushBranch is set — the
+ * validator (config.ts) guarantees they differ.
+ */
+export function resolvePushBranch(site: Site): string {
+  if (!site.pushBranch) return site.branch;
+  return site.pushBranch.replace(/\{ts\}/g, timestampSlug());
+}
+
 // ~6-line operating scope — the ONLY server-authored prompt text. Everything
 // else (how to make the change) is the agent's own judgment + the repo's files.
-function scopeNote(site: Site): string {
+// When pushBranch differs from the deploy branch, the push clause redirects the
+// commit to that review branch instead of the live one (nothing deploys).
+function scopeNote(site: Site, pushBranch: string = site.branch): string {
   const path = checkoutPath(site.id);
-  return [
+  const lines = [
     `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
     `Modify only files inside this repository; never touch other checkouts, /data, or any server config.`,
-    `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (Netlify deploys the site from it).`,
-    `If the push is rejected because the branch moved, run \`git pull --rebase\` and push again.`,
+  ];
+  if (pushBranch === site.branch) {
+    lines.push(
+      `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (Netlify deploys the site from it).`,
+      `If the push is rejected because the branch moved, run \`git pull --rebase\` and push again.`,
+    );
+  } else {
+    lines.push(
+      `When the change is complete, commit it with a clear message. Do NOT push to the live "${site.branch}" branch — instead publish your commit for review by running \`git push --force origin HEAD:${pushBranch}\`, which creates or updates the "${pushBranch}" branch without deploying anything (someone reviews and merges it later).`,
+      `If that push is rejected, run \`git fetch origin\` and run the exact same push command again.`,
+    );
+  }
+  lines.push(
     `Your replies are shown in a small chat bubble on the website, so keep them short and plain — a sentence or two, no markdown headers, no code blocks.`,
-  ].join(" ");
+  );
+  return lines.join(" ");
 }
 
 /** Build the user turn: a "[Sent from …]" context line, the text, and any photos. */
@@ -90,7 +125,13 @@ function buildPrompt(site: Site, opts: { text: string; page: string; attachmentP
   return lines.join("\n");
 }
 
-function streamArgs(prompt: string, sessionId: string, resume: boolean, site: Site): string[] {
+function streamArgs(
+  prompt: string,
+  sessionId: string,
+  resume: boolean,
+  site: Site,
+  pushBranch: string,
+): string[] {
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
     "-p",
@@ -110,7 +151,7 @@ function streamArgs(prompt: string, sessionId: string, resume: boolean, site: Si
     "--setting-sources",
     "project",
     "--append-system-prompt",
-    scopeNote(site),
+    scopeNote(site, pushBranch),
   ];
 }
 
@@ -320,6 +361,9 @@ export async function* runMessageJob(
     yield ["status", { phase: "syncing", detail: `Syncing ${site.domain}` }];
     const preJobSha = await syncCheckout(site);
     const dir = checkoutPath(site.id);
+    // Resolve the push target once — a {ts} placeholder must not drift between
+    // the prompt, retries, and gitSummary. Equals site.branch unless pushBranch is set.
+    const pushBranch = resolvePushBranch(site);
 
     const conversationId = await conversationIdFor(site.id);
     const sessionId = sessionIdFor(conversationId);
@@ -354,7 +398,7 @@ export async function* runMessageJob(
       };
 
       const { child: c, done } = spawnClaude(
-        streamArgs(prompt, sessionId, resume, site),
+        streamArgs(prompt, sessionId, resume, site, pushBranch),
         dir,
         (e) => {
           if (e.t === "delta") {
@@ -413,7 +457,7 @@ export async function* runMessageJob(
     if (result) await writeFile(marker, sessionId).catch(() => {});
 
     if (result && !result.is_error) {
-      const git = await gitSummary(site, preJobSha);
+      const git = await gitSummary(site, preJobSha, pushBranch);
       const reply = (result.result ?? "").toString().trim();
       yield [
         "result",
