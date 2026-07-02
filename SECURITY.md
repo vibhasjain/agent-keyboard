@@ -1,18 +1,18 @@
 # Security and threat model
 
 Agent Keyboard gives an AI agent push access to a small allow-list of git repositories, driven by a
-single authenticated owner. This is the honest long version of the README's
+small allow-list of authenticated users — usually exactly one. This is the honest long version of the README's
 [Security model](./README.md#security-model): what the thing is, what an attacker who finds your
 server can and cannot do, where the trust boundaries sit, and the risks that remain after all of them.
 
-The posture is "one trusted human, tightly scoped credentials," not "multi-tenant SaaS." Every claim
+The posture is "a few trusted humans (usually one), tightly scoped credentials," not "multi-tenant SaaS." Every claim
 below is verifiable against the code (`server/src/auth.ts`, `index.ts`, `checkouts.ts`, `claude.ts`).
 
 ## What this is
 
 - One Express server you host (the reference deploy is Fly.io) that drives the real Claude Code CLI
   against per-site git checkouts.
-- A single owner: every privileged request must carry a Supabase JWT that resolves to one configured
+- Allow-listed users only: every privileged request must carry a Supabase JWT that resolves to a configured
   email (`ALLOWED_EMAIL`). There are no other accounts, and Supabase signups are turned off, so no
   other account can be created.
 - A fixed allow-list of repos (`SITES`) the agent may edit. It cannot be pointed at an arbitrary repo.
@@ -36,7 +36,7 @@ Someone who finds your server's URL, with no valid session:
 
 No token means the Claude Code CLI is never spawned — there is no code path that runs the agent for an
 unauthenticated request. `requireOwner` (`server/src/auth.ts`) verifies the JWT against Supabase and
-requires the resulting email to equal `ALLOWED_EMAIL` (optionally pinned to `ALLOWED_USER_ID`);
+requires the resulting email to be on the `ALLOWED_EMAIL` list (optionally pinned to `ALLOWED_USER_ID`);
 anything else is rejected.
 
 Rejecting an unauthenticated request is deliberately cheap: a missing token is a bare 401 with no
@@ -55,9 +55,9 @@ regardless of origin.
 
 Same rings as the README, outermost in:
 
-1. **Single-owner gate.** Every privileged request carries a Supabase JWT that must resolve to
-   `ALLOWED_EMAIL` (optionally `ALLOWED_USER_ID`). No other accounts exist; signups are off, so none
-   can be made.
+1. **Allow-list gate.** Every privileged request carries a Supabase JWT that must resolve to an email
+   on the `ALLOWED_EMAIL` list (optionally `ALLOWED_USER_ID`). No other accounts exist; signups are
+   off, so none can be made.
 2. **The `SITES` allow-list.** The agent only ever operates on a repo you listed. An unknown site id
    is a 404; there is no "edit an arbitrary repo" path, and each checkout lives at a fixed, hardcoded
    path on the volume.
@@ -66,7 +66,7 @@ Same rings as the README, outermost in:
    fine-grained PAT scoped to only the `SITES` repos, Contents read/write, and **no** workflows
    permission. GitHub then rejects any push that touches `.github/workflows/`.
 4. **No secret in the browser.** The anon key is public by design. Voice dictation uses short-lived
-   OpenAI tokens minted server-side (`POST /realtime/token`, owner-only). The Claude OAuth token,
+   OpenAI tokens minted server-side (`POST /realtime/token`, allow-list gated). The Claude OAuth token,
    `GH_TOKEN`, and Supabase service key live only in your server's secrets.
 
 ## Prompt injection
@@ -101,8 +101,9 @@ no third-party content path into the prompt:
 
 ## Residual risks, stated plainly
 
-- **A compromised owner account is game over.** The single Supabase login is the whole gate. Use a
-  strong, unique password and keep signups disabled so no second account can exist. Because the anon
+- **A compromised allow-listed account is game over.** Each Supabase login on the list is a
+  full-power gate — use strong, unique passwords for all of them, keep the list short, and keep
+  signups disabled so no account you didn't create can exist. Because the anon
   key ships in the public widget, anyone can *reach* your Supabase auth endpoint — so the password and
   Supabase's own rate limiting are doing real work.
 - **A leaked `GH_TOKEN` is bounded:** contents-write on only the listed repos, no workflows, no other
@@ -110,8 +111,8 @@ no third-party content path into the prompt:
 - **A leaked `CLAUDE_CODE_OAUTH_TOKEN`** lets someone use your Claude subscription. It lives only in
   server secrets; rotate with `claude setup-token` and update the secret.
 - **All sites share one VM and one `/data` volume.** Separation between site checkouts is the agent's
-  cooperation plus a per-site mutex, not a hard sandbox. Since only the one owner can issue prompts,
-  this is about owner error, not external attack — but if you don't want two sites sharing a blast
+  cooperation plus a per-site mutex, not a hard sandbox. Since only allow-listed users can issue prompts,
+  this is about user error, not external attack — but if you don't want two sites sharing a blast
   radius, run two deployments.
 - **Your prompts become commit messages.** If a target repo is public, what you typed is visible in
   its history. Don't put secrets in prompts.
@@ -121,9 +122,9 @@ no third-party content path into the prompt:
 Please don't open a public issue for a security problem. Instead:
 
 Open a private [GitHub Security Advisory](https://github.com/vibhasjain/agent-keyboard/security/advisories/new)
-on this repository — it reaches the maintainer directly. This is a personal, single-owner project
+on this repository — it reaches the maintainer directly. This is a personal, single-maintainer project
 with no security team; best-effort response, usually fast.
 
-Because this is a self-hosted, single-owner tool, the most valuable hardening is usually your own
+Because this is a self-hosted, allow-list-gated tool, the most valuable hardening is usually your own
 configuration: signups off, a strong Supabase password, a tightly scoped PAT, and a protected deploy
 branch.

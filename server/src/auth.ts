@@ -1,19 +1,29 @@
-// Supabase session verification. The widget sends the owner's Supabase access
+// Supabase session verification. The widget sends the user's Supabase access
 // token as a Bearer; we verify it by asking Supabase who it belongs to, then
-// require it to be THE single allowed user (this is a single-user product — the
-// agent has write access to real repos, so the gate is deliberately strict).
+// require it to be on the allow-list (the agent has write access to real repos,
+// so the gate is deliberately strict: allow-listed accounts only, no public
+// signups, no multi-tenancy).
 //
-// The allowed identity comes from env: ALLOWED_EMAIL (required, matched
-// case-insensitively) and an optional ALLOWED_USER_ID (Supabase UUID, checked
-// only if set). A 60s in-memory cache keeps us from hitting Supabase on every
-// SSE re-attach / poll.
+// The allowed identities come from env: ALLOWED_EMAIL — one email, or a
+// comma-separated few (a client, a partner) — matched case-insensitively, and
+// an optional ALLOWED_USER_ID pin (one or more Supabase UUIDs, checked only if
+// set). A 60s in-memory cache keeps us from hitting Supabase on every SSE
+// re-attach / poll.
 
 import type { Request, Response, NextFunction } from "express";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
-const ALLOWED_EMAIL = (process.env.ALLOWED_EMAIL ?? "").toLowerCase().trim();
-const ALLOWED_USER_ID = (process.env.ALLOWED_USER_ID ?? "").trim();
+const csv = (v: string | undefined): Set<string> =>
+  new Set(
+    (v ?? "")
+      .toLowerCase()
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+const ALLOWED_EMAILS = csv(process.env.ALLOWED_EMAIL);
+const ALLOWED_USER_IDS = csv(process.env.ALLOWED_USER_ID);
 
 const CACHE_TTL_MS = 60_000;
 // Cap the verification cache so a flood of unique tokens from an unauthenticated
@@ -56,8 +66,8 @@ async function verify(token: string): Promise<AuthedUser | null> {
     });
     if (res.ok) {
       const body = (await res.json()) as { id?: string; email?: string };
-      const emailOk = !!body?.email && body.email.toLowerCase() === ALLOWED_EMAIL;
-      const idOk = !ALLOWED_USER_ID || body?.id === ALLOWED_USER_ID;
+      const emailOk = !!body?.email && ALLOWED_EMAILS.has(body.email.toLowerCase());
+      const idOk = ALLOWED_USER_IDS.size === 0 || (!!body?.id && ALLOWED_USER_IDS.has(body.id.toLowerCase()));
       if (emailOk && idOk && body.id && body.email) {
         user = { id: body.id, email: body.email };
       }

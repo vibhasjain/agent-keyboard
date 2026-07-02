@@ -122,7 +122,7 @@ export function loadSites(): Site[] {
 // Required config, in the order we report it. SITES is validated separately
 // (below) so its error names the exact bad entry.
 const REQUIRED: { name: string; hint: string }[] = [
-  { name: "ALLOWED_EMAIL", hint: "the single email allowed to drive the agent" },
+  { name: "ALLOWED_EMAIL", hint: "the email(s) allowed to drive the agent — one, or a comma-separated few" },
   { name: "SUPABASE_URL", hint: "your Supabase project URL, e.g. https://xxxx.supabase.co" },
   { name: "SUPABASE_ANON_KEY", hint: "the Supabase anon/public key (safe to expose; RLS + the owner gate protect writes)" },
   { name: "GH_TOKEN", hint: "a fine-grained GitHub PAT with push access to the site repos" },

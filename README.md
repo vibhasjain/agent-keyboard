@@ -45,8 +45,9 @@ made from the bar at the bottom of that page.
 
 A personal tool, open-sourced because there's no reason to keep it closed. It scratches one itch: I
 own a handful of small static sites, I already pay for Claude Code, and I wanted to fix a typo or
-tweak a section from my phone without opening an editor. So it's narrow on purpose — single owner, an
-allow-list of repos you control, no accounts, no dashboard. If you have a Claude Code subscription and
+tweak a section from my phone without opening an editor. So it's narrow on purpose — an allow-list of
+accounts (you, maybe a client or a partner), an allow-list of repos you control, no public signups,
+no dashboard. If you have a Claude Code subscription and
 static sites you deploy from git, you can fork it and point it at your own repos in under an hour (see
 [SELF_HOSTING.md](./SELF_HOSTING.md)). If you don't, it probably isn't for you.
 
@@ -78,7 +79,7 @@ Full walkthrough with time estimates in **[SELF_HOSTING.md](./SELF_HOSTING.md)**
 - [GitHub](https://github.com) — holds your site repos and issues the push token. (You have this.)
 - A [Claude](https://claude.ai) **Pro or Max** subscription — `claude setup-token` mints the OAuth token the server's CLI edits with. This is the one cost that matters.
 - [Supabase](https://supabase.com) — auth (your one login) plus optional job history. Free tier is fine.
-- [Fly.io](https://fly.io) — runs the server (or any Docker host will do).
+- [Fly.io](https://fly.io) — runs the server. The guide prescribes Fly; a Dockerfile exists if you insist on hosting elsewhere.
 - A static-site host you already use — [Netlify](https://netlify.com), [GitHub Pages](https://pages.github.com), [Cloudflare Pages](https://pages.cloudflare.com), etc. Anything that redeploys your repo on push. **This project does not host your site.**
 
 **What it costs.** Your existing Claude subscription does the editing, plus one small always-on Fly VM
@@ -111,7 +112,7 @@ listing any missing *required* var.
 |-----|-----------|
 | `SUPABASE_URL` | Supabase project base URL. Also injected into the served widget bundle. |
 | `SUPABASE_ANON_KEY` | Publishable anon key. Public by design; injected into the widget. |
-| `ALLOWED_EMAIL` | The single email allowed to drive the agent (case-insensitive). |
+| `ALLOWED_EMAIL` | The email(s) allowed to drive the agent — one, or a comma-separated few (case-insensitive). |
 | `SITES` | One-line JSON array allow-list of repos the agent may edit (see below). |
 | `GH_TOKEN` | Fine-grained PAT: only the `SITES` repos, Contents read/write + Metadata, no workflows. |
 
@@ -120,7 +121,7 @@ listing any missing *required* var.
 | Var | What it is |
 |-----|-----------|
 | `CLAUDE_CODE_OAUTH_TOKEN` | Read by the Claude Code CLI, never by server code; from `claude setup-token`. Boot warns if missing — the agent can't run without it. |
-| `ALLOWED_USER_ID` | Extra pin to a specific Supabase user UUID. |
+| `ALLOWED_USER_ID` | Extra pin to specific Supabase user UUID(s), comma-separated. |
 | `SUPABASE_SERVICE_KEY` | Enables durable job history / re-attach. Works without it; boot warns. |
 | `OPENAI_API_KEY` | Voice dictation (ephemeral realtime tokens minted server-side). Absent = the mic button errors with "voice not configured". |
 | `EXTRA_ORIGINS` | Comma-separated extra CORS origins (deploy previews, staging). |
@@ -160,8 +161,9 @@ A pretty-printed multi-site example lives in [`server/sites.example.json`](./ser
 
 Concentric rings, honestly stated:
 
-1. **Single-owner gate.** Every request must carry a Supabase JWT that resolves to your `ALLOWED_EMAIL`
-   (optionally pinned further to `ALLOWED_USER_ID`). There are no other accounts.
+1. **Allow-list gate.** Every request must carry a Supabase JWT that resolves to an email on your
+   `ALLOWED_EMAIL` list (optionally pinned further to `ALLOWED_USER_ID`). No accounts exist beyond
+   the ones you created by hand.
 2. **The `SITES` allow-list.** The agent can only ever touch repos you listed. A request for any other
    site id is rejected; there is no "edit an arbitrary repo" path.
 3. **Bounded blast radius.** The CLI runs with permissions bypassed, but *inside a dedicated Fly VM*.

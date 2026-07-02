@@ -315,6 +315,7 @@ export function mountBar(shadow: ShadowRoot): void {
     if (getState().auth !== 'authed' && getState().ui.mode !== 'login') {
       patchUi({ mode: 'login' })
       setTimeout(() => emailInput.focus(), 60)
+      armLoginIdle()
     }
   })
 
@@ -329,10 +330,31 @@ export function mountBar(shadow: ShadowRoot): void {
   })
   on(loginRow, 'input', () => loginRow.classList.remove('error'))
   let loggingIn = false
+
+  // An untouched login form folds back into the plain bar after a while —
+  // opening it was often an accidental focus, and the fields keep their values
+  // for next time either way. Any interaction restarts the clock.
+  const LOGIN_IDLE_MS = 12_000
+  let loginIdle: ReturnType<typeof setTimeout> | null = null
+  const disarmLoginIdle = () => {
+    if (loginIdle != null) {
+      clearTimeout(loginIdle)
+      loginIdle = null
+    }
+  }
+  const armLoginIdle = () => {
+    disarmLoginIdle()
+    loginIdle = setTimeout(() => {
+      loginIdle = null
+      if (getState().ui.mode === 'login' && !loggingIn) patchUi({ mode: 'collapsed' })
+    }, LOGIN_IDLE_MS)
+  }
+  for (const ev of ['input', 'keydown', 'pointerdown', 'focusin']) on(loginRow, ev, armLoginIdle)
   on(loginRow, 'submit', async (e) => {
     e.preventDefault()
     if (loggingIn) return
     loggingIn = true
+    disarmLoginIdle()
     goBtn.disabled = true
     try {
       await login(emailInput.value.trim(), pwInput.value)
@@ -343,6 +365,7 @@ export function mountBar(shadow: ShadowRoot): void {
       loginRow.classList.remove('shake')
       void loginRow.offsetWidth
       loginRow.classList.add('shake', 'error')
+      armLoginIdle()
     } finally {
       loggingIn = false
       goBtn.disabled = false

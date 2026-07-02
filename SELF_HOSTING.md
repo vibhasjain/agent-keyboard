@@ -17,9 +17,10 @@ real cost, and it's what actually does the editing.
   token the server's CLI authenticates with. This is the cost that matters.
 - [ ] **[Supabase](https://supabase.com)** — auth (your one login) and optional durable job history.
   Free tier is fine.
-- [ ] **[Fly.io](https://fly.io)** — hosts the server and the durable checkout volume. Any Docker host
-  works, but this guide uses Fly and the committed config targets it. Fly is usage-billed — see the
-  cost note in [step 5](#5-flyio-deploy-the-server-15-min).
+- [ ] **[Fly.io](https://fly.io)** — hosts the server and the durable checkout volume. This guide
+  prescribes Fly and the committed config targets it; a Dockerfile exists if you're determined to run
+  elsewhere, but you're on your own there. Fly is usage-billed — see the cost note in
+  [step 5](#5-flyio-deploy-the-server-15-min).
 - [ ] **A static-site host you already use** — [Netlify](https://netlify.com),
   [GitHub Pages](https://pages.github.com), [Cloudflare Pages](https://pages.cloudflare.com), or
   similar: whatever redeploys your repo when the agent pushes. **Agent Keyboard does not host your
@@ -58,8 +59,10 @@ the bar can re-attach after a reload.
 3. **Authentication → Sign In / Providers (or Settings):** turn **off** "Allow new users to sign up".
    This matters: the anon key ships inside the public widget bundle, so anyone can hit your Supabase
    auth endpoint. With signups off, the only account that can ever exist is the one you create by hand.
-4. **Authentication → Users → Add user:** create one user with an email + password. This is your login
-   for the bar. Use whatever email you'll put in `ALLOWED_EMAIL`.
+4. **Authentication → Users → Add user:** create a user with an email + password — your login for the
+   bar. Want to give someone else access (a client whose site you built, a partner)? Add a user for
+   them too, and list every address in `ALLOWED_EMAIL`, comma-separated. Access is exactly that list;
+   nothing else can sign in.
 5. **SQL Editor:** open [`server/sql/jobs.sql`](./server/sql/jobs.sql) from this repo, paste it, run
    it. It creates `agent_keyboard_jobs` with row-level security enabled and **no policies** — meaning
    no anon or authenticated client can read or write it; only your server (using the service key,
