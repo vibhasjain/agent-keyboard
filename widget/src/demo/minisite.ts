@@ -54,8 +54,17 @@ export function mountMinisite(): Minisite {
       el('span', 'label', (s) => (s.textContent = 'deploying')),
     )
   })
+  const nav = el('div', 'demo-nav')
+  nav.append(el('span', 'logo'), el('span', 'sp'), el('i'), el('i'), el('i'))
+  const img = el('div', 'demo-img', (n) => {
+    n.innerHTML =
+      '<svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true">' +
+      '<rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M4.5 17.5 10 12l4 4 2.5-2.5 3 3"/></svg>'
+  })
   site.append(
+    nav,
     headline,
+    img,
     el('div', 'demo-bar w1'),
     el('div', 'demo-bar w2'),
     el('div', 'demo-rule'),

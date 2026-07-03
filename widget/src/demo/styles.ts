@@ -37,12 +37,12 @@ body{
 .demo-site.spotlight{ opacity:.92; }
 .demo-headline{
   font-family:var(--serif); font-style:italic; font-weight:400;
-  color:var(--ink2); line-height:1.05; letter-spacing:.01em;
+  color:var(--ink3); line-height:1.05; letter-spacing:.01em;
   font-size:26px; margin:0 0 22px;
   transition:font-size .55s cubic-bezier(.2,.7,.2,1), text-shadow .55s ease, color .55s ease;
 }
 .demo-headline.grown{
-  font-size:38px; color:var(--ink);
+  font-size:38px; color:var(--ink2);
   animation:demo-glow 1.1s ease-out;
 }
 @keyframes demo-glow{
@@ -50,6 +50,17 @@ body{
   35%{ text-shadow:0 0 22px rgba(255,184,107,.55); }
   100%{ text-shadow:0 0 0 rgba(255,184,107,0); }
 }
+/* skeleton website furniture — reads as "a site", stays out of the story */
+.demo-nav{ display:flex; align-items:center; gap:10px; margin:0 0 30px; }
+.demo-nav .logo{ width:14px; height:14px; border-radius:50%; background:var(--rule); }
+.demo-nav .sp{ flex:1; }
+.demo-nav i{ display:block; width:26px; height:6px; border-radius:3px; background:var(--rule); }
+.demo-img{
+  height:104px; border-radius:10px; background:var(--rule);
+  display:flex; align-items:center; justify-content:center;
+  margin:0 0 16px; opacity:.75;
+}
+.demo-img svg{ width:22px; height:22px; color:var(--ink3); }
 .demo-bar{ height:11px; border-radius:6px; background:var(--rule); margin:0 0 12px; }
 .demo-bar.w1{ width:92%; }
 .demo-bar.w2{ width:74%; }

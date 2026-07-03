@@ -31,8 +31,8 @@ export const ship: Scene = {
     const ta = q<HTMLTextAreaElement>(shadow, '.ak-ta')
     return {
       // tight loop: payoff lands, holds just long enough to read, resets
-      loopAt: 19800,
-      posterAt: 17200,
+      loopAt: 19400,
+      posterAt: 16600,
       steps: [
         { at: 500, run: () => typeInto(ta, PROMPT, 12) },
         {
@@ -43,15 +43,8 @@ export const ship: Scene = {
             patchUi({ mode: 'collapsed' })
           },
         },
-        { at: 14200, run: () => minisite.deploy.deploying() },
-        {
-          at: 16400,
-          run: () => {
-            minisite.deploy.live()
-            minisite.growHeadline(true)
-          },
-        },
-        { at: 19000, run: () => setJob({ phase: 'idle' }) },
+        { at: 15600, run: () => minisite.growHeadline(true) },
+        { at: 18600, run: () => setJob({ phase: 'idle' }) },
       ],
       onReset: () => {
         clearTextarea(ta)

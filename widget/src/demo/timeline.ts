@@ -4,6 +4,7 @@
 // from the exact same offset", never "skip ahead", so a scene never jumps.
 
 import { prefersReducedMotion } from '../dom'
+import { getState, setJob } from '../state'
 
 export interface TimelineStep {
   at: number // ms from the start of each loop cycle
@@ -23,6 +24,16 @@ export function runTimeline(steps: TimelineStep[], opts: TimelineOpts): void {
   // no per-char animation (the action helpers go instant under the same query).
   if (prefersReducedMotion()) {
     for (const s of sorted) if (s.at <= opts.posterAt) s.run()
+    // The real jobstore lingers the done pill ~8s then blanks it — fine in a
+    // loop, but a poster must STAY the payoff, not decay to an empty bar
+    // (observed on iOS with Reduce Motion on). Re-pin the job state once,
+    // after the linger has fired.
+    const snap = getState().job
+    if (snap.phase === 'done') {
+      setTimeout(() => {
+        if (getState().job.phase !== 'done') setJob(snap)
+      }, 9500)
+    }
     return
   }
 
