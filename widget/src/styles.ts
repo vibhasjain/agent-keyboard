@@ -40,7 +40,7 @@ export const STYLES = `
 /* ---- mini: the smallest resting state, a round ⌨️ parked bottom-right ---- */
 .ak-mini{
   display:flex; align-items:center; justify-content:center;
-  margin-left:0; margin-right:auto; /* left-align the block within the padded zone */
+  margin-left:auto; margin-right:0; /* desktop: bottom-right within the padded zone */
   width:52px; height:52px; padding:0;
   border-radius:50%; border:1px solid #3d372e;
   background:rgba(12,11,10,.96);
@@ -59,6 +59,8 @@ export const STYLES = `
   animation:ak-breathe 3.4s ease-in-out infinite;
 }
 @keyframes ak-breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.09); } }
+/* On touch devices, park it bottom-left — easier thumb reach. */
+@media (pointer: coarse){ .ak-mini{ margin-left:0; margin-right:auto; } }
 
 /* ---- pill surface (streaming / done / error / login) ---- */
 .ak-pill{

@@ -472,12 +472,29 @@ export function mountBar(shadow: ShadowRoot): void {
     }, 160)
   })
 
+  // Touch devices pop an on-screen keyboard on focus, so we only auto-focus the
+  // prompter when opening the bar on a precise-pointer (desktop) device.
+  const isTouch = () => {
+    try {
+      return matchMedia('(pointer: coarse)').matches
+    } catch {
+      return false
+    }
+  }
+  // Open the bar from the minimized corner; on desktop, drop the cursor straight
+  // into the prompter so you can just start typing.
+  const openBar = () => {
+    patchUi({ mode: 'collapsed' })
+    if (!isTouch()) setTimeout(() => composer.focus(), 60)
+  }
+
   // -- three-state cycle (mini → bar → expanded → mini) --
   // Bound to the tilde key and reused by the mini button. Any non-mini/expanded
   // mode counts as "the bar", so composing/login/done all advance to expanded.
   const cycleState = () => {
     const m = getState().ui.mode
-    const next: UiMode = m === 'mini' ? 'collapsed' : m === 'expanded' ? 'mini' : 'expanded'
+    if (m === 'mini') return openBar()
+    const next: UiMode = m === 'expanded' ? 'mini' : 'expanded'
     patchUi({ mode: next })
   }
 
@@ -495,7 +512,7 @@ export function mountBar(shadow: ShadowRoot): void {
     cycleState()
   })
 
-  on(miniBtn, 'click', () => patchUi({ mode: 'collapsed' }))
+  on(miniBtn, 'click', openBar)
 
   // -- idle auto-collapse to the corner --
   // If it's been open and untouched for a while, fold back to the smallest state.
