@@ -379,9 +379,14 @@ export function mountBar(shadow: ShadowRoot): void {
     e.stopPropagation()
     patchUi({ mode: 'expanded' })
   })
-  // Tapping the done/error row itself drops straight into the composer to reply.
+  // Tapping a SUCCESS row opens the full chat (read the change in context);
+  // tapping an error row still drops into the composer to reply/retry.
   on(statusRow, 'click', () => {
     if (getState().ui.mode === 'expanded') return
+    if (getState().job.phase === 'done') {
+      patchUi({ mode: 'expanded' })
+      return
+    }
     patchUi({ mode: 'composing' })
     setTimeout(() => composer.focus(), 60)
   })
