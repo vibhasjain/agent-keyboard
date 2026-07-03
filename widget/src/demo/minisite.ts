@@ -17,6 +17,26 @@ export interface Minisite {
 
 const HEADLINE = 'sunday pottery — small batches, most saturdays'
 
+/** The fake mobile-browser chrome pinned under the bar: URL pill + home
+ *  indicator. Gives the bar something to float above so the phone frame's big
+ *  radius wraps browser chrome, not the widget itself. Idempotent. */
+export function mountBrowserChrome(): void {
+  if (document.querySelector('.demo-chrome')) return
+  if (!document.getElementById('demo-styles')) {
+    const style = el('style', undefined, (n) => {
+      n.id = 'demo-styles'
+      n.textContent = MINISITE_STYLES
+    })
+    document.head.appendChild(style)
+  }
+  const chrome = el('div', 'demo-chrome')
+  chrome.append(
+    el('span', 'demo-url', (n) => (n.textContent = 'sundaypottery.com')),
+    el('span', 'demo-home'),
+  )
+  document.body.appendChild(chrome)
+}
+
 export function mountMinisite(): Minisite {
   if (!document.getElementById('demo-styles')) {
     const style = el('style', undefined, (n) => {
@@ -45,7 +65,10 @@ export function mountMinisite(): Minisite {
   const label = chip.querySelector('.label') as HTMLElement
 
   return {
-    growHeadline: (grown) => headline.classList.toggle('grown', grown),
+    growHeadline: (grown) => {
+      headline.classList.toggle('grown', grown)
+      site.classList.toggle('spotlight', grown) // the page steps forward only as it changes
+    },
     deploy: {
       deploying: () => {
         label.textContent = 'deploying'
@@ -61,6 +84,7 @@ export function mountMinisite(): Minisite {
     },
     reset: () => {
       headline.classList.remove('grown')
+      site.classList.remove('spotlight')
       chip.classList.remove('show', 'deploying', 'live')
       label.textContent = 'deploying'
     },

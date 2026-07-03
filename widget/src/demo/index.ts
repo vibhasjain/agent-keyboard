@@ -8,7 +8,7 @@ import { injectFonts } from '../fonts'
 import { setAuth } from '../state'
 import { STYLES } from '../styles'
 import { installFakeApi } from './fake-api'
-import { mountMinisite } from './minisite'
+import { mountBrowserChrome, mountMinisite } from './minisite'
 import { getScene } from './scenes'
 import { DEMO_STYLES } from './styles'
 import { runTimeline } from './timeline'
@@ -42,6 +42,7 @@ function boot(): void {
   mountBar(shadow)
 
   const minisite = mountMinisite()
+  mountBrowserChrome() // URL pill + home bar under the widget, every scene
   const t = sceneDef.build({ shadow, minisite })
   runTimeline(t.steps, { loopAt: t.loopAt, posterAt: t.posterAt, onReset: t.onReset })
 

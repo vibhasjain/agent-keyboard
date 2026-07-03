@@ -76,27 +76,34 @@ export function runTimeline(steps: TimelineStep[], opts: TimelineOpts): void {
     clearTimer()
   }
 
-  let onscreen = false
+  // Default to RUNNING. Cross-origin iframe viewability via IntersectionObserver
+  // is not reliable everywhere (iOS Safari can simply never report intersecting,
+  // which used to freeze every scene on mobile) — so the observer is a pure
+  // optimization: it may only pause the loop once it has PROVEN it works by
+  // reporting at least one intersecting entry. visibilitychange covers tab and
+  // window switches on its own.
+  let onscreen = true
+  let ioTrusted = false
   const sync = (): void => {
     if (!document.hidden && onscreen) resume()
     else pause()
   }
-
-  // IntersectionObserver on the document element reports iframe viewability even
-  // cross-origin — the one signal that survives being embedded on the marketing
-  // site. visibilitychange covers tab/window switches.
   try {
     const io = new IntersectionObserver(
       (entries) => {
-        onscreen = entries.some((e) => e.isIntersecting)
-        sync()
+        const hit = entries.some((e) => e.isIntersecting)
+        if (hit) ioTrusted = true
+        if (ioTrusted) {
+          onscreen = hit
+          sync()
+        }
       },
       { threshold: 0 },
     )
     io.observe(document.documentElement)
   } catch {
-    onscreen = true // no IO support: fall back to visibility only
-    sync()
+    /* no IO: visibility-only */
   }
   document.addEventListener('visibilitychange', sync)
+  sync()
 }

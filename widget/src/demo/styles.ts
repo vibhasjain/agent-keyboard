@@ -8,6 +8,8 @@
 
 export const DEMO_STYLES = `
 .ak-lg-row.demo-focus .ak-lg-mark{ color:var(--ak-amber); }
+/* the bar floats above the fake browser chrome (.demo-chrome, light DOM) */
+.ak-zone{ padding-bottom:74px; }
 `
 
 export const MINISITE_STYLES = `
@@ -27,15 +29,20 @@ body{
 .demo-site{
   box-sizing:border-box; width:100%; max-width:560px;
   margin:0 auto; padding:40px 28px 150px;
+  /* backdrop, not subject: the widget is the story. The page only steps
+     forward (.spotlight) for the beat where it visibly changes. */
+  opacity:.38;
+  transition:opacity .6s ease;
 }
+.demo-site.spotlight{ opacity:.92; }
 .demo-headline{
   font-family:var(--serif); font-style:italic; font-weight:400;
-  color:var(--ink); line-height:1.05; letter-spacing:.01em;
-  font-size:30px; margin:0 0 22px;
-  transition:font-size .55s cubic-bezier(.2,.7,.2,1), text-shadow .55s ease;
+  color:var(--ink2); line-height:1.05; letter-spacing:.01em;
+  font-size:26px; margin:0 0 22px;
+  transition:font-size .55s cubic-bezier(.2,.7,.2,1), text-shadow .55s ease, color .55s ease;
 }
 .demo-headline.grown{
-  font-size:42px;
+  font-size:38px; color:var(--ink);
   animation:demo-glow 1.1s ease-out;
 }
 @keyframes demo-glow{
@@ -62,6 +69,23 @@ body{
 .demo-chip.live{ color:var(--ok); border-color:rgba(109,211,150,.5); }
 .demo-chip.live .dot{ background:var(--ok); animation:none; }
 @keyframes demo-pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+
+/* fake mobile-browser chrome pinned to the very bottom: URL pill + home bar.
+   Sits UNDER the widget (the shadow host out-z-indexes everything) and gives
+   the phone frame's big corner radius something browser-y to wrap. */
+.demo-chrome{
+  position:fixed; left:0; right:0; bottom:0; z-index:1;
+  display:flex; flex-direction:column; align-items:center; gap:7px;
+  padding:9px 16px calc(8px + env(safe-area-inset-bottom,0px));
+  background:rgba(16,15,14,.92); border-top:1px solid var(--rule);
+  backdrop-filter:blur(10px);
+}
+.demo-url{
+  font-family:var(--mono); font-size:11px; color:var(--ink3);
+  background:rgba(255,255,255,.04); border:1px solid var(--rule);
+  border-radius:999px; padding:4px 18px;
+}
+.demo-home{ width:110px; height:4px; border-radius:3px; background:rgba(245,241,234,.22); }
 
 @media (prefers-reduced-motion: reduce){
   .demo-headline{ transition:none; }
