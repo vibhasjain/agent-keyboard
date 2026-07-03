@@ -301,7 +301,9 @@ export function mountBar(shadow: ShadowRoot): void {
     n.appendChild(icon('expand', 15))
     n.setAttribute('aria-label', 'Expand chat')
   })
-  composer.el.querySelector('.ak-input-row')?.appendChild(composerExpand)
+  // Far LEFT, before the text — at the right edge it kept getting confused
+  // with the send arrow.
+  composer.el.querySelector('.ak-input-row')?.prepend(composerExpand)
 
   const chat: Chat = mountChat(shadow, {
     composerEl: composer.el,
