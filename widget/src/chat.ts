@@ -36,6 +36,36 @@ function lineEl(cls: string, marker: string, body: HTMLElement): HTMLElement {
   return m
 }
 
+// -- host body scroll lock ------------------------------------------------------
+// While the chat overlay is open, the page underneath must not scroll (iOS
+// chains touch scrolls to the body once the inner scroller hits an edge — or
+// when the touch lands outside it entirely). position:fixed is the only
+// reliable iOS lock; the scroll offset is restored on unlock.
+let bodyLockTop: number | null = null
+function lockBody(): void {
+  if (bodyLockTop != null) return
+  bodyLockTop = window.scrollY
+  const s = document.body.style
+  s.position = 'fixed'
+  s.top = `-${bodyLockTop}px`
+  s.left = '0'
+  s.right = '0'
+  s.width = '100%'
+  s.overflow = 'hidden'
+}
+function unlockBody(): void {
+  if (bodyLockTop == null) return
+  const s = document.body.style
+  s.position = ''
+  s.top = ''
+  s.left = ''
+  s.right = ''
+  s.width = ''
+  s.overflow = ''
+  window.scrollTo(0, bodyLockTop)
+  bodyLockTop = null
+}
+
 // -- lightbox (tap a thumb → full-screen; tap or Esc closes) -------------------
 let lbHost: ShadowRoot | null = null
 let lbEl: HTMLElement | null = null
@@ -57,6 +87,12 @@ function openLightbox(src: string): void {
     lbImg.alt = ''
     lbEl.appendChild(lbImg)
     on(lbEl, 'click', () => closeLightbox())
+    // Tap-to-dismiss is the ONLY gesture: no pinch, no pan, no scrolling the
+    // content behind it. touch-action:none covers modern engines; these cover
+    // iOS Safari's proprietary gestures and any scroll/wheel fallthrough.
+    for (const ev of ['gesturestart', 'gesturechange', 'gestureend', 'touchmove', 'wheel']) {
+      lbEl.addEventListener(ev, (e) => e.preventDefault(), { passive: false })
+    }
     lbHost.appendChild(lbEl)
   }
   lbImg!.src = src
@@ -287,9 +323,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const expanded = getState().ui.mode === 'expanded'
     show(overlay, expanded)
     if (!expanded) {
+      unlockBody()
       wasExpanded = false
       return
     }
+    lockBody()
     if (footer.firstChild !== deps.composerEl) footer.appendChild(deps.composerEl)
     if (!loaded && !loading) {
       void loadHistory()

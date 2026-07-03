@@ -222,7 +222,7 @@ export const STYLES = `
   flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
   padding:calc(20px + env(safe-area-inset-top,0px)) 18px 10px;
   scrollbar-width:none; -ms-overflow-style:none;
-  touch-action:pan-y;
+  touch-action:pan-y; overscroll-behavior:contain; /* never chain scroll to the page behind */
 }
 .ak-ov-scroll::-webkit-scrollbar{ display:none; width:0; height:0; }
 .ak-overlay{ touch-action:pan-y; }
@@ -259,6 +259,7 @@ export const STYLES = `
   position:fixed; inset:0; z-index:5; background:rgba(0,0,0,.9);
   display:flex; align-items:center; justify-content:center; cursor:zoom-out;
   animation:ak-fade .15s ease;
+  touch-action:none; overscroll-behavior:contain; /* tap-to-dismiss is the ONLY gesture */
 }
 .ak-lightbox img{ max-width:94vw; max-height:90vh; border-radius:8px; display:block; }
 .ak-t-attach{ display:flex; align-items:center; gap:5px; color:var(--ak-ink3); font-size:11px; margin:1px 0 5px; }
