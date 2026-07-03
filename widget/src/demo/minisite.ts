@@ -6,6 +6,10 @@ import { el } from '../dom'
 import { MINISITE_STYLES } from './styles'
 
 export interface Minisite {
+  /** establish → backdrop: the page recedes while the widget works */
+  dim: () => void
+  /** the refresh beat: fade to blank, apply the change mid-blank, return in spotlight */
+  refresh: (apply: () => void) => void
   growHeadline: (grown: boolean) => void
   deploy: {
     deploying: () => void
@@ -74,9 +78,17 @@ export function mountMinisite(): Minisite {
   const label = chip.querySelector('.label') as HTMLElement
 
   return {
+    dim: () => site.classList.add('backdrop'),
+    refresh: (apply) => {
+      site.classList.add('refreshing')
+      setTimeout(() => {
+        apply()
+        site.classList.remove('refreshing', 'backdrop')
+        site.classList.add('spotlight')
+      }, 420)
+    },
     growHeadline: (grown) => {
       headline.classList.toggle('grown', grown)
-      site.classList.toggle('spotlight', grown) // the page steps forward only as it changes
     },
     deploy: {
       deploying: () => {
@@ -93,7 +105,7 @@ export function mountMinisite(): Minisite {
     },
     reset: () => {
       headline.classList.remove('grown')
-      site.classList.remove('spotlight')
+      site.classList.remove('spotlight', 'backdrop', 'refreshing')
       chip.classList.remove('show', 'deploying', 'live')
       label.textContent = 'deploying'
     },

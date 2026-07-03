@@ -2,7 +2,6 @@
 // live textarea, append dictation bursts, attach a painted photo, toggle the mic.
 // Every mutation goes through real DOM events so the widget's own handlers fire.
 
-import { prefersReducedMotion } from '../dom'
 
 /** Query one element inside the widget shadow; throw loudly if a scene selector
  *  drifts from the production markup (the demo is worthless if it silently no-ops). */
@@ -20,11 +19,6 @@ const fireInput = (ta: HTMLTextAreaElement): void => {
  *  reduced motion). Dispatches a real 'input' after each char so autogrow +
  *  send-enable + draft-save all run exactly as they do for a human. */
 export function typeInto(ta: HTMLTextAreaElement, text: string, cps = 26): void {
-  if (prefersReducedMotion()) {
-    ta.value = text
-    fireInput(ta)
-    return
-  }
   const step = 1000 / cps
   let i = 0
   const tick = (): void => {
@@ -38,11 +32,6 @@ export function typeInto(ta: HTMLTextAreaElement, text: string, cps = 26): void 
 /** Type into any input (email / password) char-by-char; password fields mask
  *  the real characters themselves. */
 export function typeInput(input: HTMLInputElement, text: string, cps = 22): void {
-  if (prefersReducedMotion()) {
-    input.value = text
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-    return
-  }
   const step = 1000 / cps
   let i = 0
   const tick = (): void => {
@@ -60,10 +49,6 @@ export function dictateInto(ta: HTMLTextAreaElement, bursts: string[], gapMs = 1
     ta.value = ta.value + chunk
     fireInput(ta)
     ta.scrollTop = ta.scrollHeight // pin to the newest words past the cap
-  }
-  if (prefersReducedMotion()) {
-    append(bursts.join(''))
-    return
   }
   bursts.forEach((b, i) => setTimeout(() => append(b), i * gapMs))
 }

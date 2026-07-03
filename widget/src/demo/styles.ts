@@ -10,6 +10,13 @@ export const DEMO_STYLES = `
 .ak-lg-row.demo-focus .ak-lg-mark{ color:var(--ak-amber); }
 /* the bar floats above the fake browser chrome (.demo-chrome, light DOM) */
 .ak-zone{ padding-bottom:74px; }
+/* demos ignore Reduce Motion by design (owner's call): restore the widget's
+   own animations that STYLES turns off under the media query */
+@media (prefers-reduced-motion: reduce){
+  .ak-shimmer{ animation:ak-shimmer 1.6s infinite !important; }
+  .ak-mic.live::after{ animation:ak-ping 1.3s cubic-bezier(0,0,.2,1) infinite !important; }
+  .ak-line{ transition:transform .6s cubic-bezier(.32,.08,.22,1), opacity .45s ease !important; }
+}
 `
 
 export const MINISITE_STYLES = `
@@ -29,12 +36,15 @@ body{
 .demo-site{
   box-sizing:border-box; width:100%; max-width:560px;
   margin:0 auto; padding:40px 28px 150px;
-  /* backdrop, not subject: the widget is the story. The page only steps
-     forward (.spotlight) for the beat where it visibly changes. */
-  opacity:.38;
-  transition:opacity .6s ease;
+  /* the story: ESTABLISH the website first (readable), dim to a backdrop while
+     the widget works, blank for the refresh beat, return changed (spotlight). */
+  opacity:.72;
+  transition:opacity .55s ease;
 }
+.demo-site.backdrop{ opacity:.38; }
 .demo-site.spotlight{ opacity:.92; }
+.demo-site.refreshing{ opacity:0; transition:opacity .28s ease; }
+.demo-site.refreshing .demo-headline{ transition:none; } /* fresh load: appears already changed */
 .demo-headline{
   font-family:var(--serif); font-style:italic; font-weight:400;
   color:var(--ink3); line-height:1.05; letter-spacing:.01em;
@@ -98,9 +108,4 @@ body{
 }
 .demo-home{ width:110px; height:4px; border-radius:3px; background:rgba(245,241,234,.22); }
 
-@media (prefers-reduced-motion: reduce){
-  .demo-headline{ transition:none; }
-  .demo-headline.grown{ animation:none; }
-  .demo-chip.deploying .dot{ animation:none; }
-}
 `

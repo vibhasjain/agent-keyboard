@@ -3,8 +3,6 @@
 // (tab switch) OR scrolled out of the parent's viewport. Frozen means "resume
 // from the exact same offset", never "skip ahead", so a scene never jumps.
 
-import { prefersReducedMotion } from '../dom'
-import { getState, setJob } from '../state'
 
 export interface TimelineStep {
   at: number // ms from the start of each loop cycle
@@ -13,29 +11,12 @@ export interface TimelineStep {
 
 export interface TimelineOpts {
   loopAt: number // cycle length; onReset fires here, then the cycle replays
-  posterAt: number // reduced-motion cutoff: run steps up to here once, no loop
+  posterAt: number // kept for API stability; scenes always loop (owner's call: demos ignore Reduce Motion)
   onReset: () => void
 }
 
 export function runTimeline(steps: TimelineStep[], opts: TimelineOpts): void {
   const sorted = [...steps].sort((a, b) => a.at - b.at)
-
-  // Reduced motion: paint one representative "poster" frame and stop. No loop,
-  // no per-char animation (the action helpers go instant under the same query).
-  if (prefersReducedMotion()) {
-    for (const s of sorted) if (s.at <= opts.posterAt) s.run()
-    // The real jobstore lingers the done pill ~8s then blanks it — fine in a
-    // loop, but a poster must STAY the payoff, not decay to an empty bar
-    // (observed on iOS with Reduce Motion on). Re-pin the job state once,
-    // after the linger has fired.
-    const snap = getState().job
-    if (snap.phase === 'done') {
-      setTimeout(() => {
-        if (getState().job.phase !== 'done') setJob(snap)
-      }, 9500)
-    }
-    return
-  }
 
   let idx = 0
   let offset = 0 // cycle-time consumed so far (frozen across pauses)
@@ -87,33 +68,13 @@ export function runTimeline(steps: TimelineStep[], opts: TimelineOpts): void {
     clearTimer()
   }
 
-  // Default to RUNNING. Cross-origin iframe viewability via IntersectionObserver
-  // is not reliable everywhere (iOS Safari can simply never report intersecting,
-  // which used to freeze every scene on mobile) — so the observer is a pure
-  // optimization: it may only pause the loop once it has PROVEN it works by
-  // reporting at least one intersecting entry. visibilitychange covers tab and
-  // window switches on its own.
-  let onscreen = true
-  let ioTrusted = false
+  // The ONLY pause is a hidden document (tab switch) — literally invisible.
+  // No IntersectionObserver, no prefers-reduced-motion, no other gatekeepers:
+  // the owner's standing rule is that demo animations play on every device,
+  // always. (A hidden tab still banks its offset and resumes exactly in place.)
   const sync = (): void => {
-    if (!document.hidden && onscreen) resume()
+    if (!document.hidden) resume()
     else pause()
-  }
-  try {
-    const io = new IntersectionObserver(
-      (entries) => {
-        const hit = entries.some((e) => e.isIntersecting)
-        if (hit) ioTrusted = true
-        if (ioTrusted) {
-          onscreen = hit
-          sync()
-        }
-      },
-      { threshold: 0 },
-    )
-    io.observe(document.documentElement)
-  } catch {
-    /* no IO: visibility-only */
   }
   document.addEventListener('visibilitychange', sync)
   sync()
