@@ -202,6 +202,24 @@ function makeComposer(): Composer {
     }
   })
 
+  // paste an image straight into the composer (screenshots, copied pics). Text
+  // pastes fall through untouched — we only swallow the event when it carries images.
+  on(ta, 'paste', (e) => {
+    const dt = (e as ClipboardEvent).clipboardData
+    if (!dt) return
+    const files: File[] = []
+    for (const item of Array.from(dt.items || [])) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const f = item.getAsFile()
+        if (f) files.push(f)
+      }
+    }
+    if (!files.length) for (const f of Array.from(dt.files || [])) if (f.type.startsWith('image/')) files.push(f)
+    if (!files.length) return
+    e.preventDefault()
+    photos.addFiles(files)
+  })
+
   // keyboard avoidance while the composer has focus
   let detachKb: (() => void) | null = null
   on(ta, 'focus', () => {
