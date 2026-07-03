@@ -229,6 +229,16 @@ footer .meta a:hover{ color:var(--amber); }
   .phone iframe{ transition:none; }
   html{ scroll-behavior:auto; }
 }
+
+/* ---- pull-to-refresh (installed web-app only; injected by JS) ---- */
+.ptr{ position:fixed; top:0; left:0; right:0; z-index:2147482000; display:flex; justify-content:center; pointer-events:none; will-change:transform,opacity; }
+.ptr-in{ margin-top:calc(8px + env(safe-area-inset-top,0px)); width:36px; height:36px; border-radius:50%;
+  background:var(--bg-2); border:1px solid var(--rule-2); color:var(--amber);
+  display:flex; align-items:center; justify-content:center; box-shadow:0 6px 22px rgba(0,0,0,.45); }
+.ptr.ready .ptr-in{ border-color:rgba(255,184,107,.55); }
+.ptr-in svg{ width:18px; height:18px; transform:rotate(var(--r,0deg)); }
+.ptr.spin .ptr-in svg{ animation:ptr-spin .8s linear infinite; }
+@keyframes ptr-spin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -436,6 +446,74 @@ footer .meta a:hover{ color:var(--amber); }
     if (e.origin !== DEMO_ORIGIN || !e.data || e.data.type !== 'ak-demo-ready') return;
     document.querySelectorAll('.phone[data-scene="' + e.data.scene + '"]').forEach(function(p){ p.classList.add('ready'); });
   });
+
+  // Pull-to-refresh — only when running as an installed web app (standalone),
+  // where the browser's own pull-to-refresh isn't available. Pulling down at the
+  // very top past the threshold triggers a hard refresh (clears any PWA cache /
+  // service worker first). Touches inside the Agent Keyboard widget are ignored,
+  // so pulling the chat transcript never reloads the page.
+  (function(){
+    var standalone = false;
+    try { standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch(e){}
+    if (!standalone) return;
+
+    var el = document.createElement('div');
+    el.className = 'ptr';
+    el.innerHTML = '<div class="ptr-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg></div>';
+    document.body.appendChild(el);
+    var glyph = el.querySelector('svg');
+
+    var THRESHOLD = 72, MAX = 96;
+    var startY = 0, active = false, pull = 0, refreshing = false;
+
+    function atTop(){ return (window.scrollY || document.documentElement.scrollTop || 0) <= 0; }
+    function inWidget(t){ return !!(t && t.closest && t.closest('#agent-keyboard-host')); }
+    function place(y, op){ el.style.transform = 'translateY(' + y + 'px)'; el.style.opacity = op; }
+    place(-56, 0);
+
+    window.addEventListener('touchstart', function(e){
+      if (refreshing || e.touches.length !== 1 || !atTop() || inWidget(e.target)) { active = false; return; }
+      startY = e.touches[0].clientY; active = true; pull = 0;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', function(e){
+      if (!active || refreshing) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { active = false; place(-56, 0); return; }
+      pull = Math.min(dy * 0.5, MAX);      // rubber-band resistance
+      e.preventDefault();                  // hold the page still while we track the pull
+      var progress = Math.min(pull / THRESHOLD, 1);
+      glyph.style.setProperty('--r', (progress * 300) + 'deg');
+      place(pull - 44, progress);
+      el.classList.toggle('ready', pull >= THRESHOLD);
+    }, { passive: false });
+
+    function end(){
+      if (!active || refreshing) return;
+      active = false;
+      if (pull >= THRESHOLD) {
+        refreshing = true;
+        el.classList.remove('ready'); el.classList.add('spin');
+        place(THRESHOLD - 44, 1);
+        hardReload();
+      } else {
+        el.style.transition = 'transform .22s ease, opacity .22s ease';
+        place(-56, 0);
+        setTimeout(function(){ el.style.transition = ''; }, 240);
+      }
+    }
+    window.addEventListener('touchend', end, { passive: true });
+    window.addEventListener('touchcancel', end, { passive: true });
+
+    function hardReload(){
+      var go = function(){ location.reload(); };
+      var jobs = [];
+      try { if (window.caches && caches.keys) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })); } catch(e){}
+      try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })); } catch(e){}
+      Promise.all(jobs).then(go).catch(go);
+      setTimeout(go, 1200); // safety net if cache-clearing hangs
+    }
+  })();
 </script>
 
 <!-- The live product: this exact page's editor. Owner-gated. -->
