@@ -33,9 +33,32 @@ export const STYLES = `
    bar mid-screen — no focus, no lift. */
 :host(.ak-kbd) .ak-zone{ transform:translateY(calc(-1 * var(--ak-kb))); }
 .ak-zone{ pointer-events:none; }
-.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox{ pointer-events:auto; }
+.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox, .ak-mini{ pointer-events:auto; }
 .ak-bar{ position:relative; width:100%; min-height:48px; }
 .ak-stash{ display:none; }
+
+/* ---- mini: the smallest resting state, a round ⌨️ parked bottom-right ---- */
+.ak-mini{
+  display:flex; align-items:center; justify-content:center;
+  margin-left:auto; margin-right:0; /* right-align the block within the padded zone */
+  width:52px; height:52px; padding:0;
+  border-radius:50%; border:1px solid #3d372e;
+  background:rgba(12,11,10,.96);
+  box-shadow:0 6px 22px rgba(0,0,0,.5);
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  cursor:pointer;
+  animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
+  transition:transform .16s ease, border-color .16s ease;
+}
+.ak-mini:hover{ transform:scale(1.06); border-color:rgba(255,184,107,.5); }
+.ak-mini:active{ transform:scale(.96); }
+.ak-mini-glyph{
+  font-size:24px; line-height:1;
+  filter:drop-shadow(0 0 6px rgba(255,184,107,.5));
+  animation:ak-breathe 3.4s ease-in-out infinite;
+}
+@keyframes ak-breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.09); } }
 
 /* ---- pill surface (streaming / done / error / login) ---- */
 .ak-pill{
@@ -274,7 +297,7 @@ export const STYLES = `
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
-  .ak-shimmer, .ak-mic.live::after{ animation:none !important; }
+  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
   .ak-zone{ transition:none !important; }
 }

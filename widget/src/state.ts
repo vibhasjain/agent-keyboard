@@ -22,7 +22,7 @@ export type JobState =
   | { phase: 'done'; jobId: string; summary: string; ok: boolean }
   | { phase: 'error'; message: string; retry?: () => void }
 
-export type UiMode = 'collapsed' | 'login' | 'composing' | 'expanded'
+export type UiMode = 'mini' | 'collapsed' | 'login' | 'composing' | 'expanded'
 export type VoiceState = 'idle' | 'connecting' | 'live' | 'error'
 
 export interface UiState {
@@ -42,7 +42,7 @@ export interface State {
 const state: State = {
   auth: 'unknown',
   job: { phase: 'idle' },
-  ui: { mode: 'collapsed', voice: 'idle' },
+  ui: { mode: 'mini', voice: 'idle' },
 }
 
 const listeners = new Set<() => void>()
