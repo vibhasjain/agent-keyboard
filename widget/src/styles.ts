@@ -59,8 +59,6 @@ export const STYLES = `
   animation:ak-breathe 3.4s ease-in-out infinite;
 }
 @keyframes ak-breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.09); } }
-/* On touch devices, park it bottom-left — easier thumb reach. */
-@media (pointer: coarse){ .ak-mini{ margin-left:0; margin-right:auto; } }
 
 /* ---- pill surface (streaming / done / error / login) ---- */
 .ak-pill{
