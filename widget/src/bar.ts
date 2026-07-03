@@ -96,12 +96,14 @@ function makeComposer(): Composer {
       partial = joinText(partial, delta)
       ta.value = joinText(baseText, partial)
       autogrow()
+      pinToEnd() // dictation past the height cap: keep the last spoken word in view
     },
     onFinal: (transcript) => {
       baseText = joinText(baseText, transcript)
       partial = ''
       ta.value = baseText
       autogrow()
+      pinToEnd()
       saveDraft()
       syncSend()
     },
@@ -120,6 +122,10 @@ function makeComposer(): Composer {
     // scrollHeight is 0 while hidden/mid-reparent — don't persist a 0px height.
     if (ta.scrollHeight > 0) ta.style.height = Math.min(ta.scrollHeight, 88) + 'px'
     else ta.style.height = ''
+  }
+
+  const pinToEnd = () => {
+    ta.scrollTop = ta.scrollHeight
   }
 
   const saveDraft = () => {
