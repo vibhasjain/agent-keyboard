@@ -15,10 +15,15 @@ function measure(): void {
   // Gap between the bottom of the visual viewport and the bottom of the layout viewport.
   const gap = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
   host.style.setProperty('--ak-kb', `${Math.round(gap)}px`)
+  // How far the visual viewport has scrolled down inside the layout viewport
+  // (iOS scrolls it when the keyboard opens). Anything pinned to the VISIBLE
+  // top — the chat's collapse button — offsets by this.
+  host.style.setProperty('--ak-vvt', `${Math.round(Math.max(0, vv.offsetTop))}px`)
 }
 
 function reset(): void {
   host?.style.setProperty('--ak-kb', '0px')
+  host?.style.setProperty('--ak-vvt', '0px')
 }
 
 /** Call on focus of any composer input; returns a detach fn for blur. */

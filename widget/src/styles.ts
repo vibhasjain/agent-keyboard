@@ -212,7 +212,9 @@ export const STYLES = `
 }
 @keyframes ak-fade{ from{ opacity:0; } to{ opacity:1; } }
 .ak-ov-close{
-  position:absolute; top:calc(8px + env(safe-area-inset-top,0px)); right:10px; z-index:2;
+  /* pinned to the VISIBLE top-right: --ak-vvt tracks how far iOS scrolled the
+     visual viewport down when the keyboard opened */
+  position:absolute; top:calc(8px + env(safe-area-inset-top,0px) + var(--ak-vvt, 0px)); right:10px; z-index:2;
   width:34px; height:34px; border-radius:6px; border:none; background:transparent;
   color:var(--ak-ink3); line-height:0; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
