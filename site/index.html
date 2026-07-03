@@ -450,11 +450,11 @@ footer .meta a:hover{ color:var(--amber); }
 
   // Pull-to-refresh — only when running as an installed web app (standalone),
   // where the browser's own pull-to-refresh isn't available. Pulling down at the
-  // very top past the threshold reloads the page. We deliberately do NOT clear
-  // caches or unregister the service worker: wiping site data resets the
-  // microphone permission on iOS home-screen web apps, forcing a re-prompt every
-  // launch. Touches inside the Agent Keyboard widget are ignored, so pulling the
-  // chat transcript never reloads the page.
+  // very top past the threshold triggers a hard refresh — clears any PWA cache /
+  // service worker first, then reloads — so you always land on the latest deploy.
+  // (iOS re-prompts for the mic on any reload regardless, so there's nothing to
+  // gain by holding back.) Touches inside the Agent Keyboard widget are ignored,
+  // so pulling the chat transcript never reloads the page.
   (function(){
     var standalone = false;
     try { standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch(e){}
@@ -498,7 +498,7 @@ footer .meta a:hover{ color:var(--amber); }
         refreshing = true;
         el.classList.remove('ready'); el.classList.add('spin');
         place(THRESHOLD - 44, 1);
-        location.reload();
+        hardReload();
       } else {
         el.style.transition = 'transform .22s ease, opacity .22s ease';
         place(-56, 0);
@@ -507,6 +507,15 @@ footer .meta a:hover{ color:var(--amber); }
     }
     window.addEventListener('touchend', end, { passive: true });
     window.addEventListener('touchcancel', end, { passive: true });
+
+    function hardReload(){
+      var go = function(){ location.reload(); };
+      var jobs = [];
+      try { if (window.caches && caches.keys) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })); } catch(e){}
+      try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })); } catch(e){}
+      Promise.all(jobs).then(go).catch(go);
+      setTimeout(go, 1200); // safety net if cache-clearing hangs
+    }
   })();
 </script>
 
