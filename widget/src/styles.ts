@@ -22,12 +22,16 @@ export const STYLES = `
   width:100%;
   display:block;
   padding:0 14px calc(10px + env(safe-area-inset-bottom,0px)) 14px;
-  transform:translateY(calc(-1 * var(--ak-kb)));
+  transform:none;
   transition:transform .18s ease-out;
   font-family:var(--ak-mono);
   color:var(--ak-ink);
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
+/* Lift the bar above the keyboard ONLY while the composer is focused. Gating on
+   the class (not just --ak-kb) means a stale gap can never strand the collapsed
+   bar mid-screen — no focus, no lift. */
+:host(.ak-kbd) .ak-zone{ transform:translateY(calc(-1 * var(--ak-kb))); }
 .ak-zone{ pointer-events:none; }
 .ak-pill, .ak-composer, .ak-overlay, .ak-lightbox{ pointer-events:auto; }
 .ak-bar{ position:relative; width:100%; min-height:48px; }
