@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#0a0a0a" />
 <meta name="generator" content="Agent Keyboard" />
 <title>Agent Keyboard — an open-source prompt bar that edits the site it's on</title>
@@ -40,7 +40,7 @@
   --wrap:960px;
 }
 *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
-html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; }
+html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; touch-action:pan-x pan-y; }
 body{
   min-height:100vh;
   /* room for the fixed widget bar at the bottom */
@@ -451,6 +451,21 @@ footer .meta a:hover{ color:var(--amber); }
 </footer>
 
 <script>
+  // No browser zoom, ever: the viewport meta + touch-action cover most engines;
+  // iOS Safari additionally needs its proprietary gesture events cancelled and
+  // rapid double-taps on non-interactive surfaces eaten.
+  ['gesturestart','gesturechange','gestureend'].forEach(function(ev){
+    document.addEventListener(ev, function(e){ e.preventDefault(); });
+  });
+  var lastTouchEnd = 0;
+  document.addEventListener('touchend', function(e){
+    var now = Date.now();
+    var t = e.target;
+    var interactive = t && t.closest && t.closest('button, a, textarea, input');
+    if (now - lastTouchEnd < 350 && !interactive) e.preventDefault();
+    lastTouchEnd = now;
+  }, { passive: false });
+
   document.querySelectorAll('.copybtn').forEach(function(btn){
     btn.addEventListener('click', function(){
       var text = btn.getAttribute('data-copy');

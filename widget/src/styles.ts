@@ -26,6 +26,7 @@ export const STYLES = `
   transition:transform .18s ease-out;
   font-family:var(--ak-mono);
   color:var(--ak-ink);
+  touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
 .ak-zone{ pointer-events:none; }
 .ak-pill, .ak-composer, .ak-overlay{ pointer-events:auto; }
