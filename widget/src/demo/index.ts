@@ -5,7 +5,7 @@
 import { mountBar } from '../bar'
 import { CONFIG } from '../config'
 import { injectFonts } from '../fonts'
-import { getState, setAuth, subscribe } from '../state'
+import { setAuth } from '../state'
 import { STYLES } from '../styles'
 import { installFakeApi } from './fake-api'
 import { mountBrowserChrome, mountMinisite } from './minisite'
@@ -42,13 +42,7 @@ function boot(): void {
   mountBar(shadow)
 
   const minisite = mountMinisite()
-  mountBrowserChrome() // URL pill + home bar under the widget, every scene
-  // The expanded transcript is full-screen: the fake browser chrome under it
-  // must disappear with it, exactly like real chrome would.
-  subscribe(() => {
-    const chrome = document.querySelector('.demo-chrome') as HTMLElement | null
-    if (chrome) chrome.style.display = getState().ui.mode === 'expanded' ? 'none' : ''
-  })
+  mountBrowserChrome() // URL pill + home bar — the browser's own UI, always on top
   const t = sceneDef.build({ shadow, minisite })
   runTimeline(t.steps, { loopAt: t.loopAt, posterAt: t.posterAt, onReset: t.onReset })
 

@@ -95,7 +95,8 @@ body{
    Sits UNDER the widget (the shadow host out-z-indexes everything) and gives
    the phone frame's big corner radius something browser-y to wrap. */
 .demo-chrome{
-  position:fixed; left:0; right:0; bottom:0; z-index:1;
+  /* the browser's UI: above ALL page content, including the widget's overlay */
+  position:fixed; left:0; right:0; bottom:0; z-index:2147483001;
   display:flex; flex-direction:column; align-items:center; gap:7px;
   padding:9px 16px calc(8px + env(safe-area-inset-bottom,0px));
   background:rgba(16,15,14,.92); border-top:1px solid var(--rule);
