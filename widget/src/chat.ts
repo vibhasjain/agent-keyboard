@@ -7,7 +7,7 @@ import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getActivePrompt, getActiveThumbs, getLiveTurns, getQueued } from './jobstore'
 import { renderMarkdown } from './markdown'
-import { getState, subscribe } from './state'
+import { getState, patchUi, subscribe } from './state'
 
 export interface Chat {
   footerEl: HTMLElement
@@ -199,10 +199,19 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   lbHost = shadow
   on(close, 'click', () => deps.collapse())
+  // Escape steps down one size each press: lightbox → chat → bar → mini corner.
   on(window, 'keydown', (e) => {
     if ((e as KeyboardEvent).key !== 'Escape') return
-    if (isLightboxOpen()) closeLightbox() // Esc peels the lightbox first…
-    else if (getState().ui.mode === 'expanded') deps.collapse() // …then the chat
+    if (isLightboxOpen()) return closeLightbox() // Esc peels the lightbox first…
+    const mode = getState().ui.mode
+    if (mode === 'expanded') return deps.collapse() // …then the chat → bar…
+    if (mode === 'mini') return // already the smallest
+    // …then the bar → minimized corner, unless a host-page field owns the Escape.
+    const da = document.activeElement as HTMLElement | null
+    const hostField =
+      da && (da.tagName === 'INPUT' || da.tagName === 'TEXTAREA' || da.isContentEditable) && !da.closest?.('#agent-keyboard-host')
+    if (hostField) return
+    patchUi({ mode: 'mini' })
   })
 
   // -- history state --
