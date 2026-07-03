@@ -251,12 +251,14 @@ export function mountBar(shadow: ShadowRoot): void {
   const statusDot = el('div', 'dot')
   const statusMsg = el('div', 'msg')
   const retryBtn = el('button', 'ak-retry', (n) => (n.textContent = 'Retry'))
-  const statusExpand = el('button', 'ak-expand', (n) => {
+  // Corner chat button: talk some more from right here — straight into the
+  // composer, no full modal (the row tap is what opens the full chat).
+  const statusChat = el('button', 'ak-expand', (n) => {
     n.type = 'button'
-    n.appendChild(icon('expand', 15))
-    n.setAttribute('aria-label', 'Expand chat')
+    n.appendChild(icon('chat', 15))
+    n.setAttribute('aria-label', 'Reply')
   })
-  statusRow.append(statusDot, statusMsg, statusExpand)
+  statusRow.append(statusDot, statusMsg, statusChat)
 
   // Login styled as a Claude Code prompt sequence: "> email" / "> password",
   // chromeless mono inputs, dim marks that go amber on focus, hairline between.
@@ -375,9 +377,10 @@ export function mountBar(shadow: ShadowRoot): void {
   // -- expand / collapse (chat is reachable from every state) --
   on(expandBtn, 'click', () => patchUi({ mode: 'expanded' }))
   on(composerExpand, 'click', () => patchUi({ mode: 'expanded' }))
-  on(statusExpand, 'click', (e) => {
+  on(statusChat, 'click', (e) => {
     e.stopPropagation()
-    patchUi({ mode: 'expanded' })
+    patchUi({ mode: 'composing' })
+    setTimeout(() => composer.focus(), 60)
   })
   // Tapping a SUCCESS row opens the full chat (read the change in context);
   // tapping an error row still drops into the composer to reply/retry.

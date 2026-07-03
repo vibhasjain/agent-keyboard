@@ -49,6 +49,7 @@ const ICON_PATHS: Record<string, string> = {
   'arrow-right': '<path d="M5 12h14M12.5 5.5 19 12l-6.5 6.5" fill="none"/>',
   expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none"/>',
   'chevron-down': '<path d="M5 9.5 12 16l7-6.5" fill="none"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none"/>',
   check: '<path d="M4.5 12.5 10 18 19.5 6.5" fill="none"/>',
   retry: '<path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5" fill="none"/>',
   x: '<path d="M6 6l12 12M18 6 6 18" fill="none"/>',
