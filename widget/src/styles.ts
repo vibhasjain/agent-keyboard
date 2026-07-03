@@ -29,7 +29,7 @@ export const STYLES = `
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
 .ak-zone{ pointer-events:none; }
-.ak-pill, .ak-composer, .ak-overlay{ pointer-events:auto; }
+.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox{ pointer-events:auto; }
 .ak-bar{ position:relative; width:100%; min-height:48px; }
 .ak-stash{ display:none; }
 
