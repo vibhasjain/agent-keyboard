@@ -93,6 +93,17 @@ function openLightbox(src: string): void {
     for (const ev of ['gesturestart', 'gesturechange', 'gestureend', 'touchmove', 'wheel']) {
       lbEl.addEventListener(ev, (e) => e.preventDefault(), { passive: false })
     }
+    // On touch devices dismiss straight from touchend — with the gesture
+    // lockdown above, iOS won't reliably synthesize the click. preventDefault
+    // stops a late synthesized click from double-firing.
+    lbEl.addEventListener(
+      'touchend',
+      (e) => {
+        e.preventDefault()
+        closeLightbox()
+      },
+      { passive: false },
+    )
     lbHost.appendChild(lbEl)
   }
   lbImg!.src = src
