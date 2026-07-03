@@ -165,8 +165,9 @@ h2 em{ font-style:italic; color:var(--warm); }
   background:rgba(255,184,107,.5); box-shadow:0 0 4px rgba(255,184,107,.3); animation:flow-x 2.8s linear infinite; }
 @keyframes flow-x{ 0%{ transform:translateX(0); opacity:0; } 15%{ opacity:1; } 85%{ opacity:1; } 100%{ transform:translateX(34px); opacity:0; } }
 @media (max-width:860px){
-  .flow{ flex-direction:column; align-items:stretch; max-width:360px; margin-left:auto; margin-right:auto; }
-  .node{ width:100%; }
+  .flow{ flex-direction:column; align-items:stretch; max-width:270px; margin-left:auto; margin-right:auto; }
+  .node{ width:100%; padding:15px 14px; }
+  .node .n-ico{ width:28px; height:28px; margin-bottom:11px; }
   .conn{ flex-direction:column; padding:9px 0; }
   .conn-line{ width:1px; height:30px; background:var(--rule-2); }
   .conn-line::after{ right:auto; left:-2.5px; top:auto; bottom:-2px; transform:rotate(135deg); }
@@ -288,27 +289,27 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="flow">
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/></svg>
-        <b>your page</b><span>one script tag</span>
+        <b>Your page</b><span>one script tag</span>
       </div>
       <div class="conn"><span class="conn-label">prompt</span><span class="conn-line"><i class="pulse"></i></span></div>
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M5 7.5l4.5 4.5L5 16.5M12.5 16.5H19"/></svg>
-        <b>your server</b><span><em class="think">✻</em> Claude Code CLI</span>
+        <b>Your server</b><span><em class="think">✻</em> Claude Code CLI</span>
       </div>
       <div class="conn"><span class="conn-label">commit + push</span><span class="conn-line"><i class="pulse" style="animation-delay:.7s"></i></span></div>
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="7" cy="6.5" r="2.2"/><circle cx="7" cy="17.5" r="2.2"/><circle cx="17" cy="8.5" r="2.2"/><path d="M7 8.7v6.6M17 10.7c0 2.8-3.2 3.6-7 4"/></svg>
-        <b>your repo</b><span>main</span>
+        <b>Your repo</b><span>main</span>
       </div>
       <div class="conn"><span class="conn-label">deploy hook</span><span class="conn-line"><i class="pulse" style="animation-delay:1.4s"></i></span></div>
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.7 2.7 2.7 14.3 0 17-2.7-2.7-2.7-14.3 0-17z"/></svg>
-        <b>your host</b><span>redeploys</span>
+        <b>Your host</b><span>redeploys</span>
       </div>
       <div class="conn"><span class="conn-label">refresh</span><span class="conn-line"><i class="pulse" style="animation-delay:2.1s"></i></span></div>
       <div class="node loop">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg>
-        <b>your page</b><span>it's changed</span>
+        <b>Your page</b><span>it's changed</span>
       </div>
     </div>
   </div>
