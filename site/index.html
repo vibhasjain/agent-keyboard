@@ -5,22 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
 <meta name="theme-color" content="#0a0a0a" />
 <meta name="generator" content="Agent Keyboard" />
-<title>Agent Keyboard — an open-source prompt bar that edits the site it's on</title>
+<title>Agent Keyboard — The Prompt Bar That Edits the Site It's On</title>
 <meta name="description" content="One script tag on your static site. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session against the site's repo and pushes to main. Self-hosted, your keys, MIT." />
 
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=4" />
 
 <meta property="og:type" content="website" />
-<meta property="og:title" content="Agent Keyboard — an open-source prompt bar that edits the site it's on" />
-<meta property="og:description" content="One script tag on your static site. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session against the site's repo and pushes to main. Self-hosted, your keys, MIT." />
+<meta property="og:title" content="Agent Keyboard" />
+<meta property="og:description" content="Ask for a change. A real Claude Code session edits your site's repo and pushes to main. Self-hosted, MIT." />
 <meta property="og:url" content="https://agentkeyboard.com/" />
 <meta property="og:image" content="https://agentkeyboard.com/og.jpg?v=7" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Agent Keyboard — an open-source prompt bar that edits the site it's on" />
-<meta name="twitter:description" content="One script tag on your static site. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session against the site's repo and pushes to main. Self-hosted, your keys, MIT." />
+<meta name="twitter:title" content="Agent Keyboard" />
+<meta name="twitter:description" content="Ask for a change. A real Claude Code session edits your site's repo and pushes to main. Self-hosted, MIT." />
 <meta name="twitter:image" content="https://agentkeyboard.com/og.jpg?v=7" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -140,44 +140,49 @@ h2 em{ font-style:italic; color:var(--warm); }
 .sub{ max-width:60ch; margin:18px auto 0; text-align:center; color:var(--ink-2); font-size:16px; }
 .sub code{ font-family:var(--mono); font-size:.84em; color:var(--amber); }
 
-/* ---- demo: terminal transcript ---- */
-.demo-card{
-  max-width:680px; margin:36px auto 0;
-  background:linear-gradient(135deg, rgba(12,12,11,.96), rgba(17,17,16,.96));
-  border:1px solid var(--rule-2); border-radius:18px; padding:24px;
-  font-family:var(--mono); font-size:13px; line-height:1.75;
-}
-.tline{ display:grid; grid-template-columns:18px 1fr; align-items:start; }
-.tmark{ user-select:none; }
-.tline.prompt .tmark{ color:var(--ink-3); } .tline.prompt .tbody{ color:var(--ink-2); }
-.tline.tool .tmark{ color:var(--ok); } .tline.tool .tbody{ color:var(--ink-3); }
-.tline.think .tmark{ color:var(--violet); } .tline.think .tbody{ color:var(--violet); font-style:italic; }
-.tline.reply .tmark{ color:var(--amber); } .tline.reply .tbody{ color:var(--ink); }
-.tline.push .tmark{ color:var(--ok); } .tline.push .tbody{ color:var(--ok); }
-.demo-card .tline{ opacity:0; animation:tin .5s ease forwards; }
-.demo-card .tline:nth-child(1){ animation-delay:0ms; }
-.demo-card .tline:nth-child(2){ animation-delay:90ms; }
-.demo-card .tline:nth-child(3){ animation-delay:180ms; }
-.demo-card .tline:nth-child(4){ animation-delay:270ms; }
-.demo-card .tline:nth-child(5){ animation-delay:360ms; }
-.demo-card .tline:nth-child(6){ animation-delay:450ms; }
-.demo-card .tline:nth-child(7){ animation-delay:540ms; }
-@keyframes tin{ from{ opacity:0; transform:translateY(4px); } to{ opacity:1; transform:none; } }
+/* ---- phone-frame demo iframes ---- */
+.phone{ position:relative; width:100%; overflow:hidden; background:#0a0a0a;
+  border:1px solid var(--rule-2); border-top:none; border-radius:0 0 40px 40px; }
+.phone::before{ content:""; position:absolute; inset:0 0 auto 0; height:64px; z-index:2; pointer-events:none;
+  background:linear-gradient(to bottom, var(--bg), transparent); }
+.phone .poster{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:bottom; }
+.phone iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; pointer-events:none;
+  opacity:0; transition:opacity .5s ease; }
+.phone.ready iframe{ opacity:1; }
+.scene-fig{ margin:0; }
+.scene-fig figcaption{ font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin-top:12px; text-align:center; }
+.demo-scene{ max-width:380px; margin:36px auto 0; }
+.scenes{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:end; margin-top:40px; }
+@media (max-width:720px){ .scenes{ grid-template-columns:1fr; max-width:380px; margin-left:auto; margin-right:auto; } }
 .honesty{ max-width:680px; margin:16px auto 0; text-align:center; font-family:var(--mono); font-size:11.5px; color:var(--ink-3); }
-.honesty .arrow{ color:var(--amber); }
 .receipts{ text-align:center; margin-top:26px; font-size:14.5px; color:var(--ink-2); }
 
-/* ---- steps ---- */
-.steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:44px; }
-.step{ background:var(--bg-2); border:1px solid var(--rule); border-radius:18px; padding:24px 22px; }
-.step .n{ font-family:var(--mono); font-size:11px; color:var(--amber); letter-spacing:.1em; }
-.step h3{ font-family:var(--serif); font-weight:400; font-size:24px; margin:12px 0 8px; }
-.step p{ font-size:14.5px; color:var(--ink-2); }
-.step p code{ font-family:var(--mono); font-size:.82em; color:var(--amber); }
-.step.edit .n{ color:var(--violet); }
-.step.ship .n{ color:var(--ok); }
-.archstrip{ text-align:center; margin-top:30px; font-family:var(--mono); font-size:12.5px; color:var(--ink-3); overflow-x:auto; }
-.archstrip .ar{ color:var(--amber); }
+/* ---- architecture: pure-css flow ---- */
+.flow{ display:flex; align-items:stretch; justify-content:center; margin-top:44px; }
+.node{ flex:1 1 0; min-width:0; background:var(--bg-2); border:1px solid var(--rule-2); border-radius:12px; padding:16px 12px; text-align:center; }
+.node b{ display:block; font-family:var(--mono); font-size:12px; font-weight:500; color:var(--amber); }
+.node span{ display:block; font-family:var(--mono); font-size:10.5px; color:var(--ink-3); margin-top:6px; line-height:1.5; }
+.node .think{ color:var(--violet); font-style:normal; }
+.node.loop b{ color:var(--ok); }
+.node .n-ico{ width:17px; height:17px; color:var(--ink-3); display:block; margin:0 auto 9px; }
+.conn{ flex:0 0 auto; align-self:center; display:flex; flex-direction:column; align-items:center; gap:6px; padding:0 7px; }
+.conn-label{ font-family:var(--mono); font-size:9.5px; color:var(--ink-3); text-align:center; line-height:1.35; max-width:58px; }
+.conn-line{ position:relative; width:38px; height:1px; background:var(--rule-2); }
+.conn-line::after{ content:""; position:absolute; right:-2px; top:-3px; width:6px; height:6px;
+  border-top:1px solid var(--ink-3); border-right:1px solid var(--ink-3); transform:rotate(45deg); }
+.conn-line .pulse{ position:absolute; top:-1px; left:0; width:4px; height:3px; border-radius:2px;
+  background:rgba(255,184,107,.5); box-shadow:0 0 4px rgba(255,184,107,.3); animation:flow-x 2.8s linear infinite; }
+@keyframes flow-x{ 0%{ transform:translateX(0); opacity:0; } 15%{ opacity:1; } 85%{ opacity:1; } 100%{ transform:translateX(34px); opacity:0; } }
+.flow-cap{ text-align:center; margin-top:24px; font-family:var(--mono); font-size:12px; color:var(--ink-3); }
+@media (max-width:860px){
+  .flow{ flex-direction:column; align-items:stretch; max-width:360px; margin-left:auto; margin-right:auto; }
+  .node{ width:100%; }
+  .conn{ flex-direction:column; padding:9px 0; }
+  .conn-line{ width:1px; height:30px; background:var(--rule-2); }
+  .conn-line::after{ right:auto; left:-2.5px; top:auto; bottom:-2px; transform:rotate(135deg); }
+  .conn-line .pulse{ left:-1.5px; top:0; animation-name:flow-y; }
+}
+@keyframes flow-y{ 0%{ transform:translateY(0); opacity:0; } 15%{ opacity:1; } 85%{ opacity:1; } 100%{ transform:translateY(26px); opacity:0; } }
 
 /* ---- self-host ---- */
 .term{ position:relative; max-width:820px; margin:34px auto 0; }
@@ -192,19 +197,10 @@ h2 em{ font-style:italic; color:var(--warm); }
 .byo-cell b{ display:block; color:var(--warm); font-weight:500; margin-bottom:5px; }
 .byo-ico{ width:20px; height:20px; display:block; margin-bottom:10px; opacity:.92; }
 
-/* ---- states gallery (real screenshots) ---- */
-.states{ display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:40px; align-items:start; }
-.states figure, .states-wide{ margin:0; }
-.states img, .states-wide img{ width:100%; height:auto; display:block; border-radius:14px; border:1px solid var(--rule-2); }
-.states figcaption, .states-wide figcaption{ font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin-top:10px; text-align:center; }
-.states-wide{ max-width:420px; margin:28px auto 0; }
-@media (max-width:720px){
-  .states{ grid-template-columns:1fr; max-width:360px; margin-left:auto; margin-right:auto; }
-}
-
 /* ---- feature grid ---- */
 .grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:40px; }
 .feat{ border:1px solid var(--rule); border-radius:14px; padding:20px; background:var(--bg-2); }
+.feat .f-ico{ width:16px; height:16px; color:var(--ink-3); display:block; margin-bottom:10px; }
 .feat h4{ font-size:14.5px; font-weight:600; margin-bottom:7px; }
 .feat p{ font-size:13.5px; color:var(--ink-3); }
 .feat p .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-2); white-space:nowrap; }
@@ -226,7 +222,7 @@ footer .meta a{ color:var(--ink-3); }
 footer .meta a:hover{ color:var(--amber); }
 
 @media (max-width:720px){
-  .steps, .grid{ grid-template-columns:1fr; }
+  .grid{ grid-template-columns:1fr; }
   .byo{ grid-template-columns:1fr 1fr; }
   .top .hint{ display:none; }
   /* one line up top: just the repo pill, centered */
@@ -239,7 +235,8 @@ footer .meta a:hover{ color:var(--amber); }
 }
 @media (prefers-reduced-motion: reduce){
   .hero .kbd{ animation:none; }
-  .demo-card .tline{ opacity:1; animation:none; }
+  .conn-line .pulse{ animation:none; opacity:0; }
+  .phone iframe{ transition:none; }
   html{ scroll-behavior:auto; }
 }
 </style>
@@ -286,73 +283,80 @@ footer .meta a:hover{ color:var(--amber); }
 <section id="demo">
   <div class="wrap">
     <div class="kicker">The demo is the product</div>
-    <h2>This page <em>edits itself</em>.</h2>
-    <p class="sub">The bar at the bottom of this page is the production widget, embedded with <code>data-site="halo"</code> —
-      pointed at this site's own repo. The repo is public now, so its commits are too.</p>
+    <h2>Ask. <em>Watch it ship.</em></h2>
 
-    <div class="demo-card" aria-hidden="true">
-      <div class="tline prompt"><span class="tmark">&gt;</span><span class="tbody">make the hero headline bigger on phones</span></div>
-      <div class="tline tool"><span class="tmark">●</span><span class="tbody">reading index.html</span></div>
-      <div class="tline tool"><span class="tmark">●</span><span class="tbody">editing index.html</span></div>
-      <div class="tline tool"><span class="tmark">●</span><span class="tbody"><span class="a">$</span> git commit -am "Hero: larger phone headline"</span></div>
-      <div class="tline think"><span class="tmark">✻</span><span class="tbody">Pushing to main… (0:47)</span></div>
-      <div class="tline reply"><span class="tmark">●</span><span class="tbody">Bumped the small-screen headline from 40px to 46px. Looks right on an iPhone now.</span></div>
-      <div class="tline push"><span class="tmark">●</span><span class="tbody">pushed 3f2a91c — refresh to see it</span></div>
+    <div class="demo-scene">
+      <div class="phone" data-scene="ship" style="height:420px">
+        <img class="poster" src="shots/poster-ship.png" alt="" aria-hidden="true">
+        <iframe loading="lazy" title="Agent Keyboard shipping a change, live" tabindex="-1" aria-hidden="true"></iframe>
+      </div>
     </div>
-    <p class="honesty">a restaged session — same widget, same glyphs. the real one is at the bottom of this page. <span class="arrow">↘</span></p>
-    <p class="receipts"><a href="https://github.com/vibhasjain/agent-keyboard/commits/main">Every change it ships lands on main in the open — see the commits →</a></p>
+    <p class="honesty">a live render of the actual widget code — dummy data, looping</p>
+    <p class="receipts"><a href="https://github.com/vibhasjain/agent-keyboard/commits/main">Every change the real one ships lands on main in the open — see the commits →</a></p>
   </div>
 </section>
 
-<section id="how">
-  <div class="wrap">
-    <div class="kicker">How it works</div>
-    <h2>Ask for a change. <em>Watch it ship.</em></h2>
-    <div class="steps">
-      <div class="step ask">
-        <div class="n">01 · ASK</div>
-        <h3>Ask</h3>
-        <p>Type, dictate, or photograph the change — from your phone, anywhere.</p>
-      </div>
-      <div class="step edit">
-        <div class="n">02 · EDIT</div>
-        <h3>Edit</h3>
-        <p>Your server drives the real Claude Code CLI against a durable checkout of the repo — it edits,
-          then commits as "Agent Keyboard."</p>
-      </div>
-      <div class="step ship">
-        <div class="n">03 · SHIP</div>
-        <h3>Ship</h3>
-        <p>Pushes to <code>main</code>; your site redeploys. Refresh — it's changed.</p>
-      </div>
-    </div>
-    <p class="archstrip">phone <span class="ar">→</span> your server <span class="ar">→</span> claude code cli
-      <span class="ar">→</span> git push <span class="ar">→</span> your host redeploys</p>
-  </div>
-</section>
-
-<section id="states">
+<section id="closer">
   <div class="wrap">
     <div class="kicker">The bar, up close</div>
     <h2>Small surface. <em>Real states.</em></h2>
-    <div class="states">
-      <figure>
-        <img src="shots/bar-login.png" alt="Signing in: a terminal-style email and password prompt" width="382" height="102" loading="lazy">
-        <figcaption>sign in — a prompt, not a form</figcaption>
+    <div class="scenes">
+      <figure class="scene-fig">
+        <div class="phone" data-scene="photo" style="height:340px">
+          <img class="poster" src="shots/poster-photo.png" alt="" aria-hidden="true">
+          <iframe loading="lazy" title="Attaching a photo to a request" tabindex="-1" aria-hidden="true"></iframe>
+        </div>
+        <figcaption>photo it — uploads while you type</figcaption>
       </figure>
-      <figure>
-        <img src="shots/bar-working.png" alt="A running job: Thinking, with a live timer" width="382" height="68" loading="lazy">
-        <figcaption>a job running — close the tab, it keeps going</figcaption>
+      <figure class="scene-fig">
+        <div class="phone" data-scene="voice" style="height:320px">
+          <img class="poster" src="shots/poster-voice.png" alt="" aria-hidden="true">
+          <iframe loading="lazy" title="Dictating a request by voice" tabindex="-1" aria-hidden="true"></iframe>
+        </div>
+        <figcaption>say it — words land in the bar</figcaption>
       </figure>
-      <figure>
-        <img src="shots/bar-resting.png" alt="The bar at rest: photo, voice, and send controls" width="382" height="68" loading="lazy">
-        <figcaption>at rest — photo, voice, send</figcaption>
+      <figure class="scene-fig">
+        <div class="phone" data-scene="expand" style="height:420px">
+          <img class="poster" src="shots/poster-expand.png" alt="" aria-hidden="true">
+          <iframe loading="lazy" title="The expanded transcript, one tap away" tabindex="-1" aria-hidden="true"></iframe>
+        </div>
+        <figcaption>the transcript, one tap away</figcaption>
       </figure>
     </div>
-    <figure class="states-wide">
-      <img src="shots/chat-transcript.png" alt="The expanded transcript of a real session: prompt, tool lines, reply" width="382" height="261" loading="lazy">
-      <figcaption>the transcript — a real session on this very page</figcaption>
-    </figure>
+  </div>
+</section>
+
+<section id="architecture">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>Your keys. <em>Your boxes.</em></h2>
+    <div class="flow">
+      <div class="node">
+        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/></svg>
+        <b>your page</b><span>one script tag</span>
+      </div>
+      <div class="conn"><span class="conn-label">prompt</span><span class="conn-line"><i class="pulse"></i></span></div>
+      <div class="node">
+        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M5 7.5l4.5 4.5L5 16.5M12.5 16.5H19"/></svg>
+        <b>your server</b><span><em class="think">✻</em> Claude Code CLI</span>
+      </div>
+      <div class="conn"><span class="conn-label">commit + push</span><span class="conn-line"><i class="pulse" style="animation-delay:.7s"></i></span></div>
+      <div class="node">
+        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="7" cy="6.5" r="2.2"/><circle cx="7" cy="17.5" r="2.2"/><circle cx="17" cy="8.5" r="2.2"/><path d="M7 8.7v6.6M17 10.7c0 2.8-3.2 3.6-7 4"/></svg>
+        <b>your repo</b><span>main</span>
+      </div>
+      <div class="conn"><span class="conn-label">deploy hook</span><span class="conn-line"><i class="pulse" style="animation-delay:1.4s"></i></span></div>
+      <div class="node">
+        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.7 2.7 2.7 14.3 0 17-2.7-2.7-2.7-14.3 0-17z"/></svg>
+        <b>your host</b><span>redeploys</span>
+      </div>
+      <div class="conn"><span class="conn-label">refresh</span><span class="conn-line"><i class="pulse" style="animation-delay:2.1s"></i></span></div>
+      <div class="node loop">
+        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg>
+        <b>your page</b><span>it's changed</span>
+      </div>
+    </div>
+    <p class="flow-cap">nothing passes through anyone else's servers</p>
   </div>
 </section>
 
@@ -360,8 +364,7 @@ footer .meta a:hover{ color:var(--amber); }
   <div class="wrap">
     <div class="kicker">Self-host</div>
     <h2>Run your own.</h2>
-    <p class="sub">It's a small Express server, a ~15&nbsp;KB widget, and your git repo. The full guide is
-      in the README; here's the shape of it.</p>
+    <p class="sub">A small server, a ~15&nbsp;KB widget, your repo — the README walks you through it.</p>
 
     <div class="term">
       <button class="copybtn" data-copy="git clone https://github.com/vibhasjain/agent-keyboard.git">copy</button>
@@ -391,12 +394,12 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="kicker">What's in the bar</div>
     <h2>Small on the page. <em>Serious underneath.</em></h2>
     <div class="grid">
-      <div class="feat"><h4>Fire-and-forget</h4><p>Close the tab — the job keeps running on your server. Reopen and the bar re-attaches to the stream.</p></div>
-      <div class="feat"><h4>Any input</h4><p>Type it, hold to dictate it, or attach a photo of what you mean.</p></div>
-      <div class="feat"><h4>One tag, ~15&nbsp;KB</h4><p>Zero dependencies, Shadow-DOM isolated — it can't clash with your CSS and your CSS can't break it.</p></div>
-      <div class="feat"><h4>Memory</h4><p>One long-running session per site. It remembers your last ask, and compacts itself when it gets long — shown inline as <span class="comp">· session compacted ·</span></p></div>
-      <div class="feat"><h4>An allowlist, not a free-for-all</h4><p>The server only touches repos you list in its config. It can't wander.</p></div>
-      <div class="feat"><h4>Your keys, your box</h4><p>Your Claude token, your Supabase, your VM. Nothing phones home to anyone.</p></div>
+      <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><h4>Fire-and-forget</h4><p>Close the tab — the job keeps running on your server. Reopen and the bar re-attaches to the stream.</p></div>
+      <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><rect x="9" y="3.5" width="6" height="10.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><h4>Any input</h4><p>Type it, hold to dictate it, or attach a photo of what you mean.</p></div>
+      <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M9 6.5 4 12l5 5.5M15 6.5 20 12l-5 5.5"/></svg><h4>One tag, ~15&nbsp;KB</h4><p>Zero dependencies, Shadow-DOM isolated — it can't clash with your CSS and your CSS can't break it.</p></div>
+      <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M12 4 3.5 8.8 12 13.6l8.5-4.8L12 4zM3.5 15.2 12 20l8.5-4.8"/></svg><h4>Memory</h4><p>One session per site — it remembers your last ask and self-compacts when long, shown inline as <span class="comp">· session compacted ·</span></p></div>
+      <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8.5 12.3l2.4 2.4 4.6-5.4"/></svg><h4>An allowlist, not a free-for-all</h4><p>The server only touches repos you list in its config. It can't wander.</p></div>
+      <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="8.5" cy="15.5" r="3.2"/><path d="M11 13 19 5M15.5 8.5 18 11M13 11l2 2"/></svg><h4>Your keys, your box</h4><p>Your Claude token, your Supabase, your VM. Nothing phones home to anyone.</p></div>
     </div>
   </div>
 </section>
@@ -406,11 +409,6 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="kicker">Questions</div>
     <h2>The honest version.</h2>
     <div class="faq">
-      <div class="qa">
-        <h3>How does it actually work?</h3>
-        <p>One tag adds the bar; your prompts go to your server. A real Claude Code session edits a durable
-          checkout of the repo, commits, and pushes to <code>main</code> — then your host redeploys.</p>
-      </div>
       <div class="qa">
         <h3>Who can use the bar?</h3>
         <p>Whoever you allow-list. <code>ALLOWED_EMAIL</code> takes one address or a comma-separated
@@ -428,11 +426,6 @@ footer .meta a:hover{ color:var(--amber); }
         <p>Mostly things you already pay for: the Claude Code subscription does the editing, Supabase's
           free tier does auth, and a small Fly VM (a few dollars a month) does the hosting. The OpenAI
           key is optional and only for voice.</p>
-      </div>
-      <div class="qa">
-        <h3>Does it remember what I've asked?</h3>
-        <p>Yes — one long-running session per site, with memory. When it grows long it auto-compacts,
-          shown inline as <span class="comp">· session compacted ·</span>.</p>
       </div>
       <div class="qa">
         <h3>What if I close the tab mid-change?</h3>
@@ -475,6 +468,18 @@ footer .meta a:hover{ color:var(--amber); }
         setTimeout(function(){ btn.textContent = prev; }, 1400);
       }).catch(function(){});
     });
+  });
+
+  // Live demo iframes: point each phone frame at its scene on the demo origin,
+  // and reveal it only once that scene signals it's painted.
+  var DEMO_ORIGIN = 'https://agent-keyboard.fly.dev';
+  document.querySelectorAll('.phone[data-scene]').forEach(function(p){
+    var f = p.querySelector('iframe');
+    if (f) f.src = DEMO_ORIGIN + '/demo/' + p.getAttribute('data-scene');
+  });
+  window.addEventListener('message', function(e){
+    if (e.origin !== DEMO_ORIGIN || !e.data || e.data.type !== 'ak-demo-ready') return;
+    document.querySelectorAll('.phone[data-scene="' + e.data.scene + '"]').forEach(function(p){ p.classList.add('ready'); });
   });
 </script>
 

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { assertServerConfig } from "./config.js";
+import { demoPage, isDemoScene } from "./demo.js";
 import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
 import { runMessageJob, killAllChildren } from "./claude.js";
@@ -116,6 +117,35 @@ app.get("/widget.js", (_req, res) => {
   res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
   res.setHeader("Content-Length", String(buf.length));
   res.send(buf);
+});
+
+// ─── demo scenes (open, static, dummy data — see demo.ts) ───────────────────
+function demoJsPath(): string | null {
+  const primary = process.env.DEMO_JS_PATH ?? "/app/widget/demo.js";
+  if (existsSync(primary)) return primary;
+  const devFallback = join(SERVER_DIR, "..", "widget", "dist", "demo.js");
+  if (existsSync(devFallback)) return devFallback;
+  return null;
+}
+app.get("/demo.js", (_req, res) => {
+  const p = demoJsPath();
+  if (!p) {
+    res.status(404).type("text/plain").send("// demo.js is not built yet");
+    return;
+  }
+  res.setHeader("Content-Type", "text/javascript");
+  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
+  res.sendFile(p);
+});
+app.get("/demo/:scene", (req, res) => {
+  const scene = String(req.params.scene ?? "");
+  if (!isDemoScene(scene)) {
+    res.status(404).type("text/plain").send("unknown demo scene");
+    return;
+  }
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.send(demoPage(scene));
 });
 
 // ─── SSE helpers ─────────────────────────────────────────────────────────────

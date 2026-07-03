@@ -174,6 +174,36 @@ const server = createServer(async (req, res) => {
   }
   if (p === '/widget.js') return serveStatic(res, 'dist/widget.js', 'text/javascript; charset=utf-8')
   if (p === '/widget.js.map') return serveStatic(res, 'dist/widget.js.map', 'application/json')
+  if (p === '/demo.js') return serveStatic(res, 'dist/demo.js', 'text/javascript; charset=utf-8')
+  if (p === '/demo.js.map') return serveStatic(res, 'dist/demo.js.map', 'application/json')
+
+  // GET /demo/:scene -> minimal noindex host page that loads /demo.js for one
+  // scene (the marketing site embeds these in iframes). Allowlisted ids only.
+  const dm = p.match(/^\/demo\/([a-z]+)$/)
+  if (dm && req.method === 'GET') {
+    const scene = dm[1]
+    if (!['ship', 'photo', 'voice', 'expand', 'login'].includes(scene)) {
+      res.writeHead(404, { 'Access-Control-Allow-Origin': '*' })
+      res.end('unknown scene')
+      return
+    }
+    const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Agent Keyboard demo — ${scene}</title>
+<style>html,body{margin:0;background:#0a0a0a}</style>
+</head>
+<body>
+<script src="/demo.js" data-scene="${scene}" defer></script>
+</body>
+</html>`
+    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
+    res.end(html)
+    return
+  }
 
   // POST /sites/:id/messages -> SSE stream
   let m = p.match(/^\/sites\/([^/]+)\/messages$/)

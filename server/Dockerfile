@@ -45,8 +45,9 @@ RUN npm ci --omit=dev
 COPY server/tsconfig.json ./
 COPY server/src ./src
 
-# The widget bundle served at GET /widget.js.
+# The widget bundle served at GET /widget.js, and the demo bundle at /demo.js.
 COPY --from=widget /w/dist/widget.js /app/widget/widget.js
+COPY --from=widget /w/dist/demo.js /app/widget/demo.js
 
 EXPOSE 8080
 CMD ["npx", "tsx", "src/index.ts"]

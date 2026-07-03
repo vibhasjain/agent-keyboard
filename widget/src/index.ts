@@ -6,6 +6,7 @@
 import { initAuth } from './auth'
 import { mountBar } from './bar'
 import { initConfig } from './config'
+import { injectFonts } from './fonts'
 import { bootRehydrate } from './jobstore'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
@@ -14,25 +15,6 @@ declare global {
   interface Window {
     __agentKeyboard?: boolean
   }
-}
-
-const FONTS_HREF =
-  'https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500&display=swap'
-
-function injectFonts(): void {
-  if (document.getElementById('ak-fonts')) return
-  const pre1 = document.createElement('link')
-  pre1.rel = 'preconnect'
-  pre1.href = 'https://fonts.googleapis.com'
-  const pre2 = document.createElement('link')
-  pre2.rel = 'preconnect'
-  pre2.href = 'https://fonts.gstatic.com'
-  pre2.crossOrigin = 'anonymous'
-  const link = document.createElement('link')
-  link.id = 'ak-fonts'
-  link.rel = 'stylesheet'
-  link.href = FONTS_HREF
-  document.head.append(pre1, pre2, link)
 }
 
 // No browser zoom from inside the widget, ever: double-tapping the bar or
