@@ -40,7 +40,7 @@ export const STYLES = `
 /* ---- mini: the smallest resting state, a round ⌨️ parked bottom-right ---- */
 .ak-mini{
   display:flex; align-items:center; justify-content:center;
-  margin-left:auto; margin-right:0; /* right-align the block within the padded zone */
+  margin-left:0; margin-right:auto; /* left-align the block within the padded zone */
   width:52px; height:52px; padding:0;
   border-radius:50%; border:1px solid #3d372e;
   background:rgba(12,11,10,.96);
