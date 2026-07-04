@@ -143,8 +143,16 @@ Everything runs in one small Fly app with one volume.
      OPENAI_API_KEY="sk-..." \
      SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
    ```
-   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. Non-secret tuning vars
-   (`CLAUDE_MODEL`, `PORT`, …) can go in the `[env]` block of `server/fly.toml` instead.
+   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. `GEMINI_API_KEY` is optional
+   too — set it to enable the built-in image-generation skill (`fly secrets set -a YOUR-APP
+   GEMINI_API_KEY="AIza..."`). Non-secret tuning vars (`CLAUDE_MODEL`, `AK_PUBLIC_URL`, `PORT`, …)
+   can go in the `[env]` block of `server/fly.toml` instead — set `AK_PUBLIC_URL` to
+   `https://YOUR-APP.fly.dev` so user-provisioning invite emails land on your `/welcome` page.
+
+   > Upgrading an existing deployment? Run `fly ssh console -a YOUR-APP -C "ls -la /data/.claude"`
+   > first — the server now loads user-level Claude settings/skills from the volume
+   > (`--setting-sources user,project`), so anything already sitting in `/data/.claude` starts being
+   > honored after this deploy.
 5. **Deploy.** The build context **must** be the repo root so the Dockerfile's widget stage can bake
    `widget/` into the image:
    ```bash
@@ -224,6 +232,45 @@ fire-and-forget path working.
 
 ---
 
+## Harness controls: configure the agent by asking it
+
+There is no settings UI. The agent's own runtime is steered in the same chat:
+
+- **Introspection** — "what model are you on?", "how much context are we using?" (approximate).
+- **Model / effort** — "switch to sonnet", "set effort to max" (`low·medium·high·xhigh·max`).
+  Applied from the next message.
+- **Plan mode** — "switch to plan mode" makes the next turns propose without committing; "go back to
+  dangerously bypass permissions" leaves it (the agent can exit plan mode even though it can't edit
+  files there — the server handles it).
+- **Compact** — "compact your memory" compresses the conversation right after the current turn.
+- **Skills** — "install a skill that does X" writes to `/data/.claude/skills`; it loads next turn and
+  survives deploys. Three skills ship built in: `image-gen` (needs `GEMINI_API_KEY`),
+  `verify-in-browser` (headless Chromium is preinstalled), `provision-user` (below).
+
+State lives in `/data/agent-keyboard/sites/<id>/settings.json`. If the agent ever wedges its own
+settings, reset from your machine:
+
+```bash
+fly ssh console -a YOUR-APP -C "rm /data/agent-keyboard/sites/<id>/settings.json"
+```
+
+### Inviting more users
+
+Ask the bar: *"invite esther@example.com"*. The agent runs the `provision-user` skill — Supabase
+emails them a link to set a password (landing on `$AK_PUBLIC_URL/welcome`), and their email is added
+to `/data/agent-keyboard/allowed-emails.json`, which the auth gate accepts alongside `ALLOWED_EMAIL`.
+
+Setup requirements, once:
+
+1. `SUPABASE_SERVICE_KEY` must be set (it's the same key durable jobs use).
+2. Add `https://YOUR-APP.fly.dev/welcome` to Supabase **Auth → URL Configuration → Redirect URLs**.
+3. Don't set `ALLOWED_USER_ID` — it pins auth to specific user ids and blocks provisioned users.
+
+Revoke someone by removing their email from the JSON file (`fly ssh console`), or deleting the user
+in Supabase.
+
+---
+
 ## A review step instead of straight-to-main
 
 By default the agent pushes to your deploy `branch`, so an accepted change goes live on the next
@@ -262,6 +309,10 @@ the PR is on you.
 | Job runs but push is rejected | `GH_TOKEN` lacks the repo, lacks Contents write, or the push touched `.github/workflows/` | Add the repo to the token's selection / grant Contents write. Workflow files are blocked by design. |
 | Job history / re-attach doesn't persist across restarts | No `SUPABASE_SERVICE_KEY` | Set the service_role key and redeploy; re-run `server/sql/jobs.sql` if you skipped it. |
 | Everything works but the agent errors immediately | `CLAUDE_CODE_OAUTH_TOKEN` missing or expired | Re-run `claude setup-token` and update the secret. |
+| "Image generation isn't configured" | No `GEMINI_API_KEY` | `fly secrets set GEMINI_API_KEY=...` and redeploy. |
+| Agent stuck in plan mode / weird settings | Its `settings.json` got wedged | Ask it to "go back to dangerously bypass permissions" (works from plan mode), or `fly ssh console -C "rm /data/agent-keyboard/sites/<id>/settings.json"`. |
+| Invite email link lands somewhere useless | `/welcome` isn't in Supabase's allowed redirect URLs, or `AK_PUBLIC_URL` unset | Add `https://YOUR-APP.fly.dev/welcome` to Auth → URL Configuration and set `AK_PUBLIC_URL`. |
+| Provisioned user still gets 401 | `ALLOWED_USER_ID` is set (pins auth to specific ids) | Unset it, or add the new user's Supabase UUID. |
 
 ---
 

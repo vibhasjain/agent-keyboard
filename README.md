@@ -124,9 +124,13 @@ listing any missing *required* var.
 | `ALLOWED_USER_ID` | Extra pin to specific Supabase user UUID(s), comma-separated. |
 | `SUPABASE_SERVICE_KEY` | Enables durable job history / re-attach. Works without it; boot warns. |
 | `OPENAI_API_KEY` | Voice dictation (ephemeral realtime tokens minted server-side). Absent = the mic button errors with "voice not configured". |
+| `GEMINI_API_KEY` | The baked-in image-generation skill. Read by the skill inside the CLI child, never by server code. Absent = the agent reports image generation as not configured. |
+| `AK_PUBLIC_URL` | This server's public base URL; invite emails from user provisioning land on `$AK_PUBLIC_URL/welcome`. |
 | `EXTRA_ORIGINS` | Comma-separated extra CORS origins (deploy previews, staging). |
-| `CLAUDE_MODEL` | Model for the CLI. Default `opus`. |
+| `CLAUDE_MODEL` | Default model for the CLI. Default `opus`. Per-site overrides via [harness controls](#talking-to-the-harness). |
+| `CONTEXT_WINDOW_TOKENS` | Window size for the approximate context gauge. Default `200000`. |
 | `CLAUDE_RUN_TIMEOUT_MS` | Per-run timeout. Default `900000`. |
+| `CLAUDE_COMPACT_TIMEOUT_MS` | Timeout for an on-demand compact turn. Default `300000`. |
 | `CLAUDE_BIN` | Path to the `claude` binary. Default `claude`. |
 | `AGENT_DATA_DIR` | Checkout + session root. Default `/data`. |
 | `WIDGET_JS_PATH` | Override path to the built `widget.js`. |
@@ -157,19 +161,63 @@ SITES=[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","do
 
 A pretty-printed multi-site example lives in [`server/sites.example.json`](./server/sites.example.json).
 
+## Talking to the harness
+
+The bar has no settings screen — you configure the agent by asking it, the same way you'd ask for a
+site change:
+
+- *"What model are you on? How much context are we using?"* — it answers from live values the server
+  injects into every turn (the context number is approximate).
+- *"Switch to sonnet."* / *"Set effort to max."* — applied from the next message.
+- *"Switch to plan mode."* — the agent explores and proposes without committing; *"go back to
+  dangerously bypass permissions"* to leave (works even from inside plan mode).
+- *"Compact your memory."* — compacts the conversation right after the current turn.
+- *"Install a skill that does X."* — the agent writes it to its own skills directory on the volume;
+  it loads from the next turn and survives deploys.
+
+Under the hood each site has a small settings file on the volume
+(`/data/agent-keyboard/sites/<id>/settings.json`, keys `model` · `effort` · `permissionMode` ·
+`compactNow`) that the agent itself edits and the server validates and applies to the next CLI spawn.
+Bad values fall back to defaults with a warning the agent sees and fixes. Delete the file to reset
+everything.
+
+Two more things ride along:
+
+- **A second message while one is running queues** — server-side, in order, as its own follow-up
+  turn; the agent answers it knowing what the previous turn did. The bar shows queued sends dimmed
+  with a `+N` badge, and they survive a page reload.
+- **Provision users by asking** — *"invite esther@example.com"*. Supabase emails them a link to set a
+  password (landing on this server's `/welcome` page), and their email joins the allow-list. Needs
+  `SUPABASE_SERVICE_KEY`; add `$AK_PUBLIC_URL/welcome` to Supabase Auth → URL Configuration →
+  Redirect URLs, and don't pin `ALLOWED_USER_ID` if you use this.
+
+## Built-in skills
+
+Shipped in [`server/skills/`](./server/skills) (key-free), seeded into `~/.claude/skills` on the
+volume at boot — deploys update them, agent-installed ones persist:
+
+| Skill | What it does | Needs |
+|-------|--------------|-------|
+| `image-gen` | Generates images with Gemini and places them in the site repo. | `GEMINI_API_KEY` |
+| `verify-in-browser` | Serves the checkout locally, screenshots it with the preinstalled headless Chromium, and inspects the render. | nothing (baked into the image) |
+| `provision-user` | Invites a new user by email + allow-lists them. | `SUPABASE_SERVICE_KEY` |
+
 ## Security model
 
 Concentric rings, honestly stated:
 
 1. **Allow-list gate.** Every request must carry a Supabase JWT that resolves to an email on your
-   `ALLOWED_EMAIL` list (optionally pinned further to `ALLOWED_USER_ID`). No accounts exist beyond
-   the ones you created by hand.
+   `ALLOWED_EMAIL` list ∪ the runtime allow-list at `/data/agent-keyboard/allowed-emails.json`
+   (optionally pinned further to `ALLOWED_USER_ID`). Accounts exist only where you created them by
+   hand or provisioned them by asking the agent.
 2. **The `SITES` allow-list.** The agent can only ever touch repos you listed. A request for any other
    site id is rejected; there is no "edit an arbitrary repo" path.
 3. **Bounded blast radius.** The CLI runs with permissions bypassed, but *inside a dedicated Fly VM*.
    The most it can reach is the `/data` volume and whatever `GH_TOKEN` can — which is why the PAT is
    repo-scoped, contents-only, and has no workflows permission (GitHub then rejects any push that
-   touches `.github/workflows/`, capping what the agent can change).
+   touches `.github/workflows/`, capping what the agent can change). The agent is additionally
+   *sanctioned* to write two spots on the volume it always physically could: its own harness settings
+   file and its skills directory — same blast radius as before, now stated.
 4. **No key reaches the browser.** The anon key is public by design (RLS gates everything). Voice uses
    short-lived OpenAI tokens minted server-side. The Claude, GitHub, and Supabase service keys live
    only in Fly secrets.

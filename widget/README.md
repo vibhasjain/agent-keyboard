@@ -64,10 +64,22 @@ Over one job's stream you'll see:
 | Frame | Payload | Meaning |
 |-------|---------|---------|
 | `job` | `{job_id, target, status}` | Job opened; carries its id for re-attach. |
-| `status` | `{phase, detail}` | Progress line: syncing → thinking → editing. Rendered in the ticker. |
+| `status` | `{phase, detail}` | Progress line: syncing → thinking → editing (→ compacting). Rendered in the ticker. |
 | `assistant` | `{text}` | The streaming reply. **Full replace** — each frame is the complete text so far, not a delta. |
-| `result` | `{reply, git, …}` | Terminal success: the final reply plus git info (`changed`, `pushed`, `headSha`, `branch`). |
+| `result` | `{reply, git, usage, …}` | Terminal success: the final reply plus git info (`changed`, `pushed`, `headSha`, `branch`) and `usage` (`cost_usd`, `duration_ms`, `context_tokens`, `context_pct` — approximate — and `model`). |
 | `error` | `{kind, detail}` | Terminal failure (`server_error`, `not_found`, `interrupted`, …). |
+
+### Reliability behaviors (client-side)
+
+- **Durable outbox** — queued and in-flight sends persist to `localStorage` (`ak:<site>:outbox`) and
+  are re-sent after a reload with their original `idemKey`, which the server re-tails instead of
+  re-running (10-min window). Sends queue while a job runs and dispatch in order.
+- **Orphan discovery** — boot and first-expand call `GET /jobs?siteId=` to attach to a running job
+  this device doesn't have a persisted key for (cleared storage, another device), filtered through
+  the handled-jobs ledger.
+- **Transcript reconciliation** — turns completed this page load are deduped against fetched history
+  by normalized user-turn text, and the tail is refetched on re-expand, so a turn never renders twice
+  and ordering stays canonical.
 
 ## Size budget
 

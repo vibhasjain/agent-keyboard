@@ -75,9 +75,16 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   ```
 - **Config** (Fly secrets / env): required — `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `ALLOWED_EMAIL`,
   `SITES`, `GH_TOKEN` (push); optional — `CLAUDE_CODE_OAUTH_TOKEN` (read by the CLI, not the server),
-  `SUPABASE_SERVICE_KEY` (durable jobs), `ALLOWED_USER_ID`, `OPENAI_API_KEY` (voice), `EXTRA_ORIGINS`
-  (extra CORS). CI uses the repo secret `FLY_API_TOKEN`. Full table + defaults in `README.md` /
-  `server/.env.example`; non-secret tuning can live in `server/fly.toml`.
+  `SUPABASE_SERVICE_KEY` (durable jobs + user provisioning), `ALLOWED_USER_ID`, `OPENAI_API_KEY`
+  (voice), `GEMINI_API_KEY` (image-gen skill), `AK_PUBLIC_URL` (invite `/welcome` redirect),
+  `EXTRA_ORIGINS` (extra CORS). CI uses the repo secret `FLY_API_TOKEN`. Full table + defaults in
+  `README.md` / `server/.env.example`; non-secret tuning can live in `server/fly.toml`.
+- **Harness controls** — the owner steers the agent's runtime by asking the bar ("switch to sonnet",
+  "max effort", "plan mode", "compact your memory", "how much context left?", "install skill X",
+  "invite a@b.com"). Per-site `settings.json` on the volume, edited by the agent, validated/applied
+  per spawn by `server/src/harness.ts` (the KNOBS table — one entry per knob). Skills ship in
+  `server/skills/` (image-gen · verify-in-browser · provision-user), seeded to `/data/.claude/skills`
+  at boot; headless Chromium is baked into the image (`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`).
 
 ---
 
