@@ -5,7 +5,7 @@
 // Fire-and-forget guarantee: we transition sending → streaming only AFTER the jobId
 // is persisted to localStorage, so closing the tab never loses the job.
 
-import { api, HttpError, type GitInfo } from './api'
+import { api, HttpError, type ConversationMessage, type GitInfo } from './api'
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
@@ -24,6 +24,7 @@ interface Persisted {
 let jobId: string | null = null
 let startedAt = 0
 let prompt = ''
+let activeIdemKey = ''
 let lastPage = ''
 let lastAttachmentIds: string[] = []
 let terminal = false
@@ -34,11 +35,45 @@ let doneTimer: ReturnType<typeof setTimeout> | null = null
 let generation = 0
 
 // Turns completed during this page load (rendered under any server-fetched history).
-export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[] }
+// `id` is the job's idemKey; `at` the completion time — both exist so the
+// transcript can reconcile these against server history (which uses unrelated
+// Claude-session uuids, so matching is by normalized user text, not by id).
+export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[]; id?: string; at?: number }
 const liveTurns: LiveTurn[] = []
 
 export function getLiveTurns(): ReadonlyArray<LiveTurn> {
   return liveTurns
+}
+
+/**
+ * Prune liveTurns already present in server history so a turn never renders
+ * twice (history is fetched lazily — a turn that completed before the first
+ * expand exists in BOTH). History ids are Claude-session uuids with no relation
+ * to idemKey, so matching keys on normalized user-turn text against the history
+ * tail; positions must strictly increase so repeated identical prompts pair 1:1.
+ * Returns whether anything was removed.
+ */
+export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
+  if (!liveTurns.length || !history.length) return false
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
+  const tail = history.slice(-(liveTurns.length * 2 + 6))
+  const drop = new Set<number>()
+  let pos = 0
+  for (let i = 0; i < liveTurns.length; i++) {
+    if (liveTurns[i].role !== 'user') continue
+    const target = norm(liveTurns[i].text)
+    for (let j = pos; j < tail.length; j++) {
+      if (tail[j].role === 'user' && norm(tail[j].text) === target) {
+        drop.add(i)
+        if (liveTurns[i + 1]?.role === 'assistant') drop.add(i + 1)
+        pos = j + 1
+        break
+      }
+    }
+  }
+  if (!drop.size) return false
+  for (let i = liveTurns.length - 1; i >= 0; i--) if (drop.has(i)) liveTurns.splice(i, 1)
+  return true
 }
 
 export function getActivePrompt(): string | null {
@@ -53,7 +88,7 @@ export function isBusy(): boolean {
 
 // Messages sent while a job is running queue client-side (like Claude Code)
 // and dispatch as soon as the current job reaches a terminal state.
-type QueuedInput = { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[] }
+type QueuedInput = { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[]; idemKey?: string }
 const queue: QueuedInput[] = []
 
 export function getQueued(): readonly QueuedInput[] {
@@ -63,6 +98,63 @@ export function getQueued(): readonly QueuedInput[] {
 function dispatchQueue(): void {
   const next = queue.shift()
   if (next) setTimeout(() => start(next), 50)
+}
+
+// -- durable outbox -------------------------------------------------------------
+// Queued and in-flight sends persist to localStorage so a reload never loses a
+// message ("it never goes out of the queue"). The in-flight entry closes the
+// POST→job-frame gap: boot re-sends the same idemKey and the server re-tails the
+// original job instead of running it twice (10-min server TTL). Two tabs
+// restoring the same outbox POST the same idemKey — the server re-tails one
+// job, so that's safe by design.
+interface OutboxItem {
+  idemKey: string
+  text: string
+  page?: string
+  attachmentIds?: string[]
+  ts: number
+  inFlight?: boolean
+}
+
+const OUTBOX_QUEUED_TTL_MS = 30 * 60_000 // stale asks shouldn't auto-fire hours later
+const OUTBOX_INFLIGHT_TTL_MS = 10 * 60_000 // matches the server's idemKey re-tail TTL
+const OUTBOX_CAP = 10
+
+function readOutbox(): OutboxItem[] {
+  try {
+    const raw = localStorage.getItem(lsKey('outbox'))
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as { v?: number; items?: OutboxItem[] }
+    const now = Date.now()
+    return (parsed.items || []).filter(
+      (it) =>
+        it &&
+        typeof it.idemKey === 'string' &&
+        typeof it.text === 'string' &&
+        now - (it.ts || 0) < (it.inFlight ? OUTBOX_INFLIGHT_TTL_MS : OUTBOX_QUEUED_TTL_MS),
+    )
+  } catch {
+    return []
+  }
+}
+
+function writeOutbox(items: OutboxItem[]): void {
+  try {
+    localStorage.setItem(lsKey('outbox'), JSON.stringify({ v: 1, items: items.slice(-OUTBOX_CAP) }))
+  } catch {
+    /* storage blocked */
+  }
+}
+
+function outboxUpsert(item: OutboxItem): void {
+  const items = readOutbox().filter((it) => it.idemKey !== item.idemKey)
+  items.push(item)
+  writeOutbox(items)
+}
+
+function outboxRemove(idemKey: string): void {
+  if (!idemKey) return
+  writeOutbox(readOutbox().filter((it) => it.idemKey !== idemKey))
 }
 
 // -- helpers ------------------------------------------------------------------
@@ -95,6 +187,7 @@ function persist(): void {
   if (!jobId) return
   try {
     localStorage.setItem(lsKey('active-job'), JSON.stringify({ jobId, startedAt, prompt } satisfies Persisted))
+    localStorage.setItem(lsKey('last-job-at'), String(Date.now())) // activity flag for boot-time discovery
   } catch {
     /* storage blocked */
   }
@@ -127,6 +220,14 @@ function markHandled(id: string): void {
     localStorage.setItem(key, JSON.stringify([id, ...ids.filter((x) => x !== id)].slice(0, 50)))
   } catch {
     /* ignore */
+  }
+}
+
+function readHandled(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(lsKey('jobs-handled')) || '[]') as string[])
+  } catch {
+    return new Set()
   }
 }
 
@@ -167,6 +268,7 @@ function onFrame(name: string, data: Record<string, unknown>): void {
       jobId = data.job_id
       if (!startedAt) startedAt = Date.now()
       persist() // fire-and-forget guarantee: persist BEFORE we show streaming
+      outboxRemove(activeIdemKey) // the durable active-job key owns recovery now
     }
     setStreaming({ disconnected: false })
     return
@@ -203,7 +305,11 @@ function currentFullText(): string {
 function finishDone(data: Record<string, unknown>): void {
   const git = (data.git ?? {}) as GitInfo
   const reply = String(data.reply ?? '') || currentFullText()
-  liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs }, { role: 'assistant', text: reply })
+  const at = Date.now()
+  liveTurns.push(
+    { role: 'user', text: prompt, thumbs: activeThumbs, id: activeIdemKey, at },
+    { role: 'assistant', text: reply, id: activeIdemKey, at },
+  )
   const sha7 = git.headSha ? String(git.headSha).slice(0, 7) : ''
   // "pushed" only when the agent actually changed something; pushed=true alone
   // just means the checkout matches origin (e.g. a read-only question).
@@ -222,11 +328,14 @@ function finishDone(data: Record<string, unknown>): void {
   dispatchQueue()
 }
 
-function makeRetry(): () => void {
+// A retry after a REAL failure gets a fresh idemKey (re-sending the old one
+// would just re-tail the failed job). A retry after a pre-job connection loss
+// passes `reuseKey` so the server re-tails the job if it did start.
+function makeRetry(reuseKey?: string): () => void {
   const p = prompt
   const ids = [...lastAttachmentIds]
   const page = lastPage
-  return () => start({ text: p, attachmentIds: ids, page })
+  return () => start({ text: p, attachmentIds: ids, page, idemKey: reuseKey })
 }
 
 function finishError(data: Record<string, unknown>): void {
@@ -234,6 +343,9 @@ function finishError(data: Record<string, unknown>): void {
   const retry = makeRetry()
   markHandled(jobId ?? '')
   clearPersist()
+  // The failed send leaves the outbox — the error row offers Retry; silently
+  // auto-refiring it on the next reload would be surprising.
+  outboxRemove(activeIdemKey)
   reset()
   setJob({ phase: 'error', message: detail, retry })
   dispatchQueue()
@@ -251,9 +363,11 @@ function reset(): void {
 function onDisconnect(gen: number): void {
   if (gen !== generation) return
   if (!jobId) {
-    // Stream died before we ever learned the job id → can't re-attach.
-    const retry = makeRetry()
+    // Stream died before we ever learned the job id → can't re-attach. The job
+    // may still have started server-side, so the retry reuses the idemKey.
+    const retry = makeRetry(activeIdemKey)
     clearPersist()
+    outboxRemove(activeIdemKey)
     reset()
     setJob({ phase: 'error', message: 'Lost the connection before the job started.', retry })
     return
@@ -327,12 +441,26 @@ export function getActiveThumbs(): string[] | undefined {
   return isBusy() ? activeThumbs : undefined
 }
 
-export function start(input: { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[] }): void {
+export function start(input: {
+  text: string
+  attachmentIds?: string[]
+  page?: string
+  thumbs?: string[]
+  idemKey?: string
+}): void {
   if (isBusy()) {
     // One active job per site — later sends queue and auto-dispatch on finish.
-    queue.push(input)
+    const queued: QueuedInput = { ...input, idemKey: input.idemKey || uuid() }
+    queue.push(queued)
+    outboxUpsert({
+      idemKey: queued.idemKey!,
+      text: queued.text,
+      page: queued.page,
+      attachmentIds: queued.attachmentIds,
+      ts: Date.now(),
+    })
     const j = getState().job
-    if (j.phase === 'streaming') setJob({ ...j }) // nudge subscribers to render the queue
+    if (j.phase === 'streaming' || j.phase === 'sending') setJob({ ...j }) // nudge subscribers to render the queue
     return
   }
   bindWake()
@@ -343,18 +471,33 @@ export function start(input: { text: string; attachmentIds?: string[]; page?: st
   jobId = null
   startedAt = Date.now()
   prompt = input.text
+  activeIdemKey = input.idemKey || uuid()
   activeThumbs = input.thumbs?.length ? input.thumbs : undefined
   lastPage = input.page || location.pathname
   lastAttachmentIds = input.attachmentIds ?? []
   terminal = false
   attempt = 0
-  setJob({ phase: 'sending' })
+  setJob({ phase: 'sending', startedAt })
 
-  const idemKey = uuid()
+  // Persist the in-flight send BEFORE the POST: a reload in the POST→job-frame
+  // window re-sends the same idemKey and the server re-tails the original job.
+  outboxUpsert({
+    idemKey: activeIdemKey,
+    text: input.text,
+    page: lastPage,
+    attachmentIds: lastAttachmentIds.length ? lastAttachmentIds : undefined,
+    ts: Date.now(),
+    inFlight: true,
+  })
   api
     .sendMessage(
       CONFIG.site,
-      { text: input.text, page: lastPage, idemKey, attachmentIds: lastAttachmentIds.length ? lastAttachmentIds : undefined },
+      {
+        text: input.text,
+        page: lastPage,
+        idemKey: activeIdemKey,
+        attachmentIds: lastAttachmentIds.length ? lastAttachmentIds : undefined,
+      },
       onFrame,
     )
     .then(() => {
@@ -365,8 +508,9 @@ export function start(input: { text: string; attachmentIds?: string[]; page?: st
       if (jobId) {
         onDisconnect(gen) // network blip after the job started → reconnect
       } else {
-        const retry = makeRetry()
+        const retry = makeRetry(activeIdemKey) // POST may have reached the server
         clearPersist()
+        outboxRemove(activeIdemKey)
         reset()
         setJob({ phase: 'error', message: errMsg(e), retry })
       }
@@ -378,21 +522,84 @@ function errMsg(e: unknown): string {
   return m || 'Could not reach the server.'
 }
 
-/** Boot policy: re-attach ONLY if an active-job key AND a stored session exist. */
-export function bootRehydrate(): void {
-  const saved = readPersist()
-  if (!saved) return // ZERO requests
+/** Re-send any persisted outbox entries, oldest first. The in-flight entry (if
+ *  any) goes back through start() with its original idemKey — the server
+ *  re-tails the job if it started. If an active job re-attached first, the
+ *  entries route into the client queue via start()'s busy path. */
+function restoreOutbox(): void {
+  const items = readOutbox()
+  if (!items.length) return
+  items.sort((a, b) => Number(!!b.inFlight) - Number(!!a.inFlight) || a.ts - b.ts)
+  for (const it of items) {
+    start({ text: it.text, attachmentIds: it.attachmentIds, page: it.page, idemKey: it.idemKey })
+  }
+}
+
+/** Attach to a running job this device doesn't know about (cleared storage,
+ *  another device, a lost active-job key). Registry + a 10-min finished window
+ *  come back from GET /jobs; the handled ledger filters out jobs this device
+ *  already saw complete. No-ops unless idle. Errors are swallowed — discovery
+ *  is best-effort. */
+export async function discoverJobs(): Promise<void> {
+  if (getState().job.phase !== 'idle') return
   if (!hasStoredSession()) return
+  let jobs: Awaited<ReturnType<typeof api.listJobs>>['jobs']
+  try {
+    jobs = (await api.listJobs(CONFIG.site)).jobs || []
+  } catch {
+    return
+  }
+  if (getState().job.phase !== 'idle') return // a send raced the fetch
+  const handled = readHandled()
+  const running = jobs
+    .filter((j) => j.status === 'running' && j.job_id && !handled.has(j.job_id))
+    .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+  const row = running[0]
+  if (!row) return
   bindWake()
   generation++
   const gen = generation
-  jobId = saved.jobId
-  startedAt = saved.startedAt || Date.now()
-  prompt = saved.prompt || ''
+  jobId = row.job_id
+  startedAt = (row.created_at && Date.parse(row.created_at)) || Date.now()
+  prompt = ''
+  activeIdemKey = ''
   lastPage = location.pathname
   lastAttachmentIds = []
   terminal = false
   attempt = 0
   setJob({ phase: 'streaming', jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
+  persist()
   reattach(gen, true)
+}
+
+/** Boot policy: zero network unless there's evidence of prior activity — a
+ *  persisted active job, a non-empty outbox, or a job started recently on this
+ *  device (the last-job-at flag, for recovering a cleared active-job key). */
+export function bootRehydrate(): void {
+  if (!hasStoredSession()) return
+  const saved = readPersist()
+  if (saved) {
+    bindWake()
+    generation++
+    const gen = generation
+    jobId = saved.jobId
+    startedAt = saved.startedAt || Date.now()
+    prompt = saved.prompt || ''
+    activeIdemKey = ''
+    lastPage = location.pathname
+    lastAttachmentIds = []
+    terminal = false
+    attempt = 0
+    setJob({ phase: 'streaming', jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
+    reattach(gen, true)
+  } else {
+    let lastJobAt = 0
+    try {
+      lastJobAt = Number(localStorage.getItem(lsKey('last-job-at')) || 0)
+    } catch {
+      /* ignore */
+    }
+    if (lastJobAt && Date.now() - lastJobAt < 30 * 60_000) void discoverJobs()
+  }
+  restoreOutbox()
 }

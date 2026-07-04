@@ -5,7 +5,7 @@
 import { api, type ConversationMessage } from './api'
 import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { getActivePrompt, getActiveThumbs, getLiveTurns, getQueued } from './jobstore'
+import { discoverJobs, getActivePrompt, getActiveThumbs, getLiveTurns, getQueued, reconcileLiveTurns } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, subscribe } from './state'
 
@@ -212,6 +212,10 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   let loading = false
   let loadingOlder = false
   let renderedKey = ''
+  // liveTurns count at the last history fetch — when it differs on re-expand, a
+  // turn completed since, so the tail is refetched and absorbed into canonical,
+  // correctly-ordered history (idle re-opens stay fetch-free).
+  let lastLoadTurnCount = -1
 
   // live bubble nodes (kept alive between tokens so scrolling stays smooth)
   let liveUser: HTMLElement | null = null
@@ -221,7 +225,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const queuedBox = el('div')
 
   const staticKey = () =>
-    `${history.length}|${history[0]?.id ?? ''}|${getLiveTurns().length}`
+    `${history.length}|${history[0]?.id ?? ''}|${history[history.length - 1]?.id ?? ''}|${getLiveTurns().length}`
 
   const rebuildStatic = () => {
     clearNode(listEl)
@@ -235,7 +239,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const updateLive = () => {
     const job = getState().job
-    if (job.phase === 'streaming') {
+    if (job.phase === 'streaming' || job.phase === 'sending') {
       const prompt = getActivePrompt()
       if (!liveUser) {
         // Prompt and thumbs are fixed for the lifetime of a job — build once.
@@ -254,13 +258,15 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         liveAsst.append(h, lineEl('asst', '●', liveBody))
         listEl.appendChild(liveAsst)
       }
+      const streaming = job.phase === 'streaming' ? job : null
       if (liveTimer) {
-        const detail = (job.line || 'Working…').replace(/\s+/g, ' ')
-        liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${job.disconnected ? ' · reconnecting…' : ''})`
+        const detail = ((streaming ? streaming.line : '') || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
+        liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
       }
-      if (liveBody) liveBody.innerHTML = job.fullText ? renderMarkdown(job.fullText) : ''
+      const fullText = streaming?.fullText ?? ''
+      if (liveBody) liveBody.innerHTML = fullText ? renderMarkdown(fullText) : ''
       const asstLine = liveBody?.closest('.ak-t') as HTMLElement | null
-      if (asstLine) show(asstLine, !!job.fullText)
+      if (asstLine) show(asstLine, !!fullText)
     } else if (liveUser || liveAsst) {
       liveUser?.remove()
       liveAsst?.remove()
@@ -285,15 +291,18 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const loadHistory = async () => {
     loading = true
+    void discoverJobs() // cross-device: attach to a job another device started
     try {
       const r = await api.conversation(CONFIG.site, { limit: 40 })
       history = r.messages || []
       cursor = r.cursor
+      reconcileLiveTurns(history) // a turn in both history and liveTurns renders once
     } catch {
       /* leave empty */
     } finally {
       loaded = true
       loading = false
+      lastLoadTurnCount = getLiveTurns().length
       renderedKey = ''
       render()
       toBottom()
@@ -346,6 +355,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     }
     const justOpened = !wasExpanded
     wasExpanded = true
+    // Turns completed while collapsed → refresh the tail so ordering is canonical.
+    if (justOpened && !loading && getLiveTurns().length !== lastLoadTurnCount) {
+      void loadHistory()
+      return
+    }
     const pinned = isPinned()
     const key = staticKey()
     if (key !== renderedKey) {
@@ -363,7 +377,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // a 1s interval while the overlay is open and a job is streaming.
   setInterval(() => {
     const st = getState()
-    if (st.ui.mode === 'expanded' && st.job.phase === 'streaming') updateLive()
+    if (st.ui.mode === 'expanded' && (st.job.phase === 'streaming' || st.job.phase === 'sending')) updateLive()
   }, 1000)
 
   return { footerEl: footer }

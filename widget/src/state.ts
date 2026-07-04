@@ -9,7 +9,7 @@ export type LineState = 'dim' | 'thinking' | 'tool' | 'assistant'
 
 export type JobState =
   | { phase: 'idle' }
-  | { phase: 'sending' }
+  | { phase: 'sending'; startedAt: number }
   | {
       phase: 'streaming'
       jobId: string

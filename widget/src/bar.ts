@@ -5,7 +5,7 @@
 import { login } from './auth'
 import { lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { start } from './jobstore'
+import { getQueued, isBusy, start } from './jobstore'
 import { makePhotos, type Photos } from './photos'
 import { getState, patchUi, subscribe } from './state'
 import { makeTicker, type Ticker } from './ticker'
@@ -151,11 +151,18 @@ function makeComposer(): Composer {
   const doSend = () => {
     const text = ta.value.trim()
     if (!text && !photos.hasAttachments()) return
+    if (photos.isUploading()) {
+      // Don't silently drop an in-flight photo from the send payload.
+      setNote('Photo still uploading…', true)
+      return
+    }
     voice.teardown()
     const attachmentIds = photos.getAttachmentIds()
     const thumbs = photos.takeThumbUrls() // transfers ownership for transcript display
+    const wasBusy = isBusy()
     start({ text, attachmentIds, page: location.pathname, thumbs })
     reset()
+    if (wasBusy) setNote('Queued — sends when the current run finishes')
     // Stay in the expanded chat if that's where the message was sent from;
     // otherwise let the bar fall back to its streaming pill.
     if (getState().ui.mode !== 'expanded') patchUi({ mode: 'collapsed' })
@@ -246,12 +253,13 @@ export function mountBar(shadow: ShadowRoot): void {
   const spin = el('div', 'ak-spin')
   const tickerBox = el('div', 'ak-ticker')
   const timer = el('div', 'ak-timer')
+  const queueBadge = el('div', 'ak-qbadge') // "+N" queued sends
   const expandBtn = el('button', 'ak-expand', (n) => {
     n.type = 'button'
     n.appendChild(icon('expand', 15))
     n.setAttribute('aria-label', 'Expand chat')
   })
-  streamRow.append(spin, tickerBox, timer, expandBtn)
+  streamRow.append(spin, tickerBox, timer, queueBadge, expandBtn)
 
   const statusRow = el('div', 'ak-status')
   const statusDot = el('div', 'dot')
@@ -413,7 +421,7 @@ export function mountBar(shadow: ShadowRoot): void {
   }
   const runTimer = () => {
     const j = getState().job
-    if (j.phase !== 'streaming') return
+    if (j.phase !== 'streaming' && j.phase !== 'sending') return
     timer.textContent = mmss(Date.now() - j.startedAt)
   }
 
@@ -468,11 +476,14 @@ export function mountBar(shadow: ShadowRoot): void {
       if (lastView !== 'stream') ticker.clear()
       if (job.phase === 'sending') {
         ticker.set('Sending…', 'dim')
-        timer.textContent = ''
+        runTimer() // the timer counts from the send tap, not the first frame
       } else if (job.phase === 'streaming') {
         ticker.set(job.disconnected ? 'reconnecting…' : job.line || 'Working', job.disconnected ? 'dim' : job.lineState)
         runTimer()
       }
+      const q = getQueued().length
+      queueBadge.textContent = q ? `+${q}` : ''
+      show(queueBadge, q > 0)
       if (timerId == null) timerId = setInterval(runTimer, 1000)
     } else {
       stopTimer()

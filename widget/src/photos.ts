@@ -25,6 +25,7 @@ export interface Photos {
   getAttachmentIds: () => string[]
   takeThumbUrls: () => string[]
   hasAttachments: () => boolean
+  isUploading: () => boolean
   clear: () => void
 }
 
@@ -203,6 +204,7 @@ export function makePhotos(onChange: () => void): Photos {
     openPicker: () => input.click(),
     getAttachmentIds: () => items.filter((a) => a.status === 'done' && a.id).map((a) => a.id!),
     hasAttachments: () => items.length > 0,
+    isUploading: () => items.some((a) => a.status === 'uploading' || a.status === 'processing'),
     // Hand the thumbnail URLs to the caller (for transcript display) WITHOUT
     // revoking them — ownership transfers; they live for the page session.
     takeThumbUrls: () => {
