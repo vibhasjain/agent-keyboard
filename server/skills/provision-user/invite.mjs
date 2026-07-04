@@ -4,7 +4,7 @@
 // Env: SUPABASE_URL + SUPABASE_SERVICE_KEY (required), AK_PUBLIC_URL (the
 // server's public base URL, for the /welcome redirect), AGENT_DATA_DIR.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 const email = (process.argv[2] || "").trim().toLowerCase();
@@ -50,7 +50,9 @@ if (!res.ok) {
   }
 }
 
-// Add to the server's allow-list (ALLOWED_EMAIL env ∪ this file).
+// Add to the server's allow-list (ALLOWED_EMAIL env ∪ this file). Atomic
+// tmp+rename write — the auth gate reads this file on its hot path and a
+// torn read would deny access until its cache expires.
 const dataDir = process.env.AGENT_DATA_DIR || "/data";
 const listPath = join(dataDir, "agent-keyboard", "allowed-emails.json");
 let list = [];
@@ -62,7 +64,14 @@ try {
 }
 if (!list.includes(email)) list.push(email);
 await mkdir(dirname(listPath), { recursive: true });
-await writeFile(listPath, JSON.stringify(list, null, 2) + "\n");
+await writeFile(`${listPath}.tmp`, JSON.stringify(list, null, 2) + "\n");
+await rename(`${listPath}.tmp`, listPath);
+
+if (process.env.ALLOWED_USER_ID) {
+  console.error(
+    "WARNING: ALLOWED_USER_ID is set on this server — it pins auth to specific user ids, so this user will STILL be rejected until the owner unsets it (or adds their id).",
+  );
+}
 
 console.log(
   `${mode === "invite" ? "invited" : "sent a password-setup email to existing account"} ${email}; allow-listed (${list.length} total)${redirectTo ? `; link lands on ${redirectTo}` : "; note: AK_PUBLIC_URL unset — the link uses the Supabase project's default Site URL"}`,

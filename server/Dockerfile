@@ -47,10 +47,6 @@ RUN npm install -g playwright@1.58.2 \
     && playwright install --with-deps chromium-headless-shell \
     && rm -rf /var/lib/apt/lists/*
 
-# Repo-shipped agent skills (image-gen, verify-in-browser, provision-user) —
-# seeded into /data/.claude/skills at boot (see src/skills.ts).
-COPY server/skills /app/skills
-
 # Server dependencies (express, cors, busboy, sharp, uuid, tsx). sharp pulls its
 # linux native binary during npm ci in this stage.
 WORKDIR /app/server
@@ -58,6 +54,11 @@ COPY server/package*.json ./
 RUN npm ci --omit=dev
 COPY server/tsconfig.json ./
 COPY server/src ./src
+
+# Repo-shipped agent skills (image-gen, verify-in-browser, provision-user) —
+# seeded into /data/.claude/skills at boot (see src/skills.ts). Below npm ci so
+# a skill edit doesn't bust the dependency layer (sharp's native build).
+COPY server/skills /app/skills
 
 # The widget bundle served at GET /widget.js, and the demo bundle at /demo.js.
 COPY --from=widget /w/dist/widget.js /app/widget/widget.js

@@ -32,6 +32,7 @@ import { cleanupUploads } from "./photos.js";
 import {
   CONTEXT_WINDOW_TOKENS,
   clearCompactFlag,
+  defaultHarness,
   extractReplyDirectives,
   harnessNote,
   loadHarness,
@@ -44,8 +45,14 @@ import {
 import { sessionFilePath } from "./conversation.js";
 import { readFile } from "node:fs/promises";
 
-const RUN_TIMEOUT_MS = Number(process.env.CLAUDE_RUN_TIMEOUT_MS ?? 900_000);
-const COMPACT_TIMEOUT_MS = Number(process.env.CLAUDE_COMPACT_TIMEOUT_MS ?? 300_000);
+// NaN-guarded env int: a malformed value must not become setTimeout(fn, NaN)
+// (which fires immediately and would SIGKILL every spawn on the next tick).
+function envInt(name: string, fallback: number): number {
+  const n = Number(process.env[name]);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+const RUN_TIMEOUT_MS = envInt("CLAUDE_RUN_TIMEOUT_MS", 900_000);
+const COMPACT_TIMEOUT_MS = envInt("CLAUDE_COMPACT_TIMEOUT_MS", 300_000);
 const ASSISTANT_THROTTLE_MS = 180;
 const MAX_ATTEMPTS = 3;
 
@@ -107,7 +114,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   const path = checkoutPath(site.id);
   const lines = [
     `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
-    `Modify only files inside this repository, with two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")} — install or edit skills there to gain new capabilities (they load from the next turn). Never touch other checkouts or server config.`,
+    `Modify only files inside this repository. Everything else under /data is off-limits — other checkouts, other sites' state, server config, auth files — with exactly two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")}, where you may install or edit skills to gain new capabilities (they load from the next turn).`,
   ];
   if (pushBranch === site.branch) {
     lines.push(
@@ -386,24 +393,27 @@ async function countCompactBoundaries(sessionId: string, cwd: string): Promise<n
  * On-demand compaction: run `/compact` as a dedicated headless turn and verify a
  * new compact_boundary actually landed in the session log (slash commands in -p
  * mode are not guaranteed — auto-compaction remains the safety net either way).
+ * Uses the site's harness args so compaction runs on the configured model.
  */
-async function runCompactTurn(sessionId: string, dir: string): Promise<boolean> {
+async function runCompactTurn(sessionId: string, dir: string, harness: ResolvedHarness): Promise<boolean> {
   const before = await countCompactBoundaries(sessionId, dir);
   const args = [
     "--resume",
     sessionId,
     "-p",
     "/compact",
+    ...harness.args,
     "--output-format",
     "stream-json",
     "--verbose",
-    "--permission-mode",
-    "bypassPermissions",
     "--strict-mcp-config",
     "--setting-sources",
     "user,project",
   ];
-  const { done } = spawnClaude(args, dir, () => {}, { timeoutMs: COMPACT_TIMEOUT_MS });
+  const { done } = spawnClaude(args, dir, () => {}, {
+    extraEnv: harness.env,
+    timeoutMs: COMPACT_TIMEOUT_MS,
+  });
   await done;
   return (await countCompactBoundaries(sessionId, dir)) > before;
 }
@@ -446,8 +456,8 @@ export async function* runMessageJob(
 
     // Per-site harness settings (model / effort / permission mode — see
     // harness.ts). Loaded inside the site lock, once per job.
-    const harness = await loadHarness(site.id);
-    const lastUsage = await readLastUsage(site.id);
+    const [initialHarness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
+    let harness = initialHarness;
     console.log(
       `[harness] site=${site.id} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
     );
@@ -457,6 +467,7 @@ export async function* runMessageJob(
     let result: ClaudeResult | undefined;
     let lastErr = "";
     let recovered = false; // session create↔resume flip is a one-shot
+    let harnessFellBack = false; // harness-arg rejection fallback is a one-shot too
     let attempt = 0;
     let maxContext = 0; // max plausible context-tokens total seen this run
 
@@ -527,6 +538,22 @@ export async function* runMessageJob(
         continue;
       }
 
+      // Self-persisted-settings recovery: if the CLI rejects an arg the harness
+      // produced (e.g. a model id that passed the regex but doesn't exist), a
+      // wedged settings file would fail EVERY future turn — the agent can't fix
+      // a file it needs a successful turn to edit. Retry once on defaults.
+      if (
+        !harnessFellBack &&
+        !result &&
+        harness.args.length &&
+        /unknown option|unrecognized|invalid (value|argument|option)|not a valid|no such model/i.test(lastErr)
+      ) {
+        harnessFellBack = true;
+        harness = defaultHarness();
+        harness.warnings.push("your settings produced CLI args the runtime rejected — this turn ran on defaults; fix your settings file");
+        continue;
+      }
+
       // Throttling backoff: ≤3 attempts, growing delay.
       attempt++;
       if (attempt < MAX_ATTEMPTS && isThrottle(lastErr)) {
@@ -545,11 +572,18 @@ export async function* runMessageJob(
       let reply = (result.result ?? "").toString().trim();
 
       // Plan-mode escape hatch: a trailing [[settings: {...}]] line is applied
-      // server-side and stripped from the visible reply (see harness.ts).
-      const { patch, cleaned } = extractReplyDirectives(reply);
-      if (patch) {
-        reply = cleaned;
-        await saveSettings(site.id, patch).catch(() => {});
+      // server-side and stripped from the visible reply (see harness.ts). Only
+      // honored in the modes where the agent CANNOT edit its own settings file —
+      // in bypass/acceptEdits it must edit the file, which keeps this in-band
+      // channel from being a general (injectable) settings mutator.
+      const lockedMode =
+        harness.settings.permissionMode === "plan" || harness.settings.permissionMode === "default";
+      if (lockedMode) {
+        const { patch, cleaned } = extractReplyDirectives(reply);
+        if (patch) {
+          reply = cleaned;
+          await saveSettings(site.id, patch).catch(() => {});
+        }
       }
 
       // Approximate context bookkeeping — read back by the next turn's harness note.
@@ -564,14 +598,20 @@ export async function* runMessageJob(
       }
 
       // One-shot on-demand compaction: the agent (or a reply directive) set
-      // compactNow in the settings file during this turn. Verify the boundary
-      // actually landed; report honestly either way. Flag clears no matter what.
+      // compactNow in the settings file during this turn. The flag is CONSUMED
+      // BEFORE the compact runs — if the clear failed after a run, every future
+      // turn would re-compact forever. Verify the boundary landed; report
+      // honestly either way.
       const post = await loadHarness(site.id);
       if (post.settings.compactNow) {
-        yield ["status", { phase: "compacting", detail: "Compacting memory" }];
-        const ok = await runCompactTurn(sessionId, dir).catch(() => false);
-        await clearCompactFlag(site.id).catch(() => {});
-        reply = `${reply}\n\n_${ok ? "Memory compacted." : "On-demand compact didn't take — auto-compaction stays active."}_`.trim();
+        const cleared = await clearCompactFlag(site.id).then(() => true, () => false);
+        if (cleared) {
+          yield ["status", { phase: "compacting", detail: "Compacting memory" }];
+          const ok = await runCompactTurn(sessionId, dir, post).catch(() => false);
+          reply = `${reply}\n\n_${ok ? "Memory compacted." : "On-demand compact didn't take — auto-compaction stays active."}_`.trim();
+        }
+        // clear failed → skip the compact entirely rather than risk re-running
+        // it on every future turn off a stuck flag.
       }
 
       yield [

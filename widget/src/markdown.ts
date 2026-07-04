@@ -126,7 +126,10 @@ export function renderMarkdown(src: string): string {
       flushPara()
       flushList()
       flushQuote()
-      if (!olist.length) olStart = parseInt(oli[1], 10) || 1
+      if (!olist.length) {
+        const n = parseInt(oli[1], 10)
+        olStart = Number.isNaN(n) ? 1 : n // 0 is a valid list start
+      }
       olist.push(oli[2])
       i++
       continue

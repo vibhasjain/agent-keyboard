@@ -126,8 +126,11 @@ app.get("/widget.js", (_req, res) => {
 // page PUTs the new password straight to Supabase with the anon key. Open
 // route: without a valid token in the hash it can do nothing.
 app.get("/welcome", (_req, res) => {
-  const sb = JSON.stringify(process.env.SUPABASE_URL ?? "");
-  const anon = JSON.stringify(process.env.SUPABASE_ANON_KEY ?? "");
+  // JSON.stringify alone doesn't escape "<" — a "</script>" substring in a
+  // config value would terminate the inline script block. < is inert.
+  const js = (v: string) => JSON.stringify(v).replace(/</g, "\\u003c");
+  const sb = js(process.env.SUPABASE_URL ?? "");
+  const anon = js(process.env.SUPABASE_ANON_KEY ?? "");
   res.type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>Agent Keyboard — welcome</title>

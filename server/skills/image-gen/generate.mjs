@@ -18,8 +18,10 @@ if (!key) {
   process.exit(3);
 }
 
-const mimeFor = (p) =>
-  p.endsWith(".png") ? "image/png" : p.endsWith(".webp") ? "image/webp" : "image/jpeg";
+const mimeFor = (p) => {
+  const l = p.toLowerCase();
+  return l.endsWith(".png") ? "image/png" : l.endsWith(".webp") ? "image/webp" : "image/jpeg";
+};
 
 const parts = [{ text: prompt }];
 for (const p of inputPaths) {

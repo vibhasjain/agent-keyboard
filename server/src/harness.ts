@@ -12,7 +12,7 @@
 // sees and can fix itself. Adding a future knob = adding one entry here.
 
 import { join } from "node:path";
-import { readDataFile, writeDataFile } from "./checkouts.js";
+import { DATA_DIR, readDataFile, writeDataFile } from "./checkouts.js";
 
 export type PermissionMode = "bypassPermissions" | "plan" | "acceptEdits" | "default";
 
@@ -100,10 +100,11 @@ function siteRel(siteId: string, file: string): string {
   return join("agent-keyboard", "sites", siteId, file);
 }
 
-/** Absolute path of a site's harness settings file (shown to the agent). */
+/** Absolute path of a site's harness settings file (shown to the agent).
+ *  MUST derive from the same DATA_DIR the read/write helpers use — a diverging
+ *  copy would tell the agent to edit a file the server never reads. */
 export function settingsPathFor(siteId: string): string {
-  const dataDir = process.env.AGENT_DATA_DIR ?? "/data";
-  return join(dataDir, siteRel(siteId, "settings.json"));
+  return join(DATA_DIR, siteRel(siteId, "settings.json"));
 }
 
 function validateSettings(raw: unknown, warnings: string[]): HarnessSettings {
@@ -131,6 +132,13 @@ function resolve(settings: HarnessSettings, warnings: string[]): ResolvedHarness
     if (knob.toArgs) args.push(...knob.toArgs(settings[knob.key]));
   }
   return { settings, warnings, args, env: {} };
+}
+
+/** The no-settings-file harness: exactly the historical hardcoded CLI args.
+ *  Used as the one-shot fallback when a self-persisted setting makes the CLI
+ *  reject its own args (which would otherwise wedge every future turn). */
+export function defaultHarness(): ResolvedHarness {
+  return resolve({}, []);
 }
 
 /** Load + validate a site's harness settings. No file → today's exact defaults. */
@@ -177,7 +185,9 @@ export interface TurnUsage {
   at: string;
 }
 
-export const CONTEXT_WINDOW_TOKENS = Number(process.env.CONTEXT_WINDOW_TOKENS ?? 200_000);
+const parsedWindow = Number(process.env.CONTEXT_WINDOW_TOKENS ?? 200_000);
+export const CONTEXT_WINDOW_TOKENS =
+  Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : 200_000;
 
 export async function writeLastUsage(siteId: string, u: TurnUsage): Promise<void> {
   await writeDataFile(siteRel(siteId, "last-usage.json"), JSON.stringify(u) + "\n");
@@ -225,7 +235,9 @@ export function harnessNote(siteId: string, h: ResolvedHarness, usage: TurnUsage
 // [[settings: {...}]] line in the reply is validated through the same KNOBS
 // table, applied server-side, and stripped from the visible reply.
 
-const DIRECTIVE_RE = /\n?\s*\[\[settings:\s*(\{[^\]]*\})\s*\]\]\s*$/;
+// Greedy capture anchored to end-of-reply so JSON containing `]` (arrays,
+// bracket-bearing strings) still parses.
+const DIRECTIVE_RE = /\n?\s*\[\[settings:\s*(\{[\s\S]*\})\s*\]\]\s*$/;
 
 export function extractReplyDirectives(reply: string): {
   patch: Partial<HarnessSettings> | null;
@@ -233,13 +245,14 @@ export function extractReplyDirectives(reply: string): {
 } {
   const m = reply.match(DIRECTIVE_RE);
   if (!m) return { patch: null, cleaned: reply };
-  const cleaned = reply.slice(0, m.index ?? reply.length).trimEnd();
   try {
     const warnings: string[] = [];
     const patch = validateSettings(JSON.parse(m[1] ?? "{}"), warnings);
-    if (!Object.keys(patch).length) return { patch: null, cleaned };
-    return { patch, cleaned };
+    // Strip ONLY when something valid is applied — an invalid directive stays
+    // visible in the reply so the failure is observable, not silently eaten.
+    if (!Object.keys(patch).length) return { patch: null, cleaned: reply };
+    return { patch, cleaned: reply.slice(0, m.index ?? reply.length).trimEnd() };
   } catch {
-    return { patch: null, cleaned };
+    return { patch: null, cleaned: reply };
   }
 }

@@ -291,7 +291,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const loadHistory = async () => {
     loading = true
-    void discoverJobs() // cross-device: attach to a job another device started
+    // Cross-device: attach to a job another device started. First open only —
+    // tail refreshes after local turns don't need a jobs probe.
+    if (!loaded) void discoverJobs()
     try {
       const r = await api.conversation(CONFIG.site, { limit: 40 })
       history = r.messages || []

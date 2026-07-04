@@ -35,10 +35,7 @@ let doneTimer: ReturnType<typeof setTimeout> | null = null
 let generation = 0
 
 // Turns completed during this page load (rendered under any server-fetched history).
-// `id` is the job's idemKey; `at` the completion time — both exist so the
-// transcript can reconcile these against server history (which uses unrelated
-// Claude-session uuids, so matching is by normalized user text, not by id).
-export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[]; id?: string; at?: number }
+export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[] }
 const liveTurns: LiveTurn[] = []
 
 export function getLiveTurns(): ReadonlyArray<LiveTurn> {
@@ -49,21 +46,28 @@ export function getLiveTurns(): ReadonlyArray<LiveTurn> {
  * Prune liveTurns already present in server history so a turn never renders
  * twice (history is fetched lazily — a turn that completed before the first
  * expand exists in BOTH). History ids are Claude-session uuids with no relation
- * to idemKey, so matching keys on normalized user-turn text against the history
- * tail; positions must strictly increase so repeated identical prompts pair 1:1.
+ * to idemKey, so matching keys on normalized user-turn text; positions must
+ * strictly increase so repeated identical prompts pair 1:1. A photo-only turn
+ * has empty text — it may only match a history user turn that is also
+ * photo-only (photos > 0, empty text), never an arbitrary empty row.
  * Returns whether anything was removed.
  */
 export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
   if (!liveTurns.length || !history.length) return false
   const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
-  const tail = history.slice(-(liveTurns.length * 2 + 6))
   const drop = new Set<number>()
   let pos = 0
   for (let i = 0; i < liveTurns.length; i++) {
-    if (liveTurns[i].role !== 'user') continue
-    const target = norm(liveTurns[i].text)
-    for (let j = pos; j < tail.length; j++) {
-      if (tail[j].role === 'user' && norm(tail[j].text) === target) {
+    const t = liveTurns[i]
+    if (t.role !== 'user') continue
+    const target = norm(t.text)
+    for (let j = pos; j < history.length; j++) {
+      const m = history[j]
+      if (m.role !== 'user') continue
+      const matches = target
+        ? norm(m.text) === target
+        : !!t.thumbs?.length && (m.photos ?? 0) > 0 && !norm(m.text)
+      if (matches) {
         drop.add(i)
         if (liveTurns[i + 1]?.role === 'assistant') drop.add(i + 1)
         pos = j + 1
@@ -193,6 +197,16 @@ function persist(): void {
   }
 }
 
+// Once this device SEES a job finish, boot-time discovery has nothing to
+// recover — clear the activity flag so idle page loads stay zero-request.
+function clearActivityFlag(): void {
+  try {
+    localStorage.removeItem(lsKey('last-job-at'))
+  } catch {
+    /* ignore */
+  }
+}
+
 function clearPersist(): void {
   try {
     localStorage.removeItem(lsKey('active-job'))
@@ -305,11 +319,12 @@ function currentFullText(): string {
 function finishDone(data: Record<string, unknown>): void {
   const git = (data.git ?? {}) as GitInfo
   const reply = String(data.reply ?? '') || currentFullText()
-  const at = Date.now()
-  liveTurns.push(
-    { role: 'user', text: prompt, thumbs: activeThumbs, id: activeIdemKey, at },
-    { role: 'assistant', text: reply, id: activeIdemKey, at },
-  )
+  // A job attached without its prompt (cross-device discovery) pushes no live
+  // turn — an empty user bubble can't reconcile against history; the next
+  // history fetch renders the turn canonically instead.
+  if (prompt || activeThumbs?.length) {
+    liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs }, { role: 'assistant', text: reply })
+  }
   const sha7 = git.headSha ? String(git.headSha).slice(0, 7) : ''
   // "pushed" only when the agent actually changed something; pushed=true alone
   // just means the checkout matches origin (e.g. a read-only question).
@@ -318,6 +333,8 @@ function finishDone(data: Record<string, unknown>): void {
   const finishedId = jobId
   markHandled(jobId!)
   clearPersist()
+  clearActivityFlag()
+  outboxRemove(activeIdemKey) // belt-and-suspenders: the job-frame removal may have failed
   reset()
   setJob({ phase: 'done', jobId: finishedId!, summary, ok: shipped || !git.dirty })
   if (doneTimer != null) clearTimeout(doneTimer)
@@ -343,6 +360,7 @@ function finishError(data: Record<string, unknown>): void {
   const retry = makeRetry()
   markHandled(jobId ?? '')
   clearPersist()
+  clearActivityFlag()
   // The failed send leaves the outbox — the error row offers Retry; silently
   // auto-refiring it on the next reload would be surprising.
   outboxRemove(activeIdemKey)
@@ -364,10 +382,11 @@ function onDisconnect(gen: number): void {
   if (gen !== generation) return
   if (!jobId) {
     // Stream died before we ever learned the job id → can't re-attach. The job
-    // may still have started server-side, so the retry reuses the idemKey.
+    // may still have started server-side, so the retry reuses the idemKey —
+    // and the outbox entry stays: a reload re-sends the same key, which the
+    // server re-tails instead of re-running.
     const retry = makeRetry(activeIdemKey)
     clearPersist()
-    outboxRemove(activeIdemKey)
     reset()
     setJob({ phase: 'error', message: 'Lost the connection before the job started.', retry })
     return
@@ -508,9 +527,10 @@ export function start(input: {
       if (jobId) {
         onDisconnect(gen) // network blip after the job started → reconnect
       } else {
-        const retry = makeRetry(activeIdemKey) // POST may have reached the server
+        // POST may have reached the server: retry reuses the idemKey, and the
+        // outbox entry stays so a reload recovers the send either way.
+        const retry = makeRetry(activeIdemKey)
         clearPersist()
-        outboxRemove(activeIdemKey)
         reset()
         setJob({ phase: 'error', message: errMsg(e), retry })
       }
@@ -535,6 +555,25 @@ function restoreOutbox(): void {
   }
 }
 
+/** Shared attach sequence for a known-running job (boot rehydrate + discovery). */
+function attachToRunningJob(job: { jobId: string; startedAt: number; prompt: string }): void {
+  bindWake()
+  generation++
+  const gen = generation
+  jobId = job.jobId
+  startedAt = job.startedAt || Date.now()
+  prompt = job.prompt
+  activeIdemKey = ''
+  activeThumbs = undefined // never carry thumbs from a previous page's job
+  lastPage = location.pathname
+  lastAttachmentIds = []
+  terminal = false
+  attempt = 0
+  setJob({ phase: 'streaming', jobId: job.jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
+  persist()
+  reattach(gen, true)
+}
+
 /** Attach to a running job this device doesn't know about (cleared storage,
  *  another device, a lost active-job key). Registry + a 10-min finished window
  *  come back from GET /jobs; the handled ledger filters out jobs this device
@@ -556,50 +595,36 @@ export async function discoverJobs(): Promise<void> {
     .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
   const row = running[0]
   if (!row) return
-  bindWake()
-  generation++
-  const gen = generation
-  jobId = row.job_id
-  startedAt = (row.created_at && Date.parse(row.created_at)) || Date.now()
-  prompt = ''
-  activeIdemKey = ''
-  lastPage = location.pathname
-  lastAttachmentIds = []
-  terminal = false
-  attempt = 0
-  setJob({ phase: 'streaming', jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
-  persist()
-  reattach(gen, true)
+  attachToRunningJob({
+    jobId: row.job_id,
+    startedAt: (row.created_at && Date.parse(row.created_at)) || Date.now(),
+    prompt: '', // unknown here — finishDone skips the live turn; history renders it
+  })
 }
 
 /** Boot policy: zero network unless there's evidence of prior activity — a
- *  persisted active job, a non-empty outbox, or a job started recently on this
- *  device (the last-job-at flag, for recovering a cleared active-job key). */
+ *  persisted active job, a non-empty outbox, or a job started on this device
+ *  that was never observed finishing (the last-job-at flag). */
 export function bootRehydrate(): void {
   if (!hasStoredSession()) return
   const saved = readPersist()
   if (saved) {
-    bindWake()
-    generation++
-    const gen = generation
-    jobId = saved.jobId
-    startedAt = saved.startedAt || Date.now()
-    prompt = saved.prompt || ''
-    activeIdemKey = ''
-    lastPage = location.pathname
-    lastAttachmentIds = []
-    terminal = false
-    attempt = 0
-    setJob({ phase: 'streaming', jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
-    reattach(gen, true)
-  } else {
-    let lastJobAt = 0
-    try {
-      lastJobAt = Number(localStorage.getItem(lsKey('last-job-at')) || 0)
-    } catch {
-      /* ignore */
-    }
-    if (lastJobAt && Date.now() - lastJobAt < 30 * 60_000) void discoverJobs()
+    attachToRunningJob({ jobId: saved.jobId, startedAt: saved.startedAt, prompt: saved.prompt || '' })
+    restoreOutbox()
+    return
   }
-  restoreOutbox()
+  let lastJobAt = 0
+  try {
+    lastJobAt = Number(localStorage.getItem(lsKey('last-job-at')) || 0)
+  } catch {
+    /* ignore */
+  }
+  if (lastJobAt && Date.now() - lastJobAt < 30 * 60_000) {
+    // Discovery must settle BEFORE the outbox restore: restore's start() would
+    // see phase idle mid-fetch, fire as a fresh send, and make discovery bail —
+    // losing the re-attach to the genuinely running job.
+    void discoverJobs().finally(() => restoreOutbox())
+  } else {
+    restoreOutbox()
+  }
 }
