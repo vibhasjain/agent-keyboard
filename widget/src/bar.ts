@@ -2,7 +2,7 @@
 // done / error / login), and the single reparentable composer node. Subscribes to
 // the store and reconciles the DOM on every change.
 
-import { login } from './auth'
+import { getPendingInvite, login, setPasswordWithToken } from './auth'
 import { lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
@@ -20,10 +20,11 @@ function mmss(ms: number): string {
   return `${m}:${r < 10 ? '0' : ''}${r}`
 }
 
-type View = 'mini' | 'stream' | 'done' | 'error' | 'login' | 'composing' | 'expanded'
+type View = 'mini' | 'stream' | 'done' | 'error' | 'login' | 'setpw' | 'composing' | 'expanded'
 
 function computeView(): View {
   const { ui, job } = getState()
+  if (ui.mode === 'setpw') return 'setpw' // invite landing wins over everything
   if (ui.mode === 'expanded') return 'expanded'
   // Active work always surfaces the pill — even from the minimized corner, so a
   // re-attached job on reload isn't hidden behind the ⌨️ button.
@@ -329,7 +330,29 @@ export function mountBar(shadow: ShadowRoot): void {
     el('div', 'ak-lg-row', (n) => n.append(lgMark(), pwInput, goBtn)),
   )
 
-  pill.append(shimmer, streamRow, statusRow, loginRow)
+  // Invite / recovery landing: finish setting a password right here (the link
+  // redirected to this page with a fresh token — see auth.consumeInviteToken).
+  const setpwRow = el('form', 'ak-login')
+  const setpwLabel = el('div', 'ak-setpw-label')
+  const setpwInput = el('input', undefined, (n) => {
+    n.type = 'password'
+    n.placeholder = 'choose a password'
+    n.autocomplete = 'new-password'
+    n.minLength = 8
+    n.setAttribute('enterkeyhint', 'go')
+  })
+  const setpwGo = el('button', 'ak-icon-btn ak-send ak-lg-go', (n) => {
+    n.type = 'submit'
+    n.appendChild(icon('arrow-right', 15))
+    n.setAttribute('aria-label', 'Set password')
+  })
+  setpwRow.append(
+    el('div', 'ak-lg-row', (n) => n.append(setpwLabel)),
+    el('div', 'ak-lg-rule'),
+    el('div', 'ak-lg-row', (n) => n.append(lgMark(), setpwInput, setpwGo)),
+  )
+
+  pill.append(shimmer, streamRow, statusRow, loginRow, setpwRow)
   bar.append(pill)
   zone.append(miniBtn, bar, stash)
   shadow.appendChild(zone)
@@ -415,6 +438,37 @@ export function mountBar(shadow: ShadowRoot): void {
     } finally {
       loggingIn = false
       goBtn.disabled = false
+    }
+  })
+
+  // -- invite / recovery: set a password, then land signed-in --
+  let settingPw = false
+  on(setpwRow, 'input', () => setpwRow.classList.remove('error'))
+  on(setpwRow, 'submit', async (e) => {
+    e.preventDefault()
+    if (settingPw) return
+    if (setpwInput.value.length < 8) {
+      setpwRow.classList.remove('shake')
+      void setpwRow.offsetWidth
+      setpwRow.classList.add('shake', 'error')
+      setpwLabel.textContent = 'Use at least 8 characters'
+      return
+    }
+    settingPw = true
+    setpwGo.disabled = true
+    try {
+      await setPasswordWithToken(setpwInput.value)
+      setpwInput.value = ''
+      patchUi({ mode: 'composing' })
+      setTimeout(() => composer.focus(), 60)
+    } catch (err) {
+      setpwRow.classList.remove('shake')
+      void setpwRow.offsetWidth
+      setpwRow.classList.add('shake', 'error')
+      setpwLabel.textContent = err instanceof Error ? err.message : 'Could not set the password'
+    } finally {
+      settingPw = false
+      setpwGo.disabled = false
     }
   })
 
@@ -586,7 +640,7 @@ export function mountBar(shadow: ShadowRoot): void {
     show(miniBtn, view === 'mini')
     show(bar, view !== 'mini')
 
-    const pillVisible = view === 'stream' || view === 'done' || view === 'error' || view === 'login'
+    const pillVisible = view === 'stream' || view === 'done' || view === 'error' || view === 'login' || view === 'setpw'
     show(pill, pillVisible)
 
     // pill state class
@@ -599,6 +653,12 @@ export function mountBar(shadow: ShadowRoot): void {
     show(streamRow, view === 'stream')
     show(statusRow, view === 'done' || view === 'error')
     show(loginRow, view === 'login')
+    show(setpwRow, view === 'setpw')
+    if (view === 'setpw' && lastView !== 'setpw') {
+      const inv = getPendingInvite()
+      setpwLabel.textContent = inv?.email ? `Welcome — set a password for ${inv.email}` : 'Welcome — set a password'
+      setTimeout(() => setpwInput.focus(), 60)
+    }
 
     // stream row content
     if (view === 'stream') {

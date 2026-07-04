@@ -31,7 +31,6 @@ if (!SUPABASE_URL || !SERVICE_KEY) {
   process.exit(3);
 }
 const PUBLIC_URL = (process.env.AK_PUBLIC_URL || "").replace(/\/$/, "");
-const redirectTo = PUBLIC_URL ? `${PUBLIC_URL}/welcome` : "";
 const RESEND_KEY = process.env.RESEND_API_KEY || "";
 
 // Which site is this invite for? Explicit arg wins; else the sole SITES entry's
@@ -48,6 +47,15 @@ function resolveSite() {
   return "your site";
 }
 const site = resolveSite();
+
+// Land the invite on the invited site itself — the bar there finishes the
+// set-password flow in place (widget.consumeInviteToken), so nothing depends on
+// a dedicated /welcome page being in Supabase's redirect allow-list. If the
+// site domain isn't allow-listed, Supabase falls back to the project's Site URL
+// (also a bar-embedded site), which still completes. The /welcome page remains
+// as the fallback for deployments whose landing page has no widget.
+const isDomain = /\./.test(site) && !/\s/.test(site);
+const redirectTo = isDomain ? `https://${site}` : PUBLIC_URL ? `${PUBLIC_URL}/welcome` : "";
 
 const supa = (path, body) =>
   fetch(`${SUPABASE_URL}${path}`, {

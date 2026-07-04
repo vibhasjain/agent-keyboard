@@ -22,7 +22,7 @@ export type JobState =
   | { phase: 'done'; jobId: string; summary: string; ok: boolean }
   | { phase: 'error'; message: string; retry?: () => void }
 
-export type UiMode = 'mini' | 'collapsed' | 'login' | 'composing' | 'expanded'
+export type UiMode = 'mini' | 'collapsed' | 'login' | 'setpw' | 'composing' | 'expanded'
 export type VoiceState = 'idle' | 'connecting' | 'live' | 'error'
 
 export interface UiState {

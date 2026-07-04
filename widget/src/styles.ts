@@ -149,6 +149,8 @@ export const STYLES = `
 .ak-lg-row:focus-within .ak-lg-mark{ color:var(--ak-amber); }
 .ak-login.error .ak-lg-mark{ color:var(--ak-err); }
 .ak-lg-rule{ height:1px; background:var(--ak-rule); }
+.ak-setpw-label{ font-family:var(--ak-mono); font-size:11.5px; line-height:1.4; color:var(--ak-ink2); padding:4px 0; }
+.ak-login.error .ak-setpw-label{ color:var(--ak-err); }
 .ak-login input{
   flex:1; min-width:0; border:none; outline:none; background:transparent;
   color:var(--ak-ink); font-family:var(--ak-mono); font-size:16px; line-height:20px;

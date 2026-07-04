@@ -3,11 +3,12 @@
 // Renders a collapsed bar synchronously; makes ZERO network requests at boot
 // unless there is a persisted active job AND a stored session to re-attach with.
 
-import { initAuth } from './auth'
+import { consumeInviteToken, getPendingInvite, initAuth } from './auth'
 import { mountBar } from './bar'
 import { initConfig, shouldMountHere } from './config'
 import { injectFonts } from './fonts'
 import { bootRehydrate } from './jobstore'
+import { patchUi } from './state'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
 
@@ -55,6 +56,8 @@ function mount(): void {
   initViewport(host)
   initAuth() // synchronous: sets auth slice from localStorage, no network
   mountBar(shadow)
+  // If we arrived from an invite/recovery link, open the bar to set a password.
+  if (getPendingInvite()) patchUi({ mode: 'setpw' })
   bootRehydrate() // re-attach only if active-job key + stored session exist
 }
 
@@ -69,6 +72,7 @@ function mount(): void {
   // Shows on every page the embed is on by default; data-hide-paths /
   // data-only-paths on the <script> tag scope it without editing each page.
   if (!shouldMountHere(script)) return
+  consumeInviteToken() // stash + strip any invite/recovery token from the URL hash
   window.__agentKeyboard = true
   if (document.body) mount()
   else document.addEventListener('DOMContentLoaded', mount, { once: true })
