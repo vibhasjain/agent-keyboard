@@ -47,6 +47,11 @@ RUN npm install -g playwright@1.58.2 \
     && playwright install --with-deps chromium-headless-shell \
     && rm -rf /var/lib/apt/lists/*
 
+# flyctl, so the agent can operate its own Fly app (logs, status, secrets) when
+# the optional FLY_API_TOKEN secret is set. Pinned install dir — HOME=/data at
+# runtime, so the default $HOME/.fly would land on the volume.
+RUN curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
+
 # Server dependencies (express, cors, busboy, sharp, uuid, tsx). sharp pulls its
 # linux native binary during npm ci in this stage.
 WORKDIR /app/server

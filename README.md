@@ -126,6 +126,8 @@ listing any missing *required* var.
 | `OPENAI_API_KEY` | Voice dictation (ephemeral realtime tokens minted server-side). Absent = the mic button errors with "voice not configured". |
 | `GEMINI_API_KEY` | The baked-in image-generation skill. Read by the skill inside the CLI child, never by server code. Absent = the agent reports image generation as not configured. |
 | `AK_PUBLIC_URL` | This server's public base URL; invite emails from user provisioning land on `$AK_PUBLIC_URL/welcome`. |
+| `FLY_API_TOKEN` | App-scoped Fly deploy token (`fly tokens create deploy -a <app>`). Enables the `self-ops` skill — the agent can read its own logs/status and set secrets. |
+| `SUPABASE_ACCESS_TOKEN` | Supabase personal access token. Lets the agent manage auth config (SMTP, email templates, redirect URLs) via the Management API. |
 | `EXTRA_ORIGINS` | Comma-separated extra CORS origins (deploy previews, staging). |
 | `CLAUDE_MODEL` | Default model for the CLI. Default `opus`. Per-site overrides via [harness controls](#talking-to-the-harness). |
 | `CONTEXT_WINDOW_TOKENS` | Window size for the approximate context gauge. Default `200000`. |
@@ -201,6 +203,11 @@ volume at boot — deploys update them, agent-installed ones persist:
 | `image-gen` | Generates images with Gemini and places them in the site repo. | `GEMINI_API_KEY` |
 | `verify-in-browser` | Serves the checkout locally, screenshots it with the preinstalled headless Chromium, and inspects the render. | nothing (baked into the image) |
 | `provision-user` | Invites a new user by email + allow-lists them. | `SUPABASE_SERVICE_KEY` |
+| `self-ops` | The agent operates its own deployment: logs, status, secrets, deploy flow, Supabase auth config. Knows a restart kills its own turn. | `FLY_API_TOKEN` (optionally `SUPABASE_ACCESS_TOKEN`) |
+
+Branded invite/recovery email templates live in
+[`server/email-templates/`](./server/email-templates) — see that README for the
+free Resend + Supabase custom-SMTP setup.
 
 ## Security model
 

@@ -269,6 +269,15 @@ Setup requirements, once:
 Revoke someone by removing their email from the JSON file (`fly ssh console`), or deleting the user
 in Supabase.
 
+### Branded invite emails (optional, free)
+
+By default Supabase sends invites from its own shared address with a generic template (and a
+couple-per-hour rate limit). To send branded emails from your own domain instead: create a free
+[Resend](https://resend.com) account, verify your domain (3 DNS records), plug Resend's SMTP
+credentials into Supabase (Project Settings → Auth → SMTP), and paste the templates from
+[`server/email-templates/`](./server/email-templates) into Auth → Email Templates. Details in that
+directory's README. No code changes — the provision-user flow just starts sending branded emails.
+
 ---
 
 ## A review step instead of straight-to-main
