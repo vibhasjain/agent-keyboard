@@ -5,7 +5,7 @@
 import { login } from './auth'
 import { lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { getQueued, isBusy, start } from './jobstore'
+import { getQueued, start } from './jobstore'
 import { makePhotos, type Photos } from './photos'
 import { getState, patchUi, subscribe, type UiMode } from './state'
 import { makeTicker, type Ticker } from './ticker'
@@ -162,10 +162,9 @@ function makeComposer(): Composer {
     voice.teardown()
     const attachmentIds = photos.getAttachmentIds()
     const thumbs = photos.takeThumbUrls() // transfers ownership for transcript display
-    const wasBusy = isBusy()
     start({ text, attachmentIds, page: location.pathname, thumbs })
     reset()
-    if (wasBusy) setNote('Queued — sends when the current run finishes')
+    // No "Queued" note — the queue is already visible (dim lines + the +N badge).
     // Stay in the expanded chat if that's where the message was sent from;
     // otherwise let the bar fall back to its streaming pill.
     if (getState().ui.mode !== 'expanded') patchUi({ mode: 'collapsed' })
