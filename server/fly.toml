@@ -7,7 +7,8 @@
 #   fly secrets set CLAUDE_CODE_OAUTH_TOKEN=... SUPABASE_URL=... SUPABASE_ANON_KEY=... \
 #     SUPABASE_SERVICE_KEY=... ALLOWED_EMAIL=... GH_TOKEN=... \
 #     SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
-# Optional: OPENAI_API_KEY (voice), ALLOWED_USER_ID, EXTRA_ORIGINS. See SELF_HOSTING.md.
+# Optional: OPENAI_API_KEY (voice), GEMINI_API_KEY (image-gen skill),
+# ALLOWED_USER_ID, EXTRA_ORIGINS. See SELF_HOSTING.md.
 app = "agent-keyboard"
 primary_region = "iad"
 
@@ -24,6 +25,9 @@ primary_region = "iad"
   IS_SANDBOX = "1"
   NODE_ENV = "production"
   CLAUDE_MODEL = "opus"
+  # This server's public base URL — used by the provision-user skill to point
+  # invite emails at GET /welcome (must be in Supabase's allowed redirect URLs).
+  AK_PUBLIC_URL = "https://agent-keyboard.fly.dev"
   GIT_AUTHOR_NAME = "Agent Keyboard"
   GIT_COMMITTER_NAME = "Agent Keyboard"
   GIT_AUTHOR_EMAIL = "agent@agentkeyboard.com"
@@ -47,3 +51,8 @@ primary_region = "iad"
 [[vm]]
   size = "shared-cpu-2x"
   memory = "2gb"
+
+# Safety valve for the occasional 2-CLI-jobs + headless-chromium overlap
+# (worst realistic case ~1.2-1.4 GB of 2 GB). Bump memory to 4gb if OOM kills
+# ever show up in `fly logs`.
+swap_size_mb = 512

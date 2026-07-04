@@ -9,8 +9,15 @@
 // an optional ALLOWED_USER_ID pin (one or more Supabase UUIDs, checked only if
 // set). A 60s in-memory cache keeps us from hitting Supabase on every SSE
 // re-attach / poll.
+//
+// Emails provisioned at runtime (the provision-user skill: "invite
+// esther@example.com") land in /data/agent-keyboard/allowed-emails.json — the
+// gate accepts the union of the env list and that file. NOTE: if
+// ALLOWED_USER_ID is set, it still pins auth to those ids and provisioned
+// users are rejected — unset it to use runtime provisioning.
 
 import type { Request, Response, NextFunction } from "express";
+import { readDataFile } from "./checkouts.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
@@ -24,6 +31,33 @@ const csv = (v: string | undefined): Set<string> =>
   );
 const ALLOWED_EMAILS = csv(process.env.ALLOWED_EMAIL);
 const ALLOWED_USER_IDS = csv(process.env.ALLOWED_USER_ID);
+
+// Runtime-provisioned emails (allowed-emails.json on the volume), cached
+// briefly so the auth hot path doesn't stat the disk per request.
+const LIST_TTL_MS = 10_000;
+let listCache: { emails: Set<string>; at: number } = { emails: new Set(), at: 0 };
+async function provisionedEmails(): Promise<Set<string>> {
+  const now = Date.now();
+  if (now - listCache.at < LIST_TTL_MS) return listCache.emails;
+  const emails = new Set<string>();
+  try {
+    const raw = await readDataFile("agent-keyboard/allowed-emails.json");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) for (const e of parsed) emails.add(String(e).toLowerCase().trim());
+    }
+  } catch {
+    /* unreadable list = nobody extra */
+  }
+  listCache = { emails, at: now };
+  return emails;
+}
+
+async function isAllowedEmail(email: string): Promise<boolean> {
+  const e = email.toLowerCase();
+  if (ALLOWED_EMAILS.has(e)) return true;
+  return (await provisionedEmails()).has(e);
+}
 
 const CACHE_TTL_MS = 60_000;
 // Cap the verification cache so a flood of unique tokens from an unauthenticated
@@ -66,7 +100,7 @@ async function verify(token: string): Promise<AuthedUser | null> {
     });
     if (res.ok) {
       const body = (await res.json()) as { id?: string; email?: string };
-      const emailOk = !!body?.email && ALLOWED_EMAILS.has(body.email.toLowerCase());
+      const emailOk = !!body?.email && (await isAllowedEmail(body.email));
       const idOk = ALLOWED_USER_IDS.size === 0 || (!!body?.id && ALLOWED_USER_IDS.has(body.id.toLowerCase()));
       if (emailOk && idOk && body.id && body.email) {
         user = { id: body.id, email: body.email };

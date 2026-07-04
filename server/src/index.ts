@@ -20,6 +20,7 @@ import { ensureCheckout } from "./checkouts.js";
 import { stageUpload, resolveAttachments, purgeStaleUploads } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { mintRealtimeToken } from "./realtime.js";
+import { seedSkills } from "./skills.js";
 import {
   startJob,
   tail,
@@ -117,6 +118,71 @@ app.get("/widget.js", (_req, res) => {
   res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
   res.setHeader("Content-Length", String(buf.length));
   res.send(buf);
+});
+
+// ─── /welcome — set-your-password landing for provisioned users ─────────────
+// The provision-user skill sends a Supabase invite/recovery email whose link
+// redirects here with tokens in the URL hash (never sent to this server). The
+// page PUTs the new password straight to Supabase with the anon key. Open
+// route: without a valid token in the hash it can do nothing.
+app.get("/welcome", (_req, res) => {
+  const sb = JSON.stringify(process.env.SUPABASE_URL ?? "");
+  const anon = JSON.stringify(process.env.SUPABASE_ANON_KEY ?? "");
+  res.type("html").send(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Agent Keyboard — welcome</title>
+<style>
+  :root{--bg:#0a0a0a;--ink:#f5f1ea;--ink2:#b8b2a7;--ink3:#6f6a61;--rule:#211f1c;--amber:#ffb86b;--err:#f97066;--ok:#6dd396}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+  main{max-width:420px;margin:18vh auto 0;padding:0 20px}
+  h1{font-size:17px;font-weight:600;margin:0 0 6px}
+  h1 .k{margin-right:8px}
+  p{color:var(--ink2);margin:0 0 22px;font-size:13.5px}
+  label{display:block;color:var(--ink3);font-size:11px;letter-spacing:.06em;margin:14px 0 4px}
+  input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;padding:6px 2px;outline:none}
+  input:focus{border-bottom-color:var(--amber)}
+  button{margin-top:24px;background:var(--amber);color:#141310;border:none;border-radius:8px;padding:10px 18px;font:600 13.5px ui-monospace,monospace;cursor:pointer}
+  button:disabled{opacity:.5;cursor:default}
+  .msg{margin-top:16px;font-size:13px;min-height:1.4em}
+  .msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
+</style></head>
+<body><main>
+  <h1><span class="k">⌨️</span>Agent Keyboard</h1>
+  <p>You've been invited. Set a password to finish — then sign in from the bar on the site.</p>
+  <form id="f">
+    <label for="pw">new password</label>
+    <input id="pw" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="pw2">repeat it</label>
+    <input id="pw2" type="password" autocomplete="new-password" minlength="8" required>
+    <button id="go" type="submit">set password</button>
+  </form>
+  <div class="msg" id="msg"></div>
+<script>
+  const SB = ${sb}, ANON = ${anon};
+  const params = new URLSearchParams(location.hash.slice(1));
+  const token = params.get("access_token");
+  const msg = (t, cls) => { const m = document.getElementById("msg"); m.textContent = t; m.className = "msg " + (cls||""); };
+  if (params.get("error_description")) msg(params.get("error_description"), "err");
+  else if (!token) msg("This page needs the link from your invite email — open it from there.", "err");
+  document.getElementById("f").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw = document.getElementById("pw").value, pw2 = document.getElementById("pw2").value;
+    if (pw !== pw2) return msg("Passwords don't match.", "err");
+    if (!token) return msg("Missing invite token — open this page from your email link.", "err");
+    const go = document.getElementById("go"); go.disabled = true;
+    try {
+      const r = await fetch(SB.replace(/\\/$/, "") + "/auth/v1/user", {
+        method: "PUT",
+        headers: { Authorization: "Bearer " + token, apikey: ANON, "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      if (r.ok) msg("Password set. Head back to the site and sign in with your email + this password.", "ok");
+      else msg("Couldn't set the password (" + r.status + ") — the link may have expired; ask for a fresh invite.", "err");
+    } catch { msg("Network error — try again.", "err"); }
+    go.disabled = false;
+  });
+</script>
+</main></body></html>`);
 });
 
 // ─── demo scenes (open, static, dummy data — see demo.ts) ───────────────────
@@ -388,6 +454,7 @@ app.listen(port, () => {
     console.error("[boot] purge uploads failed", e),
   );
   void interruptRunningJobs().catch((e) => console.error("[boot] job sweep failed", e));
+  void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
 });
 
 let shuttingDown = false;

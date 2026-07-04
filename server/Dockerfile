@@ -37,6 +37,20 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
 # The real Claude Code CLI (pinned).
 RUN npm install -g @anthropic-ai/claude-code@2.1.170
 
+# Headless browser for the agent's verify-in-browser skill. Browsers install to
+# an IMAGE path — at runtime HOME=/data (the volume) and the Playwright default
+# ($HOME/.cache/ms-playwright) would resolve to a place they were never
+# installed. chromium-headless-shell keeps the footprint down (~350-450 MB with
+# system deps); the /data volume is unaffected (image layers live in rootfs).
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npm install -g playwright@1.58.2 \
+    && playwright install --with-deps chromium-headless-shell \
+    && rm -rf /var/lib/apt/lists/*
+
+# Repo-shipped agent skills (image-gen, verify-in-browser, provision-user) —
+# seeded into /data/.claude/skills at boot (see src/skills.ts).
+COPY server/skills /app/skills
+
 # Server dependencies (express, cors, busboy, sharp, uuid, tsx). sharp pulls its
 # linux native binary during npm ci in this stage.
 WORKDIR /app/server

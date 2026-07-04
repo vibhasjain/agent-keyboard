@@ -166,7 +166,9 @@ export function assertServerConfig(): void {
   const warn = (name: string, effect: string): void => {
     if (!process.env[name]?.trim()) process.stderr.write(`agent-keyboard: ${name} unset — ${effect}\n`);
   };
-  warn("SUPABASE_SERVICE_KEY", "job persistence disabled — reloaded clients can't re-attach");
+  warn("SUPABASE_SERVICE_KEY", "job persistence disabled — reloaded clients can't re-attach; user provisioning disabled too");
   warn("OPENAI_API_KEY", "voice dictation disabled");
   warn("CLAUDE_CODE_OAUTH_TOKEN", "Claude Code CLI has no auth — jobs will fail (run `claude setup-token`)");
+  warn("GEMINI_API_KEY", "image-generation skill disabled — the agent can't generate images");
+  warn("AK_PUBLIC_URL", "user-provisioning invite links fall back to the Supabase project's Site URL instead of this server's /welcome page");
 }
