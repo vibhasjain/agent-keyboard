@@ -5,7 +5,7 @@
 
 import { initAuth } from './auth'
 import { mountBar } from './bar'
-import { initConfig } from './config'
+import { initConfig, shouldMountHere } from './config'
 import { injectFonts } from './fonts'
 import { bootRehydrate } from './jobstore'
 import { STYLES } from './styles'
@@ -66,6 +66,9 @@ function mount(): void {
     console.warn('[agent-keyboard] missing data-site attribute — not mounting')
     return
   }
+  // Shows on every page the embed is on by default; data-hide-paths /
+  // data-only-paths on the <script> tag scope it without editing each page.
+  if (!shouldMountHere(script)) return
   window.__agentKeyboard = true
   if (document.body) mount()
   else document.addEventListener('DOMContentLoaded', mount, { once: true })

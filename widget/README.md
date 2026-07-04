@@ -31,6 +31,11 @@ The widget reads its own `<script>` tag and needs no config from the embedder:
   With no `data-site` the widget refuses to mount.
 - **`data-api`** (optional) — overrides the API base. Defaults to the origin the script was served
   from, so one server serving both `widget.js` and the API needs nothing here.
+- **`data-hide-paths`** / **`data-only-paths`** (optional) — scope which pages the bar appears on
+  without editing each one. The bar shows on **every page the embed is on by default**; set
+  `data-hide-paths="/admin/,/checkout"` to skip those (a trailing `/` means the whole subtree, `*`
+  matches within a path segment, `**` across segments), or `data-only-paths="/blog/**"` to restrict
+  it to just those. Handy when the embed lives in a shared template.
 - **Supabase URL + anon key** — *not* set by the embedder. The bundle ships with the placeholders
   `__AK_SUPABASE_URL__` / `__AK_SUPABASE_ANON_KEY__`, which the server replaces from its
   `SUPABASE_URL` / `SUPABASE_ANON_KEY` env at serve time. If they're still placeholders (server didn't
