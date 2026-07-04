@@ -10,14 +10,21 @@ their Supabase account, emails them a set-your-password link, and adds their
 email to the server's allow-list so the auth gate accepts them.
 
 ```bash
-node ~/.claude/skills/provision-user/invite.mjs someone@example.com
+node ~/.claude/skills/provision-user/invite.mjs someone@example.com [site-domain]
 ```
+
+Pass the `site-domain` you're inviting them to (e.g. `agentkeyboard.com`) so the
+email names it — if omitted, it uses the sole configured site, or a generic
+phrase when several exist.
 
 What it does:
 
-1. `POST /auth/v1/invite` on the configured Supabase project (service key from
-   the environment). If the account already exists, it falls back to a
-   password-recovery email — same outcome, a link to set a password.
+1. Generates the auth link via Supabase admin `generate_link` (no Supabase email
+   sent), then delivers a **branded, site-named email from your own domain via
+   Resend** — the dark/amber template in `server/email-templates/`. If the
+   account already exists it sends a recovery link instead (same landing).
+   Without `RESEND_API_KEY` it falls back to Supabase's built-in mailer
+   (generic template).
 2. The link lands on this server's `/welcome` page, where they set a password.
 3. Appends the email to `/data/agent-keyboard/allowed-emails.json` — the auth
    gate accepts emails from `ALLOWED_EMAIL` (env) plus this file.
@@ -29,6 +36,9 @@ sites."
 Requirements / failure modes (report plainly):
 
 - `SUPABASE_SERVICE_KEY` unset → provisioning is disabled on this deployment.
+- `RESEND_API_KEY` unset → emails still send, but via Supabase's generic mailer
+  (not branded, doesn't name the site). Set it + `EMAIL_FROM` (a verified Resend
+  sender) for the branded path.
 - The `/welcome` redirect URL must be in the Supabase project's allowed
   redirect list (Auth → URL Configuration) — if the emailed link bounces to
   the wrong page, that's the fix.

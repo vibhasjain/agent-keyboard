@@ -31,6 +31,9 @@ primary_region = "iad"
   # This server's public base URL — used by the provision-user skill to point
   # invite emails at GET /welcome (must be in Supabase's allowed redirect URLs).
   AK_PUBLIC_URL = "https://agent-keyboard.fly.dev"
+  # Branded-invite sender. Must be a verified Resend domain (the Fly host isn't
+  # an email domain, so this can't be derived from AK_PUBLIC_URL).
+  EMAIL_FROM = "Agent Keyboard <invites@agentkeyboard.com>"
   GIT_AUTHOR_NAME = "Agent Keyboard"
   GIT_COMMITTER_NAME = "Agent Keyboard"
   GIT_AUTHOR_EMAIL = "agent@agentkeyboard.com"

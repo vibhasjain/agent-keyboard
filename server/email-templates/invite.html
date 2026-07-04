@@ -10,18 +10,18 @@
 <body style="margin:0;padding:0;background-color:#0a0a0a;">
   <!-- Preheader (hidden preview text) -->
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
-    Pick a password and start editing the site by asking for changes.
+    Pick a password and start editing %%SITE%% by asking for changes.
   </div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#0a0a0a;">
     <tr>
-      <td align="center" style="padding:48px 16px 64px;">
+      <td align="center" style="padding:44px 16px 64px;">
         <table role="presentation" width="480" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;width:100%;">
 
           <!-- Wordmark -->
           <tr>
-            <td align="center" style="padding:0 0 28px;">
-              <span style="font-size:26px;line-height:1;">&#9000;&#65039;</span>
-              <div style="font-family:Georgia,'Times New Roman',serif;font-size:20px;color:#f5f1ea;padding-top:10px;letter-spacing:.02em;">
+            <td align="center" style="padding:0 0 30px;">
+              <div style="font-size:44px;line-height:1;">&#9000;&#65039;</div>
+              <div style="font-family:Georgia,'Times New Roman',serif;font-size:30px;color:#f5f1ea;padding-top:14px;letter-spacing:.01em;">
                 Agent Keyboard
               </div>
             </td>
@@ -29,32 +29,42 @@
 
           <!-- Card -->
           <tr>
-            <td style="background-color:#111110;border:1px solid #211f1c;border-radius:14px;padding:36px 32px;">
+            <td style="background-color:#111110;border:1px solid #211f1c;border-radius:14px;padding:38px 32px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="font-family:Georgia,'Times New Roman',serif;font-size:26px;line-height:1.3;color:#f5f1ea;padding-bottom:14px;">
-                    You're <em style="color:#e7d3b8;">invited</em>.
+                  <td style="font-family:Georgia,'Times New Roman',serif;font-size:28px;line-height:1.3;color:#f5f1ea;padding-bottom:14px;">
+                    You're <em style="color:#ffb86b;">invited</em>.
                   </td>
                 </tr>
                 <tr>
                   <td style="font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.65;color:#b8b2a7;padding-bottom:28px;">
-                    You've been given the keys to edit a website by simply asking for changes
-                    — typed, dictated, or photographed. First, pick a password for
-                    <span style="color:#f5f1ea;">{{ .Email }}</span>.
+                    You've been given the keys to <strong style="color:#f5f1ea;font-weight:600;">%%SITE%%</strong>
+                    — edit it by simply asking for changes, typed, dictated, or photographed. First, pick a
+                    password for <span style="color:#f5f1ea;">%%EMAIL%%</span>.
                   </td>
                 </tr>
+
+                <!-- Bulletproof amber button: color lives on the <td>, not the <a>,
+                     so clients can't restyle the link background. -->
                 <tr>
                   <td align="center" style="padding-bottom:30px;">
-                    <a href="{{ .ConfirmationURL }}"
-                       style="display:inline-block;background-color:#ffb86b;color:#141310;text-decoration:none;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;padding:13px 28px;border-radius:10px;">
-                      Pick your password
-                    </a>
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center">
+                      <tr>
+                        <td align="center" bgcolor="#ffb86b" style="background-color:#ffb86b;border-radius:10px;">
+                          <a href="%%CONFIRMATION_URL%%"
+                             style="display:inline-block;padding:14px 30px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:16px;font-weight:600;line-height:1;color:#141310 !important;text-decoration:none;border-radius:10px;">
+                            Pick your password &rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
                   </td>
                 </tr>
+
                 <tr>
                   <td style="border-top:1px solid #211f1c;padding-top:24px;font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.7;color:#6f6a61;">
-                    Then head to the site, tap the bar at the bottom of the page, and sign in
-                    with this email and your new password. Ask for a change the way you'd ask a
+                    Then open <span style="color:#b8b2a7;">%%SITE%%</span>, tap the bar at the bottom of the page,
+                    and sign in with this email and your new password. Ask for a change the way you'd ask a
                     person — <span style="color:#b8b2a7;">&ldquo;make the headline bigger&rdquo;</span> — and
                     watch it ship.
                   </td>
