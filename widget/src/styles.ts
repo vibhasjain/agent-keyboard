@@ -293,7 +293,8 @@ export const STYLES = `
 .ak-t .ak-t-body code{ font-size:12px; background:var(--ak-bg2); padding:1px 5px; border-radius:4px; }
 .ak-t .ak-t-body pre{ background:var(--ak-bg2); border:1px solid var(--ak-rule); border-radius:6px; padding:10px 12px; overflow-x:auto; margin:0 0 8px; }
 .ak-t .ak-t-body pre code{ background:none; padding:0; }
-.ak-t .ak-t-body a{ color:var(--ak-amber2); text-decoration:underline; }
+.ak-t .ak-t-body a{ color:var(--ak-amber2); text-decoration:underline; text-underline-offset:2px; overflow-wrap:anywhere; }
+.ak-t .ak-t-body a:hover{ color:var(--ak-amber); }
 .ak-t.queued{ opacity:.5; }
 .ak-t-thumbs{ display:flex; gap:6px; margin:2px 0 8px; }
 .ak-t-thumbs img{ width:56px; height:56px; object-fit:cover; border-radius:6px; border:1px solid var(--ak-rule); display:block; cursor:zoom-in; }

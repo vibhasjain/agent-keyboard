@@ -166,13 +166,17 @@ function outboxRemove(idemKey: string): void {
 }
 
 // -- helpers ------------------------------------------------------------------
+// The ticker/summary are single plain-text lines — reduce markdown links to
+// their label there (the clickable anchor renders in the transcript).
+const stripMdLinks = (s: string): string => s.replace(/\[([^\]]+)\]\(https?:\/\/[^\s)]+\)/g, '$1')
+
 const tail90 = (t: unknown): string => {
-  const s = String(t ?? '').replace(/\s+/g, ' ').trim()
+  const s = stripMdLinks(String(t ?? '')).replace(/\s+/g, ' ').trim()
   return s.length > 90 ? s.slice(-90) : s
 }
 
 const oneLine = (s: unknown, max = 140): string => {
-  const t = String(s ?? '').replace(/\s+/g, ' ').trim()
+  const t = stripMdLinks(String(s ?? '')).replace(/\s+/g, ' ').trim()
   return t.length > max ? t.slice(0, max - 1) + '…' : t
 }
 

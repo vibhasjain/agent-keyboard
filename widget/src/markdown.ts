@@ -12,14 +12,23 @@ function escape(s: string): string {
 }
 
 // Inline spans run on already-escaped text, so the only '<'/'>' present are ours.
+// Code spans, markdown links, and bare URLs are stashed as placeholders first so
+// the later passes (autolink, bold/italic) can never corrupt them — e.g. a URL
+// inside backticks must not become an anchor, and asterisks in a URL must not
+// become <em>.
 function inline(s: string): string {
+  const stash: string[] = []
+  const keep = (html: string): string => `\uE000${stash.push(html) - 1}\uE000`
+  const anchor = (href: string, label: string): string =>
+    `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
   return s
-    .replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`)
+    .replace(/`([^`]+)`/g, (_m, c) => keep(`<code>${c}</code>`))
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, href) => keep(anchor(href, text)))
+    // Bare URLs → clickable, trimming common trailing punctuation ("visit https://x.com.")
+    .replace(/https?:\/\/[^\s<>()\uE000]*[^\s<>().,;:!?'"\uE000]/g, (u) => keep(anchor(u, u)))
     .replace(/\*\*([^*]+)\*\*/g, (_m, c) => `<strong>${c}</strong>`)
     .replace(/(^|[^*])\*([^*\n]+)\*/g, (_m, pre, c) => `${pre}<em>${c}</em>`)
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, href) => {
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`
-    })
+    .replace(/\uE000(\d+)\uE000/g, (_m, i) => stash[Number(i)] ?? '')
 }
 
 export function renderMarkdown(src: string): string {
