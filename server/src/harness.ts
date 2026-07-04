@@ -134,11 +134,18 @@ function resolve(settings: HarnessSettings, warnings: string[]): ResolvedHarness
   return { settings, warnings, args, env: {} };
 }
 
-/** The no-settings-file harness: exactly the historical hardcoded CLI args.
- *  Used as the one-shot fallback when a self-persisted setting makes the CLI
- *  reject its own args (which would otherwise wedge every future turn). */
+/** The no-settings-file harness: exactly the historical hardcoded CLI args. */
 export function defaultHarness(): ResolvedHarness {
   return resolve({}, []);
+}
+
+/** One-shot fallback when the CLI rejects self-persisted args (which would
+ *  otherwise wedge every future turn): drop model/effort — the only knobs whose
+ *  validation can pass a value the runtime still rejects (claude-* ids) — but
+ *  KEEP permissionMode. Flipping a plan-mode site to bypassPermissions because
+ *  its model id was bad would silently drop the owner's safety intent. */
+export function fallbackHarness(prev: HarnessSettings): ResolvedHarness {
+  return resolve(prev.permissionMode ? { permissionMode: prev.permissionMode } : {}, []);
 }
 
 /** Load + validate a site's harness settings. No file → today's exact defaults. */

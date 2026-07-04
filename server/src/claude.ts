@@ -32,7 +32,7 @@ import { cleanupUploads } from "./photos.js";
 import {
   CONTEXT_WINDOW_TOKENS,
   clearCompactFlag,
-  defaultHarness,
+  fallbackHarness,
   extractReplyDirectives,
   harnessNote,
   loadHarness,
@@ -549,8 +549,8 @@ export async function* runMessageJob(
         /unknown option|unrecognized|invalid (value|argument|option)|not a valid|no such model/i.test(lastErr)
       ) {
         harnessFellBack = true;
-        harness = defaultHarness();
-        harness.warnings.push("your settings produced CLI args the runtime rejected — this turn ran on defaults; fix your settings file");
+        harness = fallbackHarness(harness.settings); // keeps permissionMode; drops model/effort
+        harness.warnings.push("your settings produced CLI args the runtime rejected — this turn ran on the default model; fix your settings file");
         continue;
       }
 

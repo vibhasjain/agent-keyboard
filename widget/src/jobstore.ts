@@ -389,6 +389,7 @@ function onDisconnect(gen: number): void {
     clearPersist()
     reset()
     setJob({ phase: 'error', message: 'Lost the connection before the job started.', retry })
+    dispatchQueue()
     return
   }
   const j = getState().job
@@ -427,6 +428,9 @@ function reattach(gen: number, isBoot: boolean): void {
           reset()
           setJob({ phase: 'error', message: 'That job is no longer available.', retry })
         }
+        // Sends queued behind the dead job (e.g. restored from the outbox at
+        // boot) must not strand — drain like every other terminal path.
+        dispatchQueue()
       } else if (!terminal) {
         onDisconnect(gen)
       }
@@ -533,6 +537,7 @@ export function start(input: {
         clearPersist()
         reset()
         setJob({ phase: 'error', message: errMsg(e), retry })
+        dispatchQueue()
       }
     })
 }
@@ -595,6 +600,11 @@ export async function discoverJobs(): Promise<void> {
     .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
   const row = running[0]
   if (!row) return
+  // Note: if this device also holds an in-flight outbox entry for the SAME job
+  // (job frame lost pre-persist, then reload), the entry re-queues and later
+  // re-POSTs its idemKey — the server re-tails the finished job rather than
+  // re-running it, and the transcript reconciles the duplicate. Redundant but
+  // harmless; matching the entry to the discovered job isn't possible client-side.
   attachToRunningJob({
     jobId: row.job_id,
     startedAt: (row.created_at && Date.parse(row.created_at)) || Date.now(),
