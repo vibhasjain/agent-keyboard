@@ -25,6 +25,9 @@ primary_region = "iad"
   IS_SANDBOX = "1"
   NODE_ENV = "production"
   CLAUDE_MODEL = "opus"
+  # This deployment runs the 1M-context Opus variant — size the approximate
+  # context gauge accordingly (the code default is 200k for standard windows).
+  CONTEXT_WINDOW_TOKENS = "1000000"
   # This server's public base URL — used by the provision-user skill to point
   # invite emails at GET /welcome (must be in Supabase's allowed redirect URLs).
   AK_PUBLIC_URL = "https://agent-keyboard.fly.dev"
