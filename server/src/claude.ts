@@ -29,9 +29,23 @@ import {
   readDataFile,
 } from "./checkouts.js";
 import { cleanupUploads } from "./photos.js";
+import {
+  CONTEXT_WINDOW_TOKENS,
+  clearCompactFlag,
+  extractReplyDirectives,
+  harnessNote,
+  loadHarness,
+  readLastUsage,
+  saveSettings,
+  writeLastUsage,
+  type ResolvedHarness,
+  type TurnUsage,
+} from "./harness.js";
+import { sessionFilePath } from "./conversation.js";
+import { readFile } from "node:fs/promises";
 
-const MODEL = process.env.CLAUDE_MODEL ?? "opus";
 const RUN_TIMEOUT_MS = Number(process.env.CLAUDE_RUN_TIMEOUT_MS ?? 900_000);
+const COMPACT_TIMEOUT_MS = Number(process.env.CLAUDE_COMPACT_TIMEOUT_MS ?? 300_000);
 const ASSISTANT_THROTTLE_MS = 180;
 const MAX_ATTEMPTS = 3;
 
@@ -93,7 +107,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   const path = checkoutPath(site.id);
   const lines = [
     `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
-    `Modify only files inside this repository; never touch other checkouts, /data, or any server config.`,
+    `Modify only files inside this repository, with two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")} — install or edit skills there to gain new capabilities (they load from the next turn). Never touch other checkouts or server config.`,
   ];
   if (pushBranch === site.branch) {
     lines.push(
@@ -107,7 +121,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
     );
   }
   lines.push(
-    `Your replies are shown in a small chat bubble on the website, so keep them short and plain — a sentence or two, no markdown headers, no code blocks.`,
+    `Your replies render in a small chat panel with simple markdown: short paragraphs, "-" bullet lists, numbered lists, **bold**, \`inline code\`, [links](https://example.com), short fenced code blocks, and small headings all work; tables do not render, so never use them. Keep replies concise — a couple of sentences, or a short list when structure helps.`,
   );
   return lines.join(" ");
 }
@@ -131,27 +145,29 @@ function streamArgs(
   resume: boolean,
   site: Site,
   pushBranch: string,
+  harness: ResolvedHarness,
+  usage: TurnUsage | null,
 ): string[] {
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
     "-p",
     prompt,
-    "--model",
-    MODEL,
+    // Model / effort / permission-mode come from the per-site harness settings
+    // (harness.ts); with no settings file the defaults reproduce the historical
+    // hardcoded values (--model $CLAUDE_MODEL, --permission-mode bypassPermissions).
+    ...harness.args,
     "--output-format",
     "stream-json",
     "--verbose",
     "--include-partial-messages",
-    "--permission-mode",
-    "bypassPermissions",
-    // Lean startup: skip user-level
-    // settings/skills and MCP discovery — the agent only needs built-in tools
-    // + git, and site instructions come from the checkout's own CLAUDE.md.
+    // Skip MCP discovery (the agent only needs built-in tools + git), but DO
+    // load user-level settings/skills: ~/.claude/skills on the volume holds the
+    // seeded skills (server/skills/) plus anything the agent installs itself.
     "--strict-mcp-config",
     "--setting-sources",
-    "project",
+    "user,project",
     "--append-system-prompt",
-    scopeNote(site, pushBranch),
+    scopeNote(site, pushBranch) + " " + harnessNote(site.id, harness, usage),
   ];
 }
 
@@ -215,7 +231,8 @@ export type LowEvent =
   | { t: "delta"; text: string }
   | { t: "thinking"; text: string }
   | { t: "snapshotText"; text: string }
-  | { t: "tool"; detail: string };
+  | { t: "tool"; detail: string }
+  | { t: "usage"; contextTokens: number };
 
 /**
  * Parse one stream-json line into low-level events (+ a terminal result if this
@@ -253,6 +270,18 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
       else if (b?.type === "text") msgText += String(b.text ?? "");
     }
     if (msgText) out.events.push({ t: "snapshotText", text: msgText });
+    // Approximate context size = this request's full input + output. Some rows
+    // carry placeholder input_tokens (a known stream-json quirk) — the caller
+    // keeps the max across the run, and tiny totals are dropped here.
+    const u = evt.message?.usage;
+    if (u && typeof u === "object") {
+      const total =
+        (Number(u.input_tokens) || 0) +
+        (Number(u.cache_read_input_tokens) || 0) +
+        (Number(u.cache_creation_input_tokens) || 0) +
+        (Number(u.output_tokens) || 0);
+      if (total > 1_000) out.events.push({ t: "usage", contextTokens: total });
+    }
   }
   return out;
 }
@@ -266,10 +295,15 @@ function spawnClaude(
   args: string[],
   cwd: string,
   onEvent: (e: LowEvent) => void,
+  opts: { extraEnv?: Record<string, string>; timeoutMs?: number } = {},
 ): { child: ChildProcess; done: Promise<{ result?: ClaudeResult; stderr: string }> } {
   // CLAUDE_BIN override: npx/npm prepend every ancestor node_modules/.bin to
   // PATH, which can shadow the real CLI with a stale local install.
-  const child = spawn(process.env.CLAUDE_BIN ?? "claude", args, { cwd, env: process.env });
+  const timeoutMs = opts.timeoutMs ?? RUN_TIMEOUT_MS;
+  const child = spawn(process.env.CLAUDE_BIN ?? "claude", args, {
+    cwd,
+    env: opts.extraEnv ? { ...process.env, ...opts.extraEnv } : process.env,
+  });
   activeChildren.add(child);
   const rl = createInterface({ input: child.stdout! });
   const done = new Promise<{ result?: ClaudeResult; stderr: string }>((resolve) => {
@@ -279,7 +313,7 @@ function spawnClaude(
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGKILL");
-    }, RUN_TIMEOUT_MS);
+    }, timeoutMs);
     child.stderr?.on("data", (d) => {
       stderr += d.toString();
     });
@@ -291,7 +325,7 @@ function spawnClaude(
     child.on("close", () => {
       clearTimeout(timer);
       activeChildren.delete(child);
-      if (timedOut && !stderr) stderr = `agent run timed out after ${RUN_TIMEOUT_MS}ms`;
+      if (timedOut && !stderr) stderr = `agent run timed out after ${timeoutMs}ms`;
       resolve({ result, stderr });
     });
     child.on("error", (e) => {
@@ -336,6 +370,44 @@ class FrameQueue<T> {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const isThrottle = (s: string) => /(rate.?limit|overloaded|too many requests|429)/i.test(s);
 
+/** Count compact boundaries in the session log (to verify an on-demand compact). */
+async function countCompactBoundaries(sessionId: string, cwd: string): Promise<number> {
+  const path = await sessionFilePath(sessionId, cwd);
+  if (!path) return 0;
+  try {
+    const txt = await readFile(path, "utf8");
+    return (txt.match(/"subtype":\s*"compact_boundary"/g) || []).length;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * On-demand compaction: run `/compact` as a dedicated headless turn and verify a
+ * new compact_boundary actually landed in the session log (slash commands in -p
+ * mode are not guaranteed — auto-compaction remains the safety net either way).
+ */
+async function runCompactTurn(sessionId: string, dir: string): Promise<boolean> {
+  const before = await countCompactBoundaries(sessionId, dir);
+  const args = [
+    "--resume",
+    sessionId,
+    "-p",
+    "/compact",
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-mode",
+    "bypassPermissions",
+    "--strict-mcp-config",
+    "--setting-sources",
+    "user,project",
+  ];
+  const { done } = spawnClaude(args, dir, () => {}, { timeoutMs: COMPACT_TIMEOUT_MS });
+  await done;
+  return (await countCompactBoundaries(sessionId, dir)) > before;
+}
+
 export type Frame = [string, unknown];
 
 /**
@@ -372,12 +444,21 @@ export async function* runMessageJob(
     let resume = existsSync(marker);
     const prompt = buildPrompt(site, opts);
 
+    // Per-site harness settings (model / effort / permission mode — see
+    // harness.ts). Loaded inside the site lock, once per job.
+    const harness = await loadHarness(site.id);
+    const lastUsage = await readLastUsage(site.id);
+    console.log(
+      `[harness] site=${site.id} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
+    );
+
     yield ["status", { phase: "starting", detail: "Thinking…" }];
 
     let result: ClaudeResult | undefined;
     let lastErr = "";
     let recovered = false; // session create↔resume flip is a one-shot
     let attempt = 0;
+    let maxContext = 0; // max plausible context-tokens total seen this run
 
     while (attempt < MAX_ATTEMPTS) {
       const queue = new FrameQueue<Frame>();
@@ -398,10 +479,12 @@ export async function* runMessageJob(
       };
 
       const { child: c, done } = spawnClaude(
-        streamArgs(prompt, sessionId, resume, site, pushBranch),
+        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage),
         dir,
         (e) => {
-          if (e.t === "delta") {
+          if (e.t === "usage") {
+            maxContext = Math.max(maxContext, e.contextTokens);
+          } else if (e.t === "delta") {
             streamed += e.text;
             emitAssistant();
           } else if (e.t === "snapshotText") {
@@ -419,6 +502,7 @@ export async function* runMessageJob(
             queue.push(["status", { phase: "tool", detail: e.detail }]);
           }
         },
+        { extraEnv: harness.env },
       );
       child = c;
       const settled = done.finally(() => queue.close());
@@ -458,7 +542,38 @@ export async function* runMessageJob(
 
     if (result && !result.is_error) {
       const git = await gitSummary(site, preJobSha, pushBranch);
-      const reply = (result.result ?? "").toString().trim();
+      let reply = (result.result ?? "").toString().trim();
+
+      // Plan-mode escape hatch: a trailing [[settings: {...}]] line is applied
+      // server-side and stripped from the visible reply (see harness.ts).
+      const { patch, cleaned } = extractReplyDirectives(reply);
+      if (patch) {
+        reply = cleaned;
+        await saveSettings(site.id, patch).catch(() => {});
+      }
+
+      // Approximate context bookkeeping — read back by the next turn's harness note.
+      let turnUsage: TurnUsage | null = null;
+      if (maxContext > 0) {
+        turnUsage = {
+          contextTokens: maxContext,
+          contextPct: Math.min(100, Math.round((maxContext / CONTEXT_WINDOW_TOKENS) * 100)),
+          at: new Date().toISOString(),
+        };
+        await writeLastUsage(site.id, turnUsage).catch(() => {});
+      }
+
+      // One-shot on-demand compaction: the agent (or a reply directive) set
+      // compactNow in the settings file during this turn. Verify the boundary
+      // actually landed; report honestly either way. Flag clears no matter what.
+      const post = await loadHarness(site.id);
+      if (post.settings.compactNow) {
+        yield ["status", { phase: "compacting", detail: "Compacting memory" }];
+        const ok = await runCompactTurn(sessionId, dir).catch(() => false);
+        await clearCompactFlag(site.id).catch(() => {});
+        reply = `${reply}\n\n_${ok ? "Memory compacted." : "On-demand compact didn't take — auto-compaction stays active."}_`.trim();
+      }
+
       yield [
         "result",
         {
@@ -467,6 +582,9 @@ export async function* runMessageJob(
           usage: {
             cost_usd: result.total_cost_usd ?? null,
             duration_ms: result.duration_ms ?? null,
+            context_tokens: turnUsage?.contextTokens ?? lastUsage?.contextTokens ?? null,
+            context_pct: turnUsage?.contextPct ?? lastUsage?.contextPct ?? null,
+            model: harness.settings.model ?? process.env.CLAUDE_MODEL ?? "opus",
           },
           conversation_id: conversationId,
         },

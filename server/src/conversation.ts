@@ -29,7 +29,7 @@ function slugForCwd(cwd: string): string {
 }
 
 /** Locate the session JSONL, robust to the project-dir slug. */
-async function sessionFilePath(sessionId: string, cwd: string): Promise<string | null> {
+export async function sessionFilePath(sessionId: string, cwd: string): Promise<string | null> {
   const projectsDir = join(CLAUDE_HOME, ".claude", "projects");
   // Fast path: the known cwd slug for this checkout.
   const direct = join(projectsDir, slugForCwd(cwd), `${sessionId}.jsonl`);

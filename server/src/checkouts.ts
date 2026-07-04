@@ -12,8 +12,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, appendFile, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, appendFile, readFile, writeFile, rename } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { Site } from "./sites.js";
 
 const execFileP = promisify(execFile);
@@ -167,4 +167,14 @@ export async function readDataFile(relPath: string): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+/** Write a small state file under DATA_DIR atomically (tmp + rename) — the CLI
+ *  child may be reading the same file. Creates parent dirs as needed. */
+export async function writeDataFile(relPath: string, content: string): Promise<void> {
+  const path = join(DATA_DIR, relPath);
+  await mkdir(dirname(path), { recursive: true });
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, content, "utf8");
+  await rename(tmp, path);
 }
