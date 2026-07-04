@@ -130,6 +130,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   lines.push(
     `Your replies render in a small chat panel with simple markdown: short paragraphs, "-" bullet lists, numbered lists, **bold**, \`inline code\`, [links](https://example.com), short fenced code blocks, and small headings all work; tables do not render, so never use them. Keep replies concise — a couple of sentences, or a short list when structure helps.`,
     `To show the user an image in the chat, save it (PNG/JPG/GIF/WebP) into the ${path}/.tmp/outputs/ folder — create the folder if needed; anything you leave there is displayed to the user alongside your reply. You can curl an image URL into that folder.`,
+    `If this site embeds the Agent Keyboard widget (a <script src=".../widget.js" data-site=…> tag) and you create a new page, copy that same embed onto the new page so the bar appears there too — unless the site uses a shared layout/template that already includes it.`,
   );
   return lines.join(" ");
 }
