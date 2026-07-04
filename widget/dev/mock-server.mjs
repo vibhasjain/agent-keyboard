@@ -16,6 +16,11 @@ let jobSeq = 0
 const jobsBySite = new Map()
 /** jobId -> job */
 const jobsById = new Map()
+/** idemKey -> job (the real server re-tails duplicate idemKeys; mirror that) */
+const jobsByIdem = new Map()
+/** siteId -> completed turns, appended to /conversation like the real session log */
+const turnsBySite = new Map()
+let msgSeq = 0
 
 const frame = (name, data) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
 
@@ -56,7 +61,21 @@ function makeJob(siteId, text) {
     }
   }
 
-  const reply = `Done. I updated the hero copy on **${siteId}** to read "${(text || 'your change').slice(0, 40)}" and tightened the spacing. Pushed to \`main\`.`
+  const reply = [
+    `## Done`,
+    ``,
+    `I updated the hero copy on **${siteId}** to read "${(text || 'your change').slice(0, 40)}" and tightened the spacing.`,
+    ``,
+    `1. edited \`index.html\``,
+    `2. committed the change`,
+    `3. pushed to \`main\``,
+    ``,
+    `> Netlify redeploys in about 30s.`,
+    ``,
+    `---`,
+    ``,
+    `<script>alert('escaped?')</script>`,
+  ].join('\n')
   const words = reply.split(' ')
 
   const timeline = [
@@ -86,6 +105,13 @@ function makeJob(siteId, text) {
         conversation_id: `conv_${siteId}`,
       }
       push('result', job.result)
+      // The real session log now contains this turn — surface it in /conversation.
+      const turns = turnsBySite.get(siteId) || []
+      turns.push(
+        { id: `m${++msgSeq}`, role: 'user', text: text || '', ts: Date.now() },
+        { id: `m${++msgSeq}`, role: 'assistant', text: reply, ts: Date.now() },
+      )
+      turnsBySite.set(siteId, turns)
       for (const w of job.writers) {
         try {
           w.end()
@@ -205,19 +231,29 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  // POST /sites/:id/messages -> SSE stream
+  // POST /sites/:id/messages -> SSE stream (duplicate idemKey re-tails, like prod)
   let m = p.match(/^\/sites\/([^/]+)\/messages$/)
   if (m && req.method === 'POST') {
     let body = ''
     req.on('data', (c) => (body += c))
     req.on('end', () => {
       let text = ''
+      let idemKey = ''
       try {
-        text = JSON.parse(body).text || ''
+        const parsed = JSON.parse(body)
+        text = parsed.text || ''
+        idemKey = parsed.idemKey || ''
       } catch {
         /* ignore */
       }
+      const existing = idemKey && jobsByIdem.get(idemKey)
+      if (existing) {
+        console.log(`[mock] duplicate idemKey ${idemKey} → re-tailing ${existing.id}`)
+        attach(existing, res)
+        return
+      }
       const job = makeJob(decodeURIComponent(m[1]), text)
+      if (idemKey) jobsByIdem.set(idemKey, job)
       attach(job, res)
     })
     return
@@ -234,7 +270,7 @@ const server = createServer(async (req, res) => {
     return
   }
 
-  // GET /sites/:id/conversation
+  // GET /sites/:id/conversation — static seed + turns completed this run
   m = p.match(/^\/sites\/([^/]+)\/conversation$/)
   if (m && req.method === 'GET') {
     const site = decodeURIComponent(m[1])
@@ -245,6 +281,7 @@ const server = createServer(async (req, res) => {
         { id: 'c1', role: 'system', kind: 'compact', text: 'Session compacted', ts: Date.now() - 60000 },
         { id: 'h3', role: 'user', text: 'tighten the nav spacing', ts: Date.now() - 50000 },
         { id: 'h4', role: 'assistant', text: 'Done — trimmed the nav gap to 12px and pushed `7c2f0aa`.', ts: Date.now() - 48000 },
+        ...(turnsBySite.get(site) || []),
       ],
       cursor: null,
     })
