@@ -514,6 +514,33 @@ export function mountBar(shadow: ShadowRoot): void {
 
   on(miniBtn, 'click', openBar)
 
+  // -- swipe the bar right to minimize (touch) --
+  // A clear rightward swipe on the bar folds it back to the corner. Only from a
+  // middle state (not mini/expanded), and only when the drag is decisively
+  // horizontal, so it never fights vertical scrolling or a tap on a control.
+  let swX = 0, swY = 0, swiping = false
+  on(bar, 'touchstart', (e) => {
+    const t = (e as TouchEvent).touches[0]
+    const m = getState().ui.mode
+    if (!t || m === 'mini' || m === 'expanded') { swiping = false; return }
+    swX = t.clientX; swY = t.clientY; swiping = true
+  }, { passive: true })
+  on(bar, 'touchmove', (e) => {
+    if (!swiping) return
+    const t = (e as TouchEvent).touches[0]
+    if (!t) return
+    const dx = t.clientX - swX, dy = t.clientY - swY
+    if (dx >= 70 && Math.abs(dx) > Math.abs(dy) * 1.8) {
+      swiping = false
+      const ae = shadow.activeElement as HTMLElement | null
+      ae?.blur?.() // drop the keyboard as we collapse
+      patchUi({ mode: 'mini' })
+    }
+  }, { passive: true })
+  const endSwipe = () => { swiping = false }
+  on(bar, 'touchend', endSwipe, { passive: true })
+  on(bar, 'touchcancel', endSwipe, { passive: true })
+
   // -- idle auto-collapse to the corner --
   // If it's been open and untouched for a while, fold back to the smallest state.
   // Never while working (a job is in flight), dictating, or with a draft in hand.
