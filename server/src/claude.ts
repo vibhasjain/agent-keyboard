@@ -28,7 +28,7 @@ import {
   gitSummary,
   readDataFile,
 } from "./checkouts.js";
-import { cleanupUploads } from "./photos.js";
+import { cleanupUploads, resetOutputs, collectOutputs } from "./photos.js";
 
 const MODEL = process.env.CLAUDE_MODEL ?? "opus";
 const RUN_TIMEOUT_MS = Number(process.env.CLAUDE_RUN_TIMEOUT_MS ?? 900_000);
@@ -108,6 +108,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   }
   lines.push(
     `Your replies are shown in a small chat bubble on the website, so keep them short and plain — a sentence or two, no markdown headers, no code blocks.`,
+    `To show the user an image in the chat, save it (PNG/JPG/GIF/WebP) into the ${path}/.tmp/outputs/ folder — create the folder if needed; anything you leave there is displayed to the user alongside your reply. You can curl an image URL into that folder.`,
   );
   return lines.join(" ");
 }
@@ -372,6 +373,9 @@ export async function* runMessageJob(
     let resume = existsSync(marker);
     const prompt = buildPrompt(site, opts);
 
+    // Fresh slate for images the agent shows this turn (see collectOutputs).
+    await resetOutputs(site.id).catch(() => {});
+
     yield ["status", { phase: "starting", detail: "Thinking…" }];
 
     let result: ClaudeResult | undefined;
@@ -459,11 +463,14 @@ export async function* runMessageJob(
     if (result && !result.is_error) {
       const git = await gitSummary(site, preJobSha, pushBranch);
       const reply = (result.result ?? "").toString().trim();
+      // Any images the agent dropped in .tmp/outputs/ this turn, to show in chat.
+      const images = await collectOutputs(site.id).catch(() => []);
       yield [
         "result",
         {
           reply,
           git,
+          images,
           usage: {
             cost_usd: result.total_cost_usd ?? null,
             duration_ms: result.duration_ms ?? null,

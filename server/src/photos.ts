@@ -6,13 +6,20 @@
 // Uploads live under .git/info/exclude'd `.tmp/`, so they never get committed.
 // A boot sweep purges anything older than 24h across all checkouts.
 
-import { mkdir, writeFile, readdir, stat, rm } from "node:fs/promises";
+import { mkdir, writeFile, readdir, stat, rm, rename } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
 import { checkoutPath } from "./checkouts.js";
 
 const MAX_DIM = 1568;
 const UPLOAD_TTL_MS = 24 * 60 * 60_000;
+
+// Agent-produced images (things the agent wants to SHOW the user) live in a
+// sibling dir. Same .tmp/ tree, so they're git-excluded and swept the same way.
+const OUTPUT_EXT_RE = /\.(png|jpe?g|gif|webp)$/i;
+const SERVED_NAME_RE = /^[a-f0-9-]{36}\.(png|jpe?g|gif|webp)$/i;
+const MAX_OUTPUT_BYTES = 15 * 1024 * 1024;
+const MAX_OUTPUTS = 6;
 
 export interface StagedPhoto {
   id: string;
@@ -70,25 +77,85 @@ export async function cleanupUploads(siteId: string, relPaths: string[]): Promis
   );
 }
 
-/** Boot sweep: purge staged uploads older than 24h across every checkout. */
+/** Boot sweep: purge staged uploads + agent outputs older than 24h everywhere. */
 export async function purgeStaleUploads(siteIds: string[]): Promise<void> {
   const now = Date.now();
   for (const siteId of siteIds) {
-    const dir = uploadsDir(siteId);
-    let files: string[];
-    try {
-      files = await readdir(dir);
-    } catch {
-      continue; // dir may not exist yet
-    }
-    for (const f of files) {
-      const abs = join(dir, f);
+    for (const dir of [uploadsDir(siteId), outputsDir(siteId)]) {
+      let files: string[];
       try {
-        const s = await stat(abs);
-        if (now - s.mtimeMs > UPLOAD_TTL_MS) await rm(abs, { force: true });
+        files = await readdir(dir);
       } catch {
-        /* gone */
+        continue; // dir may not exist yet
+      }
+      for (const f of files) {
+        const abs = join(dir, f);
+        try {
+          const s = await stat(abs);
+          if (now - s.mtimeMs > UPLOAD_TTL_MS) await rm(abs, { force: true });
+        } catch {
+          /* gone */
+        }
       }
     }
   }
+}
+
+// ── agent-produced images (assistant → user, shown in the chat) ──────────────
+
+function outputsDir(siteId: string): string {
+  return join(checkoutPath(siteId), ".tmp", "outputs");
+}
+
+export interface OutputImage {
+  name: string; // served filename, e.g. "<uuid>.png"
+  alt: string; // the agent's original filename (sans extension), as a caption
+}
+
+/** Clear a site's outputs dir at the start of a turn, so we only ever surface
+ *  images the agent produced THIS turn (clean attribution, bounded growth). */
+export async function resetOutputs(siteId: string): Promise<void> {
+  await rm(outputsDir(siteId), { recursive: true, force: true }).catch(() => {});
+}
+
+/** Collect the images the agent left in `.tmp/outputs/` this turn. Each is
+ *  renamed to an unguessable `<uuid>.<ext>` (so the open asset route can serve
+ *  it without leaking a guessable path) and returned for the result frame. */
+export async function collectOutputs(siteId: string): Promise<OutputImage[]> {
+  const dir = outputsDir(siteId);
+  let files: string[];
+  try {
+    files = await readdir(dir);
+  } catch {
+    return []; // no outputs dir → the agent produced nothing to show
+  }
+  const out: OutputImage[] = [];
+  for (const f of files.sort()) {
+    if (out.length >= MAX_OUTPUTS) break;
+    const m = f.match(OUTPUT_EXT_RE);
+    if (!m) continue;
+    if (SERVED_NAME_RE.test(f)) continue; // already collected (defensive)
+    const abs = join(dir, f);
+    try {
+      const s = await stat(abs);
+      if (!s.isFile() || s.size === 0 || s.size > MAX_OUTPUT_BYTES) continue;
+    } catch {
+      continue;
+    }
+    const served = `${randomUUID()}${m[0].toLowerCase()}`;
+    try {
+      await rename(abs, join(dir, served));
+    } catch {
+      continue;
+    }
+    out.push({ name: served, alt: f.replace(OUTPUT_EXT_RE, "") });
+  }
+  return out;
+}
+
+/** Validate a served asset name and return its absolute path (or null). The
+ *  strict uuid+ext pattern is what keeps the open route from path-traversing. */
+export function outputPath(siteId: string, name: string): string | null {
+  if (!SERVED_NAME_RE.test(name)) return null;
+  return join(outputsDir(siteId), name);
 }
