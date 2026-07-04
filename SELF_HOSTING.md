@@ -263,7 +263,9 @@ to `/data/agent-keyboard/allowed-emails.json`, which the auth gate accepts along
 Setup requirements, once:
 
 1. `SUPABASE_SERVICE_KEY` must be set (it's the same key durable jobs use).
-2. Add `https://YOUR-APP.fly.dev/welcome` to Supabase **Auth → URL Configuration → Redirect URLs**.
+2. Make sure your site domains are in Supabase **Auth → URL Configuration → Redirect URLs** (the
+   Site URL usually already covers this) — the invite link lands on the site and the bar there
+   finishes the set-password flow. No `/welcome` allow-list entry is required.
 3. Don't set `ALLOWED_USER_ID` — it pins auth to specific user ids and blocks provisioned users.
 
 Revoke someone by removing their email from the JSON file (`fly ssh console`), or deleting the user
@@ -320,7 +322,8 @@ the PR is on you.
 | Everything works but the agent errors immediately | `CLAUDE_CODE_OAUTH_TOKEN` missing or expired | Re-run `claude setup-token` and update the secret. |
 | "Image generation isn't configured" | No `GEMINI_API_KEY` | `fly secrets set GEMINI_API_KEY=...` and redeploy. |
 | Agent stuck in plan mode / weird settings | Its `settings.json` got wedged | Ask it to "go back to dangerously bypass permissions" (works from plan mode), or `fly ssh console -C "rm /data/agent-keyboard/sites/<id>/settings.json"`. |
-| Invite email link lands somewhere useless | `/welcome` isn't in Supabase's allowed redirect URLs, or `AK_PUBLIC_URL` unset | Add `https://YOUR-APP.fly.dev/welcome` to Auth → URL Configuration and set `AK_PUBLIC_URL`. |
+| Invite email link lands on a page with no bar | The invited site domain isn't in Supabase's allowed redirect URLs (so it fell back to the Site URL) | Add the site's domain to Auth → URL Configuration → Redirect URLs. The bar on any of your sites can still complete the flow. |
+| Invited user gets 401 after setting a password | `ALLOWED_USER_ID` is set — it pins auth to specific user ids and blocks provisioned users | `fly secrets unset ALLOWED_USER_ID` (email allow-list stays the gate). |
 | Provisioned user still gets 401 | `ALLOWED_USER_ID` is set (pins auth to specific ids) | Unset it, or add the new user's Supabase UUID. |
 
 ---

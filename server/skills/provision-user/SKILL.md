@@ -25,7 +25,9 @@ What it does:
    account already exists it sends a recovery link instead (same landing).
    Without `RESEND_API_KEY` it falls back to Supabase's built-in mailer
    (generic template).
-2. The link lands on this server's `/welcome` page, where they set a password.
+2. The link redirects to the invited site, where the bar detects the token and
+   lets them set a password in place (no dependency on a `/welcome` page being
+   allow-listed). The standalone `/welcome` page remains as a fallback.
 3. Appends the email to `/data/agent-keyboard/allowed-emails.json` — the auth
    gate accepts emails from `ALLOWED_EMAIL` (env) plus this file.
 
@@ -39,9 +41,10 @@ Requirements / failure modes (report plainly):
 - `RESEND_API_KEY` unset → emails still send, but via Supabase's generic mailer
   (not branded, doesn't name the site). Set it + `EMAIL_FROM` (a verified Resend
   sender) for the branded path.
-- The `/welcome` redirect URL must be in the Supabase project's allowed
-  redirect list (Auth → URL Configuration) — if the emailed link bounces to
-  the wrong page, that's the fix.
+- The invited site's domain must be in the Supabase project's allowed redirect
+  list (Auth → URL Configuration) — it usually already is (it's the Site URL /
+  where the bar signs people in). If the link lands somewhere without the bar,
+  add the site there.
 - If `ALLOWED_USER_ID` is set in the server env, it pins auth to specific
   user ids and provisioned users will still be rejected — the owner must unset
   it (or add the new user's id).
