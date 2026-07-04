@@ -17,7 +17,7 @@ import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
 import { runMessageJob, killAllChildren } from "./claude.js";
 import { ensureCheckout } from "./checkouts.js";
-import { stageUpload, resolveAttachments, purgeStaleUploads } from "./photos.js";
+import { stageUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { seedSkills } from "./skills.js";
@@ -215,6 +215,32 @@ app.get("/demo/:scene", (req, res) => {
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=300");
   res.send(demoPage(scene));
+});
+
+// ─── agent-produced images (open, unguessable uuid path) ─────────────────────
+// Images the agent shows in the chat load via <img>, which can't carry the auth
+// header — so this route is open, gated only by the unguessable uuid filename
+// (single-owner product; the id only ever reaches the owner via an authed frame).
+const ASSET_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+};
+app.get("/sites/:siteId/assets/:name", (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  const name = String(req.params.name ?? "");
+  const abs = site ? outputPath(site.id, name) : null;
+  if (!abs || !existsSync(abs)) {
+    res.status(404).type("text/plain").send("not found");
+    return;
+  }
+  const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
+  res.setHeader("Content-Type", ASSET_TYPES[ext] ?? "application/octet-stream");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.sendFile(abs);
 });
 
 // ─── SSE helpers ─────────────────────────────────────────────────────────────

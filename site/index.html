@@ -15,13 +15,13 @@
 <meta property="og:title" content="Agent Keyboard" />
 <meta property="og:description" content="Ask for a change. A real Claude Code session edits your site's repo and pushes to main. Self-hosted, MIT." />
 <meta property="og:url" content="https://agentkeyboard.com/" />
-<meta property="og:image" content="https://agentkeyboard.com/og.jpg?v=7" />
+<meta property="og:image" content="https://agentkeyboard.com/og.jpg?v=9" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Agent Keyboard" />
 <meta name="twitter:description" content="Ask for a change. A real Claude Code session edits your site's repo and pushes to main. Self-hosted, MIT." />
-<meta name="twitter:image" content="https://agentkeyboard.com/og.jpg?v=7" />
+<meta name="twitter:image" content="https://agentkeyboard.com/og.jpg?v=9" />
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -165,8 +165,9 @@ h2 em{ font-style:italic; color:var(--warm); }
   background:rgba(255,184,107,.5); box-shadow:0 0 4px rgba(255,184,107,.3); animation:flow-x 2.8s linear infinite; }
 @keyframes flow-x{ 0%{ transform:translateX(0); opacity:0; } 15%{ opacity:1; } 85%{ opacity:1; } 100%{ transform:translateX(34px); opacity:0; } }
 @media (max-width:860px){
-  .flow{ flex-direction:column; align-items:stretch; max-width:360px; margin-left:auto; margin-right:auto; }
-  .node{ width:100%; }
+  .flow{ flex-direction:column; align-items:stretch; max-width:270px; margin-left:auto; margin-right:auto; }
+  .node{ width:100%; padding:15px 14px; }
+  .node .n-ico{ width:28px; height:28px; margin-bottom:11px; }
   .conn{ flex-direction:column; padding:9px 0; }
   .conn-line{ width:1px; height:30px; background:var(--rule-2); }
   .conn-line::after{ right:auto; left:-2.5px; top:auto; bottom:-2px; transform:rotate(135deg); }
@@ -228,6 +229,16 @@ footer .meta a:hover{ color:var(--amber); }
   .phone iframe{ transition:none; }
   html{ scroll-behavior:auto; }
 }
+
+/* ---- pull-to-refresh (installed web-app only; injected by JS) ---- */
+.ptr{ position:fixed; top:0; left:0; right:0; z-index:2147482000; display:flex; justify-content:center; pointer-events:none; will-change:transform,opacity; }
+.ptr-in{ margin-top:calc(8px + env(safe-area-inset-top,0px)); width:36px; height:36px; border-radius:50%;
+  background:var(--bg-2); border:1px solid var(--rule-2); color:var(--amber);
+  display:flex; align-items:center; justify-content:center; box-shadow:0 6px 22px rgba(0,0,0,.45); }
+.ptr.ready .ptr-in{ border-color:rgba(255,184,107,.55); }
+.ptr-in svg{ width:18px; height:18px; transform:rotate(var(--r,0deg)); }
+.ptr.spin .ptr-in svg{ animation:ptr-spin .8s linear infinite; }
+@keyframes ptr-spin{ to{ transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -246,9 +257,10 @@ footer .meta a:hover{ color:var(--amber); }
   <header class="hero">
     <div class="kbd" aria-hidden="true">⌨️</div>
     <div class="eyebrow">OPEN SOURCE · SELF-HOSTED · MIT</div>
-    <h1>A prompt bar that <em>edits</em> the site it's on.</h1>
-    <p class="lede">Ask for a change — typed, dictated, or photographed. A real Claude Code session on
-      your own server edits the repo and pushes to <code>main</code>.</p>
+    <h1>Build your app <em>from within</em> your app.</h1>
+    <p class="lede">A prompt bar that edits the page it's on. Ask for a change right where you are —
+      typed, dictated, or photographed. A real Claude Code session on your own server edits the repo
+      and pushes to <code>main</code>.</p>
 
     <div class="cta-row">
       <a class="btn primary" href="https://github.com/vibhasjain/agent-keyboard">
@@ -277,13 +289,6 @@ footer .meta a:hover{ color:var(--amber); }
       </div>
     </div>
 
-    <div class="demo-scene">
-      <div class="phone" data-scene="expand" style="height:420px">
-        <img class="poster" src="shots/poster-expand.png" alt="" aria-hidden="true">
-        <iframe loading="lazy" title="Expand the bar into the full Claude Code session" tabindex="-1" aria-hidden="true"></iframe>
-      </div>
-    </div>
-    <p class="honesty">expand it — the full Claude Code session</p>
   </div>
 </section>
 
@@ -295,27 +300,27 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="flow">
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/></svg>
-        <b>your page</b><span>one script tag</span>
+        <b>Your page</b><span>one script tag</span>
       </div>
       <div class="conn"><span class="conn-label">prompt</span><span class="conn-line"><i class="pulse"></i></span></div>
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M5 7.5l4.5 4.5L5 16.5M12.5 16.5H19"/></svg>
-        <b>your server</b><span><em class="think">✻</em> Claude Code CLI</span>
+        <b>Your server</b><span><em class="think">✻</em> Claude Code CLI</span>
       </div>
       <div class="conn"><span class="conn-label">commit + push</span><span class="conn-line"><i class="pulse" style="animation-delay:.7s"></i></span></div>
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="7" cy="6.5" r="2.2"/><circle cx="7" cy="17.5" r="2.2"/><circle cx="17" cy="8.5" r="2.2"/><path d="M7 8.7v6.6M17 10.7c0 2.8-3.2 3.6-7 4"/></svg>
-        <b>your repo</b><span>main</span>
+        <b>Your repo</b><span>main</span>
       </div>
       <div class="conn"><span class="conn-label">deploy hook</span><span class="conn-line"><i class="pulse" style="animation-delay:1.4s"></i></span></div>
       <div class="node">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.7 2.7 2.7 14.3 0 17-2.7-2.7-2.7-14.3 0-17z"/></svg>
-        <b>your host</b><span>redeploys</span>
+        <b>Your host</b><span>redeploys</span>
       </div>
       <div class="conn"><span class="conn-label">refresh</span><span class="conn-line"><i class="pulse" style="animation-delay:2.1s"></i></span></div>
       <div class="node loop">
         <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg>
-        <b>your page</b><span>it's changed</span>
+        <b>Your page</b><span>it's changed</span>
       </div>
     </div>
   </div>
@@ -339,7 +344,7 @@ footer .meta a:hover{ color:var(--amber); }
 <span class="c"># one tag, before &lt;/body&gt;, on any page you want to edit:</span>
 <span class="a">&lt;script</span> <span class="k">src</span>=<span class="s">"https://YOUR-APP.fly.dev/widget.js"</span> <span class="k">data-site</span>=<span class="s">"mysite"</span> <span class="k">defer</span><span class="a">&gt;&lt;/script&gt;</span></pre>
     </div>
-    <p class="footnote"><a href="https://github.com/vibhasjain/agent-keyboard#readme">Full walkthrough in the README →</a></p>
+    <div class="kicker" style="margin-top:44px">Stuff you need</div>
 
     <div class="byo">
       <div class="byo-cell"><svg class="byo-ico" viewBox="0 0 24 24" fill="#d97757" aria-hidden="true"><path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/></svg><b>A Claude Code subscription</b>its OAuth token does the editing</div>
@@ -379,13 +384,13 @@ footer .meta a:hover{ color:var(--amber); }
       <div class="qa">
         <h3>An agent pushing straight to main — is that fine?</h3>
         <p>It pushes to a repo you own, from an allowlist you wrote, with every commit attributed to
-          "Agent Keyboard." Git is the undo button: <code>git revert</code>, done. It runs on this very
-          site, and the history is public.</p>
+          "Agent Keyboard." Made a change you don't like? Just ask Agent Keyboard to roll it back — no big
+          deal.</p>
       </div>
       <div class="qa">
         <h3>What does it cost to run?</h3>
         <p>Mostly things you already pay for: the Claude Code subscription does the editing, Supabase's
-          free tier does auth, and a small Fly VM (a few dollars a month) does the hosting. The OpenAI
+          free tier does auth, and a small Fly VM (often free, a few dollars a month at most) does the hosting. The OpenAI
           key is optional and only for voice.</p>
       </div>
       <div class="qa">
@@ -442,6 +447,76 @@ footer .meta a:hover{ color:var(--amber); }
     if (e.origin !== DEMO_ORIGIN || !e.data || e.data.type !== 'ak-demo-ready') return;
     document.querySelectorAll('.phone[data-scene="' + e.data.scene + '"]').forEach(function(p){ p.classList.add('ready'); });
   });
+
+  // Pull-to-refresh — only when running as an installed web app (standalone),
+  // where the browser's own pull-to-refresh isn't available. Pulling down at the
+  // very top past the threshold triggers a hard refresh — clears any PWA cache /
+  // service worker first, then reloads — so you always land on the latest deploy.
+  // (iOS re-prompts for the mic on any reload regardless, so there's nothing to
+  // gain by holding back.) Touches inside the Agent Keyboard widget are ignored,
+  // so pulling the chat transcript never reloads the page.
+  (function(){
+    var standalone = false;
+    try { standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; } catch(e){}
+    if (!standalone) return;
+
+    var el = document.createElement('div');
+    el.className = 'ptr';
+    el.innerHTML = '<div class="ptr-in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg></div>';
+    document.body.appendChild(el);
+    var glyph = el.querySelector('svg');
+
+    var THRESHOLD = 72, MAX = 96;
+    var startY = 0, active = false, pull = 0, refreshing = false;
+
+    function atTop(){ return (window.scrollY || document.documentElement.scrollTop || 0) <= 0; }
+    function inWidget(t){ return !!(t && t.closest && t.closest('#agent-keyboard-host')); }
+    function place(y, op){ el.style.transform = 'translateY(' + y + 'px)'; el.style.opacity = op; }
+    place(-56, 0);
+
+    window.addEventListener('touchstart', function(e){
+      if (refreshing || e.touches.length !== 1 || !atTop() || inWidget(e.target)) { active = false; return; }
+      startY = e.touches[0].clientY; active = true; pull = 0;
+    }, { passive: true });
+
+    window.addEventListener('touchmove', function(e){
+      if (!active || refreshing) return;
+      var dy = e.touches[0].clientY - startY;
+      if (dy <= 0) { active = false; place(-56, 0); return; }
+      pull = Math.min(dy * 0.5, MAX);      // rubber-band resistance
+      e.preventDefault();                  // hold the page still while we track the pull
+      var progress = Math.min(pull / THRESHOLD, 1);
+      glyph.style.setProperty('--r', (progress * 300) + 'deg');
+      place(pull - 44, progress);
+      el.classList.toggle('ready', pull >= THRESHOLD);
+    }, { passive: false });
+
+    function end(){
+      if (!active || refreshing) return;
+      active = false;
+      if (pull >= THRESHOLD) {
+        refreshing = true;
+        el.classList.remove('ready'); el.classList.add('spin');
+        place(THRESHOLD - 44, 1);
+        hardReload();
+      } else {
+        el.style.transition = 'transform .22s ease, opacity .22s ease';
+        place(-56, 0);
+        setTimeout(function(){ el.style.transition = ''; }, 240);
+      }
+    }
+    window.addEventListener('touchend', end, { passive: true });
+    window.addEventListener('touchcancel', end, { passive: true });
+
+    function hardReload(){
+      var go = function(){ location.reload(); };
+      var jobs = [];
+      try { if (window.caches && caches.keys) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })); } catch(e){}
+      try { if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })); } catch(e){}
+      Promise.all(jobs).then(go).catch(go);
+      setTimeout(go, 1200); // safety net if cache-clearing hangs
+    }
+  })();
 </script>
 
 <!-- The live product: this exact page's editor. Owner-gated. -->

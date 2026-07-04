@@ -22,6 +22,8 @@ interface Attachment {
 export interface Photos {
   el: HTMLElement
   openPicker: () => void
+  /** Feed image Files straight into the attach pipeline (e.g. from a paste). Returns how many were image files. */
+  addFiles: (files: Iterable<File>) => number
   getAttachmentIds: () => string[]
   takeThumbUrls: () => string[]
   hasAttachments: () => boolean
@@ -202,6 +204,15 @@ export function makePhotos(onChange: () => void): Photos {
   return {
     el: row,
     openPicker: () => input.click(),
+    addFiles: (files) => {
+      let n = 0
+      for (const f of files)
+        if (f.type.startsWith('image/')) {
+          addFile(f)
+          n++
+        }
+      return n
+    },
     getAttachmentIds: () => items.filter((a) => a.status === 'done' && a.id).map((a) => a.id!),
     hasAttachments: () => items.length > 0,
     isUploading: () => items.some((a) => a.status === 'uploading' || a.status === 'processing'),

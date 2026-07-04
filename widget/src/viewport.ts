@@ -24,6 +24,7 @@ function measure(): void {
 function reset(): void {
   host?.style.setProperty('--ak-kb', '0px')
   host?.style.setProperty('--ak-vvt', '0px')
+  host?.classList.remove('ak-kbd')
 }
 
 /** Call on focus of any composer input; returns a detach fn for blur. */
@@ -31,6 +32,7 @@ export function trackKeyboard(): () => void {
   const vv = window.visualViewport
   if (!vv) return () => {}
   attached++
+  host?.classList.add('ak-kbd')
   measure()
   vv.addEventListener('resize', measure)
   vv.addEventListener('scroll', measure)

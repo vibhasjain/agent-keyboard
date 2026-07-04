@@ -7,7 +7,7 @@ import { lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, isBusy, start } from './jobstore'
 import { makePhotos, type Photos } from './photos'
-import { getState, patchUi, subscribe } from './state'
+import { getState, patchUi, subscribe, type UiMode } from './state'
 import { makeTicker, type Ticker } from './ticker'
 import { makeVoice, type VoiceController } from './voice'
 import { trackKeyboard } from './viewport'
@@ -20,12 +20,15 @@ function mmss(ms: number): string {
   return `${m}:${r < 10 ? '0' : ''}${r}`
 }
 
-type View = 'stream' | 'done' | 'error' | 'login' | 'composing' | 'expanded'
+type View = 'mini' | 'stream' | 'done' | 'error' | 'login' | 'composing' | 'expanded'
 
 function computeView(): View {
   const { ui, job } = getState()
   if (ui.mode === 'expanded') return 'expanded'
+  // Active work always surfaces the pill — even from the minimized corner, so a
+  // re-attached job on reload isn't hidden behind the ⌨️ button.
   if (job.phase === 'streaming' || job.phase === 'sending') return 'stream'
+  if (ui.mode === 'mini') return 'mini' // smallest resting state: just the corner ⌨️
   // composing/login win over the resting done/error row so tapping it to reply works
   if (ui.mode === 'login') return 'login'
   if (ui.mode === 'composing') return 'composing'
@@ -209,6 +212,24 @@ function makeComposer(): Composer {
     }
   })
 
+  // paste an image straight into the composer (screenshots, copied pics). Text
+  // pastes fall through untouched — we only swallow the event when it carries images.
+  on(ta, 'paste', (e) => {
+    const dt = (e as ClipboardEvent).clipboardData
+    if (!dt) return
+    const files: File[] = []
+    for (const item of Array.from(dt.items || [])) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const f = item.getAsFile()
+        if (f) files.push(f)
+      }
+    }
+    if (!files.length) for (const f of Array.from(dt.files || [])) if (f.type.startsWith('image/')) files.push(f)
+    if (!files.length) return
+    e.preventDefault()
+    photos.addFiles(files)
+  })
+
   // keyboard avoidance while the composer has focus
   let detachKb: (() => void) | null = null
   on(ta, 'focus', () => {
@@ -244,6 +265,14 @@ export function mountBar(shadow: ShadowRoot): void {
   const zone = el('div', 'ak-zone')
   const bar = el('div', 'ak-bar')
   const stash = el('div', 'ak-stash')
+
+  // Smallest resting state: a round ⌨️ button parked bottom-right. Click (or the
+  // tilde shortcut) opens the full bar. The ⌨️ is the brand mark (allowed exception).
+  const miniBtn = el('button', 'ak-mini', (n) => {
+    n.type = 'button'
+    n.setAttribute('aria-label', 'Open Agent Keyboard')
+    n.appendChild(el('span', 'ak-mini-glyph', (g) => (g.textContent = '⌨️')))
+  })
 
 
   // pill + its persistent rows (kept alive so the ticker animation survives updates)
@@ -303,7 +332,7 @@ export function mountBar(shadow: ShadowRoot): void {
 
   pill.append(shimmer, streamRow, statusRow, loginRow)
   bar.append(pill)
-  zone.append(bar, stash)
+  zone.append(miniBtn, bar, stash)
   shadow.appendChild(zone)
 
   const composer = makeComposer()
@@ -451,11 +480,112 @@ export function mountBar(shadow: ShadowRoot): void {
     }, 160)
   })
 
+  // Touch devices pop an on-screen keyboard on focus, so we only auto-focus the
+  // prompter when opening the bar on a precise-pointer (desktop) device.
+  const isTouch = () => {
+    try {
+      return matchMedia('(pointer: coarse)').matches
+    } catch {
+      return false
+    }
+  }
+  // Open the bar from the minimized corner; on desktop, drop the cursor straight
+  // into the prompter so you can just start typing.
+  const openBar = () => {
+    patchUi({ mode: 'collapsed' })
+    if (!isTouch()) setTimeout(() => composer.focus(), 60)
+  }
+
+  // -- three-state cycle (mini → bar → expanded → mini) --
+  // Bound to the tilde key and reused by the mini button. Any non-mini/expanded
+  // mode counts as "the bar", so composing/login/done all advance to expanded.
+  const cycleState = () => {
+    const m = getState().ui.mode
+    if (m === 'mini') return openBar()
+    const next: UiMode = m === 'expanded' ? 'mini' : 'expanded'
+    patchUi({ mode: next })
+  }
+
+  // Tilde toggles the states, Quake-console style. It's a typable character, so
+  // never hijack it while a field is focused — in the composer/login inputs, or
+  // in any input on the host page — let it type normally there.
+  on(document, 'keydown', (e) => {
+    const ke = e as KeyboardEvent
+    if (ke.code !== 'Backquote' || ke.metaKey || ke.ctrlKey || ke.altKey) return
+    const sa = shadow.activeElement as HTMLElement | null
+    if (sa && (sa.tagName === 'INPUT' || sa.tagName === 'TEXTAREA')) return
+    const da = document.activeElement as HTMLElement | null
+    if (da && (da.tagName === 'INPUT' || da.tagName === 'TEXTAREA' || da.isContentEditable)) return
+    ke.preventDefault()
+    cycleState()
+  })
+
+  on(miniBtn, 'click', openBar)
+
+  // -- swipe the bar right to minimize (touch) --
+  // A clear rightward swipe on the bar folds it back to the corner. Only from a
+  // middle state (not mini/expanded), and only when the drag is decisively
+  // horizontal, so it never fights vertical scrolling or a tap on a control.
+  let swX = 0, swY = 0, swiping = false
+  on(bar, 'touchstart', (e) => {
+    const t = (e as TouchEvent).touches[0]
+    const m = getState().ui.mode
+    if (!t || m === 'mini' || m === 'expanded') { swiping = false; return }
+    swX = t.clientX; swY = t.clientY; swiping = true
+  }, { passive: true })
+  on(bar, 'touchmove', (e) => {
+    if (!swiping) return
+    const t = (e as TouchEvent).touches[0]
+    if (!t) return
+    const dx = t.clientX - swX, dy = t.clientY - swY
+    if (dx >= 70 && Math.abs(dx) > Math.abs(dy) * 1.8) {
+      swiping = false
+      const ae = shadow.activeElement as HTMLElement | null
+      ae?.blur?.() // drop the keyboard as we collapse
+      patchUi({ mode: 'mini' })
+    }
+  }, { passive: true })
+  const endSwipe = () => { swiping = false }
+  on(bar, 'touchend', endSwipe, { passive: true })
+  on(bar, 'touchcancel', endSwipe, { passive: true })
+
+  // -- idle auto-collapse to the corner --
+  // If it's been open and untouched for a while, fold back to the smallest state.
+  // Never while working (a job is in flight), dictating, or with a draft in hand.
+  const IDLE_MS = 60_000
+  let idleTimer: ReturnType<typeof setTimeout> | null = null
+  const canIdle = () => {
+    const s = getState()
+    return (
+      s.ui.mode !== 'mini' &&
+      s.job.phase !== 'streaming' &&
+      s.job.phase !== 'sending' &&
+      s.ui.voice === 'idle' &&
+      !composer.hasContent()
+    )
+  }
+  const armIdle = () => {
+    if (idleTimer != null) clearTimeout(idleTimer)
+    idleTimer = null
+    if (!canIdle()) return
+    idleTimer = setTimeout(() => {
+      idleTimer = null
+      if (canIdle()) patchUi({ mode: 'mini' })
+    }, IDLE_MS)
+  }
+  // Any interaction inside the widget restarts the clock.
+  for (const ev of ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart'])
+    shadow.addEventListener(ev, armIdle, { passive: true, capture: true })
+
   let lastView: View | null = null
 
   const render = () => {
     const view = computeView()
     const { job } = getState()
+
+    // mini: hide the whole bar, show just the corner ⌨️
+    show(miniBtn, view === 'mini')
+    show(bar, view !== 'mini')
 
     const pillVisible = view === 'stream' || view === 'done' || view === 'error' || view === 'login'
     show(pill, pillVisible)
@@ -509,6 +639,7 @@ export function mountBar(shadow: ShadowRoot): void {
     if (wasComposer && !isComposer) composer.teardownVoice()
 
     lastView = view
+    armIdle() // re-arm (or cancel) the idle-collapse clock on every state change
   }
 
   const unsub = subscribe(render)

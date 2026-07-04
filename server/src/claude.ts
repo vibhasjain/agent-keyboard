@@ -28,7 +28,7 @@ import {
   gitSummary,
   readDataFile,
 } from "./checkouts.js";
-import { cleanupUploads } from "./photos.js";
+import { cleanupUploads, resetOutputs, collectOutputs } from "./photos.js";
 import {
   CONTEXT_WINDOW_TOKENS,
   clearCompactFlag,
@@ -129,6 +129,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   }
   lines.push(
     `Your replies render in a small chat panel with simple markdown: short paragraphs, "-" bullet lists, numbered lists, **bold**, \`inline code\`, [links](https://example.com), short fenced code blocks, and small headings all work; tables do not render, so never use them. Keep replies concise — a couple of sentences, or a short list when structure helps.`,
+    `To show the user an image in the chat, save it (PNG/JPG/GIF/WebP) into the ${path}/.tmp/outputs/ folder — create the folder if needed; anything you leave there is displayed to the user alongside your reply. You can curl an image URL into that folder.`,
   );
   return lines.join(" ");
 }
@@ -462,6 +463,9 @@ export async function* runMessageJob(
       `[harness] site=${site.id} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
     );
 
+    // Fresh slate for images the agent shows this turn (see collectOutputs).
+    await resetOutputs(site.id).catch(() => {});
+
     yield ["status", { phase: "starting", detail: "Thinking…" }];
 
     let result: ClaudeResult | undefined;
@@ -614,11 +618,14 @@ export async function* runMessageJob(
         // it on every future turn off a stuck flag.
       }
 
+      // Any images the agent dropped in .tmp/outputs/ this turn, to show in chat.
+      const images = await collectOutputs(site.id).catch(() => []);
       yield [
         "result",
         {
           reply,
           git,
+          images,
           usage: {
             cost_usd: result.total_cost_usd ?? null,
             duration_ms: result.duration_ms ?? null,

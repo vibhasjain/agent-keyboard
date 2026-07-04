@@ -35,7 +35,8 @@ let doneTimer: ReturnType<typeof setTimeout> | null = null
 let generation = 0
 
 // Turns completed during this page load (rendered under any server-fetched history).
-export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[] }
+// `thumbs` = the user's attached photos; `images` = images the agent chose to show.
+export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[]; images?: string[] }
 const liveTurns: LiveTurn[] = []
 
 export function getLiveTurns(): ReadonlyArray<LiveTurn> {
@@ -60,6 +61,9 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
   for (let i = 0; i < liveTurns.length; i++) {
     const t = liveTurns[i]
     if (t.role !== 'user') continue
+    // Agent-shown images live ONLY on the live turn (history never carries
+    // them; the files are one-turn transient) — never prune that pair.
+    if (liveTurns[i + 1]?.role === 'assistant' && liveTurns[i + 1]?.images?.length) continue
     const target = norm(t.text)
     for (let j = pos; j < history.length; j++) {
       const m = history[j]
@@ -316,6 +320,17 @@ function currentFullText(): string {
   return j.phase === 'streaming' ? j.fullText : ''
 }
 
+// Assistant-shown images arrive as [{name}] on the result frame; build the URLs
+// the widget loads them from (the site's open asset route on the API origin).
+function imageUrls(data: Record<string, unknown>): string[] | undefined {
+  const raw = Array.isArray(data.images) ? (data.images as Array<{ name?: unknown }>) : []
+  const urls = raw
+    .map((i) => String(i?.name ?? ''))
+    .filter((n) => /^[a-f0-9-]{36}\.(png|jpe?g|gif|webp)$/i.test(n))
+    .map((n) => `${CONFIG.api}/sites/${encodeURIComponent(CONFIG.site)}/assets/${n}`)
+  return urls.length ? urls : undefined
+}
+
 function finishDone(data: Record<string, unknown>): void {
   const git = (data.git ?? {}) as GitInfo
   const reply = String(data.reply ?? '') || currentFullText()
@@ -323,7 +338,10 @@ function finishDone(data: Record<string, unknown>): void {
   // turn — an empty user bubble can't reconcile against history; the next
   // history fetch renders the turn canonically instead.
   if (prompt || activeThumbs?.length) {
-    liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs }, { role: 'assistant', text: reply })
+    liveTurns.push(
+      { role: 'user', text: prompt, thumbs: activeThumbs },
+      { role: 'assistant', text: reply, images: imageUrls(data) },
+    )
   }
   const sha7 = git.headSha ? String(git.headSha).slice(0, 7) : ''
   // "pushed" only when the agent actually changed something; pushed=true alone

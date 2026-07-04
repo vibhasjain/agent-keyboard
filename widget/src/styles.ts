@@ -22,16 +22,43 @@ export const STYLES = `
   width:100%;
   display:block;
   padding:0 14px calc(10px + env(safe-area-inset-bottom,0px)) 14px;
-  transform:translateY(calc(-1 * var(--ak-kb)));
+  transform:none;
   transition:transform .18s ease-out;
   font-family:var(--ak-mono);
   color:var(--ak-ink);
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
+/* Lift the bar above the keyboard ONLY while the composer is focused. Gating on
+   the class (not just --ak-kb) means a stale gap can never strand the collapsed
+   bar mid-screen — no focus, no lift. */
+:host(.ak-kbd) .ak-zone{ transform:translateY(calc(-1 * var(--ak-kb))); }
 .ak-zone{ pointer-events:none; }
-.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox{ pointer-events:auto; }
+.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox, .ak-mini{ pointer-events:auto; }
 .ak-bar{ position:relative; width:100%; min-height:48px; }
 .ak-stash{ display:none; }
+
+/* ---- mini: the smallest resting state, a round ⌨️ parked bottom-right ---- */
+.ak-mini{
+  display:flex; align-items:center; justify-content:center;
+  margin-left:auto; margin-right:0; /* desktop: bottom-right within the padded zone */
+  width:52px; height:52px; padding:0;
+  border-radius:50%; border:1px solid #3d372e;
+  background:rgba(12,11,10,.96);
+  box-shadow:0 6px 22px rgba(0,0,0,.5);
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  cursor:pointer;
+  animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
+  transition:transform .16s ease, border-color .16s ease;
+}
+.ak-mini:hover{ transform:scale(1.06); border-color:rgba(255,184,107,.5); }
+.ak-mini:active{ transform:scale(.96); }
+.ak-mini-glyph{
+  font-size:24px; line-height:1;
+  filter:drop-shadow(0 0 6px rgba(255,184,107,.5));
+  animation:ak-breathe 3.4s ease-in-out infinite;
+}
+@keyframes ak-breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.09); } }
 
 /* ---- pill surface (streaming / done / error / login) ---- */
 .ak-pill{
@@ -283,7 +310,7 @@ export const STYLES = `
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
-  .ak-shimmer, .ak-mic.live::after{ animation:none !important; }
+  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
   .ak-zone{ transition:none !important; }
 }

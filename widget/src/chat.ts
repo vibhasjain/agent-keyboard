@@ -7,7 +7,7 @@ import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { discoverJobs, getActivePrompt, getActiveThumbs, getLiveTurns, getQueued, reconcileLiveTurns } from './jobstore'
 import { renderMarkdown } from './markdown'
-import { getState, subscribe } from './state'
+import { getState, patchUi, subscribe } from './state'
 
 export interface Chat {
   footerEl: HTMLElement
@@ -133,7 +133,11 @@ function photoMarker(count: number): HTMLElement {
   return m
 }
 
-function msgEl(role: 'user' | 'assistant', text: string, extras?: { thumbs?: string[]; photos?: number }): HTMLElement {
+function msgEl(
+  role: 'user' | 'assistant',
+  text: string,
+  extras?: { thumbs?: string[]; photos?: number; images?: string[] },
+): HTMLElement {
   if (role === 'user') {
     const body = el('div')
     if (extras?.thumbs?.length) body.appendChild(thumbRow(extras.thumbs))
@@ -141,7 +145,15 @@ function msgEl(role: 'user' | 'assistant', text: string, extras?: { thumbs?: str
     body.appendChild(el('div', undefined, (n) => (n.textContent = text)))
     return lineEl('user', '>', body)
   }
-  return lineEl('asst', '●', el('div', undefined, (n) => (n.innerHTML = renderMarkdown(text))))
+  // Assistant: markdown text, plus any images the agent chose to show (same
+  // thumbnail + lightbox treatment as the user's own attachments).
+  if (!extras?.images?.length) {
+    return lineEl('asst', '●', el('div', undefined, (n) => (n.innerHTML = renderMarkdown(text))))
+  }
+  const body = el('div')
+  if (text) body.appendChild(el('div', undefined, (n) => (n.innerHTML = renderMarkdown(text))))
+  body.appendChild(thumbRow(extras.images))
+  return lineEl('asst', '●', body)
 }
 
 function dividerEl(text: string): HTMLElement {
@@ -199,10 +211,19 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   lbHost = shadow
   on(close, 'click', () => deps.collapse())
+  // Escape steps down one size each press: lightbox → chat → bar → mini corner.
   on(window, 'keydown', (e) => {
     if ((e as KeyboardEvent).key !== 'Escape') return
-    if (isLightboxOpen()) closeLightbox() // Esc peels the lightbox first…
-    else if (getState().ui.mode === 'expanded') deps.collapse() // …then the chat
+    if (isLightboxOpen()) return closeLightbox() // Esc peels the lightbox first…
+    const mode = getState().ui.mode
+    if (mode === 'expanded') return deps.collapse() // …then the chat → bar…
+    if (mode === 'mini') return // already the smallest
+    // …then the bar → minimized corner, unless a host-page field owns the Escape.
+    const da = document.activeElement as HTMLElement | null
+    const hostField =
+      da && (da.tagName === 'INPUT' || da.tagName === 'TEXTAREA' || da.isContentEditable) && !da.closest?.('#agent-keyboard-host')
+    if (hostField) return
+    patchUi({ mode: 'mini' })
   })
 
   // -- history state --
@@ -231,7 +252,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     clearNode(listEl)
     liveUser = liveAsst = liveTimer = liveBody = null
     for (const m of history) listEl.appendChild(nodeForMessage(m))
-    for (const t of getLiveTurns()) listEl.appendChild(msgEl(t.role, t.text, { thumbs: t.thumbs }))
+    for (const t of getLiveTurns()) listEl.appendChild(msgEl(t.role, t.text, { thumbs: t.thumbs, images: t.images }))
     if (!history.length && !getLiveTurns().length) {
       listEl.appendChild(el('div', 'ak-empty', (n) => (n.textContent = '> Ask for a change to this site.')))
     }
