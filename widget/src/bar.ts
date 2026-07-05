@@ -20,10 +20,11 @@ function mmss(ms: number): string {
   return `${m}:${r < 10 ? '0' : ''}${r}`
 }
 
-type View = 'mini' | 'stream' | 'done' | 'error' | 'login' | 'setpw' | 'composing' | 'expanded'
+type View = 'mini' | 'stream' | 'done' | 'error' | 'login' | 'setpw' | 'composing' | 'expanded' | 'signout'
 
 function computeView(): View {
   const { ui, job } = getState()
+  if (ui.signingOut) return 'signout' // logging out — overrides everything (incl. a running job)
   if (ui.mode === 'setpw') return 'setpw' // invite landing wins over everything
   if (ui.mode === 'expanded') return 'expanded'
   // An explicit minimize wins, even mid-job — so swiping the bar away while it's
@@ -438,6 +439,8 @@ export function mountBar(shadow: ShadowRoot): void {
       pwInput.value = ''
       patchUi({ mode: 'composing' }) // straight into the prompt box — no refresh needed
       setTimeout(() => composer.focus(), 60)
+      composer.setNote('✓ Signed in') // brief confirmation, then it clears itself
+      setTimeout(() => composer.setNote(''), 1800)
     } catch {
       loginRow.classList.remove('shake')
       void loginRow.offsetWidth
@@ -650,7 +653,8 @@ export function mountBar(shadow: ShadowRoot): void {
     show(miniBtn, view === 'mini')
     show(bar, view !== 'mini')
 
-    const pillVisible = view === 'stream' || view === 'done' || view === 'error' || view === 'login' || view === 'setpw'
+    const pillVisible =
+      view === 'stream' || view === 'done' || view === 'error' || view === 'login' || view === 'setpw' || view === 'signout'
     show(pill, pillVisible)
 
     // pill state class
@@ -660,7 +664,8 @@ export function mountBar(shadow: ShadowRoot): void {
     if (view === 'error') pill.classList.add('error')
 
     show(shimmer, view === 'stream')
-    show(streamRow, view === 'stream')
+    show(streamRow, view === 'stream' || view === 'signout') // signout reuses the spin + ticker row
+    show(expandBtn, view === 'stream') // no expand affordance while signing out
     show(statusRow, view === 'done' || view === 'error')
     show(loginRow, view === 'login')
     show(setpwRow, view === 'setpw')
@@ -668,6 +673,13 @@ export function mountBar(shadow: ShadowRoot): void {
       const inv = getPendingInvite()
       setpwLabel.textContent = inv?.email ? `Welcome — set a password for ${inv.email}` : 'Welcome — set a password'
       setTimeout(() => setpwInput.focus(), 60)
+    }
+
+    // signing-out: spinner + "Logging out…" / "Logged out", nothing else
+    if (view === 'signout') {
+      ticker.set(getState().ui.signingOut || 'Logging out…', 'dim')
+      timer.textContent = ''
+      show(queueBadge, false)
     }
 
     // stream row content

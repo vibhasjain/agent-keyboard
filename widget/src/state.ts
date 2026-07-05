@@ -31,6 +31,7 @@ export interface UiState {
   voiceError?: string
   loginError?: boolean
   composerNote?: string // transient hint under the composer (e.g. "still working…")
+  signingOut?: string // set (to the pill message) during the log-out → reload sequence
 }
 
 export interface State {

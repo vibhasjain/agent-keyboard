@@ -241,8 +241,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   })
   on(logoutItem, 'click', () => {
     setMenu(false)
-    logout()
-    deps.collapse() // drop out of the full chat; the bar shows signed-out
+    deps.collapse() // minimize to the bottom bar
+    logout() // wipe the session immediately — logged out even if a job is mid-think
+    patchUi({ signingOut: 'Logging out…' }) // spinner pill, overrides the thinking view
+    setTimeout(() => patchUi({ signingOut: 'Logged out' }), 750)
+    setTimeout(() => location.reload(), 1200) // reload to a fresh, guaranteed logged-out state
   })
 
   // No zoom inside the chat, ever: touch-action CSS covers modern engines;
