@@ -326,6 +326,11 @@ function spawnClaude(
   const child = spawn(process.env.CLAUDE_BIN ?? "claude", args, {
     cwd,
     env: opts.extraEnv ? { ...process.env, ...opts.extraEnv } : process.env,
+    // stdin = /dev/null → the CLI sees EOF immediately. Otherwise it waits ~3s
+    // for piped input that never comes (the prompt goes via -p), warns "no stdin
+    // data received in 3s" to stderr, and that benign line can surface as the
+    // job's error. Ignoring stdin drops the warning AND the 3s startup delay.
+    stdio: ["ignore", "pipe", "pipe"],
   });
   activeChildren.add(child);
   const rl = createInterface({ input: child.stdout! });
