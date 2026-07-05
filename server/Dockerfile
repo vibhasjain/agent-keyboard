@@ -65,6 +65,11 @@ COPY server/src ./src
 # a skill edit doesn't bust the dependency layer (sharp's native build).
 COPY server/skills /app/skills
 
+# Branded invite/recovery email templates — the provision-user skill reads them
+# from /app/email-templates on every deployment (they aren't in a site's checkout,
+# so without this the branded invite falls back to an improvised template).
+COPY server/email-templates /app/email-templates
+
 # The widget bundle served at GET /widget.js, and the demo bundle at /demo.js.
 COPY --from=widget /w/dist/widget.js /app/widget/widget.js
 COPY --from=widget /w/dist/demo.js /app/widget/demo.js
