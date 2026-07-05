@@ -113,6 +113,21 @@ export async function syncCheckout(site: Site): Promise<string> {
   const dir = await ensureCheckout(site);
   await git(dir, ["remote", "set-url", "origin", tokenizedRemote(site.repo)]);
   await git(dir, ["fetch", "origin", site.branch]);
+  // Preserve, don't destroy. If a prior (e.g. interrupted) turn left uncommitted
+  // work, stash it — recoverable via `git stash pop` — instead of the reset/clean
+  // below blowing it away. .tmp is git-ignored, so status/stash never touch the
+  // in-flight job's staged photos. Best-effort: a stash failure just falls through
+  // to the old hard-reset behaviour, never worse.
+  const dirty = (await git(dir, ["status", "--porcelain"]).catch(() => "")).trim();
+  if (dirty) {
+    await git(dir, [
+      "stash",
+      "push",
+      "--include-untracked",
+      "-m",
+      `ak-autosync ${new Date().toISOString()}`,
+    ]).catch(() => {});
+  }
   await git(dir, ["reset", "--hard", `origin/${site.branch}`]);
   await git(dir, ["clean", "-fd", "-e", ".tmp"]);
   const head = (await git(dir, ["rev-parse", "HEAD"])).trim();
