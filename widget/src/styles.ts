@@ -243,13 +243,17 @@ export const STYLES = `
 @keyframes ak-fade{ from{ opacity:0; } to{ opacity:1; } }
 .ak-ov-close{
   /* pinned to the VISIBLE top-right: --ak-vvt tracks how far iOS scrolled the
-     visual viewport down when the keyboard opened */
+     visual viewport down when the keyboard opened. A semi-translucent dark disc
+     keeps it legible over any transcript content underneath. */
   position:absolute; top:calc(8px + env(safe-area-inset-top,0px) + var(--ak-vvt, 0px)); right:10px; z-index:2;
-  width:34px; height:34px; border-radius:6px; border:none; background:transparent;
-  color:var(--ak-ink3); line-height:0; cursor:pointer;
+  width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.09);
+  background:rgba(10,10,10,.55);
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+  box-shadow:0 2px 10px rgba(0,0,0,.4);
+  color:var(--ak-ink2); line-height:0; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
-.ak-ov-close:hover{ color:var(--ak-amber); background:rgba(255,184,107,.08); }
+.ak-ov-close:hover{ color:var(--ak-amber); background:rgba(10,10,10,.72); }
 .ak-ov-scroll{
   flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
   padding:calc(20px + env(safe-area-inset-top,0px)) 18px 10px;
