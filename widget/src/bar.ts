@@ -31,6 +31,10 @@ function computeView(): View {
   // re-attached job on reload surfaces the pill by setting mode=collapsed in
   // bootRehydrate, not by overriding an explicit mini here.
   if (ui.mode === 'mini') return 'mini' // smallest resting state: just the corner ⌨️
+  // Active dictation takes precedence over the thinking pill — you're crafting a
+  // prompt, so the composer stays up (and the mic keeps recording) even while a
+  // job runs. It falls back to the pill once dictation ends.
+  if (ui.voice === 'live' || ui.voice === 'connecting') return 'composing'
   if (job.phase === 'streaming' || job.phase === 'sending') return 'stream'
   // composing/login win over the resting done/error row so tapping it to reply works
   if (ui.mode === 'login') return 'login'
@@ -697,7 +701,9 @@ export function mountBar(shadow: ShadowRoot): void {
     // the initial render, and never every frame — that recurses through onState).
     const wasComposer = lastView === 'composing' || lastView === 'expanded'
     const isComposer = view === 'composing' || view === 'expanded'
-    if (wasComposer && !isComposer) composer.teardownVoice()
+    // Never cut the mic while it's live/connecting — minimizing the modal must not
+    // cancel a recording (the composing view above keeps it up regardless).
+    if (wasComposer && !isComposer && getState().ui.voice === 'idle') composer.teardownVoice()
 
     lastView = view
     armIdle() // re-arm (or cancel) the idle-collapse clock on every state change
