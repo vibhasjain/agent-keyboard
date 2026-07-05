@@ -9,7 +9,7 @@ import { api, HttpError, type ConversationMessage, type GitInfo } from './api'
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
-import { getState, type LineState, setJob } from './state'
+import { getState, patchUi, type LineState, setJob } from './state'
 
 const BACKOFF = [1000, 2000, 5000, 10000]
 const DONE_LINGER_MS = 8000
@@ -619,6 +619,9 @@ function attachToRunningJob(job: { jobId: string; startedAt: number; prompt: str
   terminal = false
   attempt = 0
   setJob({ phase: 'streaming', jobId: job.jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
+  // Surface the re-attached job's pill on reload — but never override an explicit
+  // view (expanded chat, or a corner the user deliberately minimized to).
+  if (getState().ui.mode === 'mini') patchUi({ mode: 'collapsed' })
   persist()
   reattach(gen, true)
 }

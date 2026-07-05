@@ -26,10 +26,12 @@ function computeView(): View {
   const { ui, job } = getState()
   if (ui.mode === 'setpw') return 'setpw' // invite landing wins over everything
   if (ui.mode === 'expanded') return 'expanded'
-  // Active work always surfaces the pill — even from the minimized corner, so a
-  // re-attached job on reload isn't hidden behind the ⌨️ button.
-  if (job.phase === 'streaming' || job.phase === 'sending') return 'stream'
+  // An explicit minimize wins, even mid-job — so swiping the bar away while it's
+  // thinking actually collapses to the ⌨️ corner (the job keeps running). A
+  // re-attached job on reload surfaces the pill by setting mode=collapsed in
+  // bootRehydrate, not by overriding an explicit mini here.
   if (ui.mode === 'mini') return 'mini' // smallest resting state: just the corner ⌨️
+  if (job.phase === 'streaming' || job.phase === 'sending') return 'stream'
   // composing/login win over the resting done/error row so tapping it to reply works
   if (ui.mode === 'login') return 'login'
   if (ui.mode === 'composing') return 'composing'
