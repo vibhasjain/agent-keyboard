@@ -203,6 +203,11 @@ h2 em{ font-style:italic; color:var(--warm); }
 .feat h4{ font-size:14.5px; font-weight:600; margin-bottom:7px; }
 .feat p{ font-size:13.5px; color:var(--ink-3); }
 .feat p .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-2); white-space:nowrap; }
+.asks{ max-width:720px; margin:38px auto 0; display:grid; gap:12px; }
+.ask{ border:1px solid var(--rule); border-radius:12px; padding:14px 18px; background:var(--bg-2); }
+.ask .cmd{ font-family:var(--mono); font-size:13px; color:var(--amber); overflow-wrap:anywhere; }
+.ask .cmd::before{ content:"> "; color:var(--ink-3); }
+.ask p{ font-size:13.5px; color:var(--ink-3); margin-top:6px; }
 
 /* ---- faq ---- */
 .faq{ max-width:760px; margin:40px auto 0; }
@@ -385,6 +390,34 @@ footer .meta a:hover{ color:var(--amber); }
       <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><rect x="9" y="3.5" width="6" height="10.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5"/></svg><h4>Any input</h4><p>Type it, hold to dictate it, or attach a photo of what you mean.</p></div>
       <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M12 4 3.5 8.8 12 13.6l8.5-4.8L12 4zM3.5 15.2 12 20l8.5-4.8"/></svg><h4>Memory</h4><p>One session per app — it remembers your last ask and self-compacts when long, shown inline as <span class="comp">· session compacted ·</span></p></div>
       <div class="feat"><svg class="f-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="8.5" cy="15.5" r="3.2"/><path d="M11 13 19 5M15.5 8.5 18 11M13 11l2 2"/></svg><h4>Your keys, your box</h4><p>Your Claude token, your Supabase, your VM — and an allowlist of just the repos you name. Nothing phones home.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="steer">
+  <div class="wrap">
+    <div class="kicker">Steer it</div>
+    <h2>It runs itself. <em>You just ask.</em></h2>
+    <div class="asks">
+      <div class="ask">
+        <span class="cmd">switch to sonnet</span>
+        <p>Change the model right in the bar — or the effort, with "max effort" or "go faster." It
+          re-tunes itself for the next turn.</p>
+      </div>
+      <div class="ask">
+        <span class="cmd">install a skill to generate images</span>
+        <p>Missing a capability? Ask for it, and it installs the skill it needs before carrying on.</p>
+      </div>
+      <div class="ask">
+        <span class="cmd">invite sam@studio.com</span>
+        <p>It emails them a link to set a password and adds them to your allow-list — as many
+          co-editors as you like.</p>
+      </div>
+      <div class="ask">
+        <span class="cmd">update your Claude Code</span>
+        <p>It runs a pinned version, so it never drifts on its own. Ask, and it bumps to the latest
+          and redeploys itself.</p>
+      </div>
     </div>
   </div>
 </section>
