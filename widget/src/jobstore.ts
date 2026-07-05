@@ -43,6 +43,13 @@ export function getLiveTurns(): ReadonlyArray<LiveTurn> {
   return liveTurns
 }
 
+// Bumped when a "clear context" lands, so the transcript can drop its cached
+// server history and refetch the now-empty conversation exactly once.
+let clearEpoch = 0
+export function getClearEpoch(): number {
+  return clearEpoch
+}
+
 /**
  * Prune liveTurns already present in server history so a turn never renders
  * twice (history is fetched lazily — a turn that completed before the first
@@ -358,7 +365,16 @@ function finishDone(data: Record<string, unknown>): void {
   clearActivityFlag()
   outboxRemove(activeIdemKey) // belt-and-suspenders: the job-frame removal may have failed
   reset()
-  setJob({ phase: 'done', jobId: finishedId!, summary, ok: shipped || !git.dirty })
+  // "clear context": the server started a fresh session, so wipe the client-side
+  // transcript too (chat.ts refetches the now-empty history off the clear epoch).
+  const cleared = data.cleared === true
+  if (cleared) {
+    liveTurns.length = 0
+    queue.length = 0
+    writeOutbox([])
+    clearEpoch++
+  }
+  setJob({ phase: 'done', jobId: finishedId!, summary, ok: shipped || !git.dirty, cleared })
   if (doneTimer != null) clearTimeout(doneTimer)
   doneTimer = setTimeout(() => {
     const j = getState().job

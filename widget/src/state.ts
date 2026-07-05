@@ -19,7 +19,7 @@ export type JobState =
       fullText: string
       disconnected?: boolean
     }
-  | { phase: 'done'; jobId: string; summary: string; ok: boolean }
+  | { phase: 'done'; jobId: string; summary: string; ok: boolean; cleared?: boolean }
   | { phase: 'error'; message: string; retry?: () => void }
 
 export type UiMode = 'mini' | 'collapsed' | 'login' | 'setpw' | 'composing' | 'expanded'

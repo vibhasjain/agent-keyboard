@@ -20,6 +20,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { v5 as uuidv5 } from "uuid";
 import type { Site } from "./sites.js";
+import { randomUUID } from "node:crypto";
 import {
   DATA_DIR,
   acquireSiteLock,
@@ -27,6 +28,7 @@ import {
   checkoutPath,
   gitSummary,
   readDataFile,
+  writeDataFile,
 } from "./checkouts.js";
 import { cleanupUploads, resetOutputs, collectOutputs } from "./photos.js";
 import {
@@ -78,6 +80,18 @@ export function sessionIdFor(conversationId: string): string {
 export async function conversationIdFor(siteId: string): Promise<string> {
   const pointer = await readDataFile(join("agent-keyboard", "sites", siteId, "current-conversation"));
   return pointer || `site:${siteId}`;
+}
+
+/**
+ * Clear the context: point the site at a brand-new conversation. The next turn
+ * gets a fresh Claude Code session (no memory) and the conversation history
+ * reads empty (it's keyed off the new session). Destructive — the old session's
+ * memory and transcript are abandoned. Returns the new conversationId.
+ */
+export async function rotateConversation(siteId: string): Promise<string> {
+  const next = `site:${siteId}:${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  await writeDataFile(join("agent-keyboard", "sites", siteId, "current-conversation"), next);
+  return next;
 }
 
 function markerPathFor(conversationId: string): string {
@@ -608,15 +622,29 @@ export async function* runMessageJob(
       // turn would re-compact forever. Verify the boundary landed; report
       // honestly either way.
       const post = await loadHarness(site.id);
-      if (post.settings.compactNow) {
-        const cleared = await clearCompactFlag(site.id).then(() => true, () => false);
-        if (cleared) {
+      // Skip compaction if we're about to clear — the session is about to be
+      // abandoned anyway, so compacting it first is wasted work.
+      if (post.settings.compactNow && !post.settings.clearNow) {
+        const consumed = await clearCompactFlag(site.id).then(() => true, () => false);
+        if (consumed) {
           yield ["status", { phase: "compacting", detail: "Compacting memory" }];
           const ok = await runCompactTurn(sessionId, dir, post).catch(() => false);
           reply = `${reply}\n\n_${ok ? "Memory compacted." : "On-demand compact didn't take — auto-compaction stays active."}_`.trim();
         }
         // clear failed → skip the compact entirely rather than risk re-running
         // it on every future turn off a stuck flag.
+      }
+
+      // One-shot context clear: DESTRUCTIVE. Rotate to a fresh conversation so the
+      // NEXT turn has no memory and the history reads empty. Consume the flag
+      // BEFORE rotating, so a failure can't loop it on every future turn.
+      let contextCleared = false;
+      if (post.settings.clearNow) {
+        const consumed = await saveSettings(site.id, { clearNow: undefined }).then(() => true, () => false);
+        if (consumed) {
+          contextCleared = await rotateConversation(site.id).then(() => true, () => false);
+          if (contextCleared) reply = `${reply}\n\n_Context cleared — fresh session, chat history wiped._`.trim();
+        }
       }
 
       // Any images the agent dropped in .tmp/outputs/ this turn, to show in chat.
@@ -627,6 +655,7 @@ export async function* runMessageJob(
           reply,
           git,
           images,
+          cleared: contextCleared,
           usage: {
             cost_usd: result.total_cost_usd ?? null,
             duration_ms: result.duration_ms ?? null,

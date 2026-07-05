@@ -5,7 +5,7 @@
 import { api, type ConversationMessage } from './api'
 import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { discoverJobs, getActivePrompt, getActiveThumbs, getLiveTurns, getQueued, reconcileLiveTurns } from './jobstore'
+import { discoverJobs, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, reconcileLiveTurns } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe } from './state'
 
@@ -368,7 +368,17 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // the user had scrolled up before collapsing — track the collapsed→expanded
   // transition and force it.
   let wasExpanded = false
+  let seenClearEpoch = getClearEpoch()
   const render = () => {
+    // A "clear context" wiped the session — drop cached history and refetch the
+    // now-empty conversation (liveTurns were already cleared in the store).
+    if (getClearEpoch() !== seenClearEpoch) {
+      seenClearEpoch = getClearEpoch()
+      history = []
+      cursor = null
+      loaded = false
+      renderedKey = ''
+    }
     const expanded = getState().ui.mode === 'expanded'
     show(overlay, expanded)
     if (!expanded) {

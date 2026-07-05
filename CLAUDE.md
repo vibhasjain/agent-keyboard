@@ -80,7 +80,8 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   `EXTRA_ORIGINS` (extra CORS). CI uses the repo secret `FLY_API_TOKEN`. Full table + defaults in
   `README.md` / `server/.env.example`; non-secret tuning can live in `server/fly.toml`.
 - **Harness controls** — the owner steers the agent's runtime by asking the bar ("switch to sonnet",
-  "max effort", "plan mode", "compact your memory", "how much context left?", "install skill X",
+  "max effort", "plan mode", "compact your memory", "clear the context" (destructive — fresh
+  session; confirm first), "how much context left?", "install skill X",
   "invite a@b.com"). Per-site `settings.json` on the volume, edited by the agent, validated/applied
   per spawn by `server/src/harness.ts` (the KNOBS table — one entry per knob). Skills ship in
   `server/skills/` (image-gen · verify-in-browser · provision-user), seeded to `/data/.claude/skills`

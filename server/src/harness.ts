@@ -21,6 +21,7 @@ export interface HarnessSettings {
   effort?: string;
   permissionMode?: PermissionMode;
   compactNow?: boolean;
+  clearNow?: boolean;
 }
 
 export interface ResolvedHarness {
@@ -93,6 +94,16 @@ const KNOBS: Knob[] = [
       return undefined;
     },
     describe: `"compactNow": true — the server compacts this conversation's memory right after the current turn, then clears the flag`,
+  },
+  {
+    key: "clearNow",
+    validate: (v, warn) => {
+      if (v === undefined || v === null || v === false) return undefined;
+      if (v === true) return true;
+      warn(`clearNow must be true or absent, got ${JSON.stringify(v)} — ignored`);
+      return undefined;
+    },
+    describe: `"clearNow": true — DESTRUCTIVE: right after this turn the server starts a fresh session (wipes the agent's memory of this conversation) AND clears the chat history, then clears the flag. Unlike compact this keeps nothing. Because it can't be undone, confirm with the owner once before you set it`,
   },
 ];
 
