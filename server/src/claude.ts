@@ -288,11 +288,16 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
     }
   } else if (evt.type === "assistant" && Array.isArray(evt.message?.content)) {
     let msgText = "";
+    const tools: string[] = [];
     for (const b of evt.message.content) {
-      if (b?.type === "tool_use") out.events.push({ t: "tool", detail: condenseToolUse(b) });
+      if (b?.type === "tool_use") tools.push(condenseToolUse(b));
       else if (b?.type === "text") msgText += String(b.text ?? "");
     }
+    // Emit this message's text BEFORE its tool_use(s), so the spawn loop can
+    // reset the live text on the tool (a tool call ends the message) without
+    // dropping the text that preceded it.
     if (msgText) out.events.push({ t: "snapshotText", text: msgText });
+    for (const d of tools) out.events.push({ t: "tool", detail: d });
     // Approximate context size = this request's full input + output. Some rows
     // carry placeholder input_tokens (a known stream-json quirk) — the caller
     // keeps the max across the run, and tiny totals are dropped here.
@@ -534,6 +539,12 @@ export async function* runMessageJob(
               queue.push(["status", { phase: "thinking", detail }]);
             }
           } else if (e.t === "tool") {
+            // A tool call ends the current assistant message. Clear the live text
+            // so the NEXT message streams on its own instead of concatenating into
+            // one growing run-on blob. The final reply (no tool after it) is
+            // unaffected, and result.reply comes from the CLI's result line anyway.
+            streamed = "";
+            snapshot = "";
             queue.push(["status", { phase: "tool", detail: e.detail }]);
           }
         },
