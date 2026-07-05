@@ -703,5 +703,16 @@ export function mountBar(shadow: ShadowRoot): void {
 
   const unsub = subscribe(render)
   void unsub // retained for the lifetime of the page
+
+  // A refresh from the settings menu asked to land back in the expanded chat.
+  try {
+    if (localStorage.getItem(lsKey('reopen-expanded')) === '1') {
+      localStorage.removeItem(lsKey('reopen-expanded'))
+      patchUi({ mode: 'expanded' })
+    }
+  } catch {
+    /* storage blocked */
+  }
+
   render()
 }

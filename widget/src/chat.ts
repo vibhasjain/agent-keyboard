@@ -4,7 +4,7 @@
 
 import { api, type ConversationMessage } from './api'
 import { logout } from './auth'
-import { CONFIG } from './config'
+import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { discoverJobs, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
@@ -230,7 +230,15 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     stop()
     setMenu(false)
   })
-  on(refreshItem, 'click', () => location.reload())
+  on(refreshItem, 'click', () => {
+    // Land back in the expanded chat after the reload (one-shot flag read at boot).
+    try {
+      localStorage.setItem(lsKey('reopen-expanded'), '1')
+    } catch {
+      /* storage blocked */
+    }
+    location.reload()
+  })
   on(logoutItem, 'click', () => {
     setMenu(false)
     logout()
