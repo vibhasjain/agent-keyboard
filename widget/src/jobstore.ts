@@ -101,6 +101,12 @@ export function isBusy(): boolean {
   return p === 'sending' || p === 'streaming'
 }
 
+/** Forcefully stop the active job. The server publishes a terminal 'stopped'
+ *  error on the job's stream, which flows back through onFrame → finishError. */
+export function stop(): void {
+  if (jobId && isBusy()) void api.cancelJob(jobId).catch(() => {})
+}
+
 // Messages sent while a job is running queue client-side (like Claude Code)
 // and dispatch as soon as the current job reaches a terminal state.
 type QueuedInput = { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[]; idemKey?: string }

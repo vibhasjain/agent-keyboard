@@ -3,9 +3,10 @@
 // fetched on FIRST expand only; older pages load via a top IntersectionObserver.
 
 import { api, type ConversationMessage } from './api'
+import { logout } from './auth'
 import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { discoverJobs, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, reconcileLiveTurns } from './jobstore'
+import { discoverJobs, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe } from './state'
 
@@ -181,13 +182,60 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     n.setAttribute('aria-label', 'Collapse')
   })
 
+  // Settings (top-left) → a small dropdown: stop (only while working), refresh, log out.
+  const settings = el('button', 'ak-ov-settings', (n) => {
+    n.type = 'button'
+    n.appendChild(icon('settings', 18))
+    n.setAttribute('aria-label', 'Settings')
+  })
+  const menu = el('div', 'ak-menu')
+  const menuItem = (iconName: string, label: string) =>
+    el('button', 'ak-menu-item', (n) => {
+      n.type = 'button'
+      n.appendChild(icon(iconName, 16))
+      n.appendChild(el('span', undefined, (s) => (s.textContent = label)))
+    })
+  const stopItem = menuItem('stop', 'Stop')
+  const refreshItem = menuItem('retry', 'Refresh')
+  const logoutItem = menuItem('logout', 'Log out')
+  menu.append(stopItem, refreshItem, logoutItem)
+  show(menu, false)
+
   const scroll = el('div', 'ak-ov-scroll')
   const sentinel = el('div', 'ak-ov-sentinel')
   const listEl = el('div', 'ak-ov-list')
   scroll.append(sentinel, listEl)
 
   const footer = el('div', 'ak-ov-foot')
-  overlay.append(close, scroll, footer)
+  overlay.append(close, settings, menu, scroll, footer)
+
+  // -- settings menu open/close + actions --
+  let menuOpen = false
+  const setMenu = (open: boolean) => {
+    menuOpen = open
+    show(menu, open)
+    settings.classList.toggle('on', open)
+    if (open) (stopItem as HTMLButtonElement).disabled = !isBusy() // Stop is live only while working
+  }
+  on(settings, 'click', (e) => {
+    e.stopPropagation()
+    setMenu(!menuOpen)
+  })
+  // A click anywhere else in the overlay closes the menu.
+  on(overlay, 'click', (e) => {
+    const t = e.target as Node
+    if (menuOpen && !menu.contains(t) && !settings.contains(t)) setMenu(false)
+  })
+  on(stopItem, 'click', () => {
+    stop()
+    setMenu(false)
+  })
+  on(refreshItem, 'click', () => location.reload())
+  on(logoutItem, 'click', () => {
+    setMenu(false)
+    logout()
+    deps.collapse() // drop out of the full chat; the bar shows signed-out
+  })
 
   // No zoom inside the chat, ever: touch-action CSS covers modern engines;
   // iOS Safari's proprietary gesture events need explicit preventDefault.
@@ -214,7 +262,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // Escape steps down one size each press: lightbox → chat → bar → mini corner.
   on(window, 'keydown', (e) => {
     if ((e as KeyboardEvent).key !== 'Escape') return
-    if (isLightboxOpen()) return closeLightbox() // Esc peels the lightbox first…
+    if (menuOpen) return setMenu(false) // Esc closes the settings menu first…
+    if (isLightboxOpen()) return closeLightbox() // …then peels the lightbox…
     const mode = getState().ui.mode
     if (mode === 'expanded') return deps.collapse() // …then the chat → bar…
     if (mode === 'mini') return // already the smallest
@@ -383,6 +432,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     show(overlay, expanded)
     if (!expanded) {
       unlockBody()
+      if (menuOpen) setMenu(false)
       wasExpanded = false
       return
     }

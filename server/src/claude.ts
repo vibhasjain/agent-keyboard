@@ -458,12 +458,25 @@ export type Frame = [string, unknown];
 export async function* runMessageJob(
   site: Site,
   opts: { text: string; page: string; attachmentPaths: string[] },
+  signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
   yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
 
   let release: (() => void) | undefined;
   let child: ChildProcess | null = null;
+  // Stop (cancelJob) aborts the signal → SIGKILL the current child. Killing it
+  // resolves spawnClaude's `done`, which closes the frame queue and unblocks the
+  // generator so it runs its finally (releasing the site lock) and ends.
+  const onAbort = () => {
+    try {
+      child?.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
   try {
+    if (signal?.aborted) return; // stopped before we even started
     release = await acquireSiteLock(site.id);
 
     yield ["status", { phase: "syncing", detail: `Syncing ${site.domain}` }];
@@ -558,6 +571,7 @@ export async function* runMessageJob(
       result = out.result;
       lastErr = out.stderr || (result?.is_error ? String(result?.result ?? "") : "");
 
+      if (signal?.aborted) return; // stopped by the user — end the run, no retry
       if (result && !result.is_error) break;
 
       // Session-store recovery: flip create↔resume once,

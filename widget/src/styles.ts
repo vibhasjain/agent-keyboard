@@ -241,11 +241,11 @@ export const STYLES = `
   animation:ak-fade .2s ease;
 }
 @keyframes ak-fade{ from{ opacity:0; } to{ opacity:1; } }
-.ak-ov-close{
-  /* pinned to the VISIBLE top-right: --ak-vvt tracks how far iOS scrolled the
+.ak-ov-close, .ak-ov-settings{
+  /* pinned to the VISIBLE top corners: --ak-vvt tracks how far iOS scrolled the
      visual viewport down when the keyboard opened. A semi-translucent dark disc
-     keeps it legible over any transcript content underneath. */
-  position:absolute; top:calc(8px + env(safe-area-inset-top,0px) + var(--ak-vvt, 0px)); right:10px; z-index:2;
+     keeps them legible over any transcript content underneath. */
+  position:absolute; top:calc(8px + env(safe-area-inset-top,0px) + var(--ak-vvt, 0px)); z-index:2;
   width:34px; height:34px; border-radius:50%; border:1px solid rgba(255,255,255,.09);
   background:rgba(10,10,10,.55);
   -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
@@ -253,7 +253,32 @@ export const STYLES = `
   color:var(--ak-ink2); line-height:0; cursor:pointer;
   display:flex; align-items:center; justify-content:center;
 }
-.ak-ov-close:hover{ color:var(--ak-amber); background:rgba(10,10,10,.72); }
+.ak-ov-close{ right:10px; }
+.ak-ov-settings{ left:10px; }
+.ak-ov-close:hover, .ak-ov-settings:hover, .ak-ov-settings.on{ color:var(--ak-amber); background:rgba(10,10,10,.72); }
+
+/* settings dropdown (top-left) */
+.ak-menu{
+  position:absolute; z-index:4;
+  top:calc(48px + env(safe-area-inset-top,0px) + var(--ak-vvt, 0px)); left:10px;
+  min-width:160px; padding:5px;
+  background:rgba(12,11,10,.98); border:1px solid var(--ak-rule); border-radius:11px;
+  box-shadow:0 10px 34px rgba(0,0,0,.55);
+  -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+  display:flex; flex-direction:column; gap:1px;
+  animation:ak-pop .16s cubic-bezier(.2,.7,.2,1);
+}
+.ak-menu-item{
+  display:flex; align-items:center; gap:11px; width:100%;
+  padding:9px 11px; border-radius:7px; border:none; background:none; cursor:pointer;
+  font-family:var(--ak-mono); font-size:13px; color:var(--ak-ink2); text-align:left;
+}
+.ak-menu-item svg{ width:16px; height:16px; color:var(--ak-ink3); flex:none; }
+.ak-menu-item:hover{ background:rgba(255,255,255,.05); color:var(--ak-ink); }
+.ak-menu-item:hover svg{ color:var(--ak-amber); }
+.ak-menu-item:disabled{ opacity:.38; cursor:default; }
+.ak-menu-item:disabled:hover{ background:none; color:var(--ak-ink2); }
+.ak-menu-item:disabled:hover svg{ color:var(--ak-ink3); }
 .ak-ov-scroll{
   flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
   padding:calc(20px + env(safe-area-inset-top,0px)) 18px 10px;

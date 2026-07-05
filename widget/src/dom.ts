@@ -53,6 +53,9 @@ const ICON_PATHS: Record<string, string> = {
   check: '<path d="M4.5 12.5 10 18 19.5 6.5" fill="none"/>',
   retry: '<path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5" fill="none"/>',
   x: '<path d="M6 6l12 12M18 6 6 18" fill="none"/>',
+  settings:
+    '<circle cx="12" cy="12" r="3" fill="none"/><path d="M19.4 13a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-2.87 1.2V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-2.87-1.2l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 13H4.5a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.2-2.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 11 4.6V4.5a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 2.87 1.2l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 11h.1a2 2 0 0 1 0 4z" fill="none"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" fill="none"/>',
 }
 
 /** Inline SVG icon sized to 1em-ish; color follows currentColor. */

@@ -39,6 +39,7 @@ interface Job {
   updatedAt: number;
   subscribers: Set<SubQueue>;
   lastDbWrite: number;
+  abort: () => void; // signals runMessageJob to kill its CLI child (used by cancelJob)
 }
 
 // ─── a subscriber's frame queue (null = closed) ───────────────────────────
@@ -185,6 +186,7 @@ export async function startJob(opts: {
   prompt: string;
   page: string;
   gen: AsyncGenerator<Frame>;
+  abort?: () => void;
   idemKey?: string;
 }): Promise<Job> {
   const now = Date.now();
@@ -202,6 +204,7 @@ export async function startJob(opts: {
     updatedAt: now,
     subscribers: new Set(),
     lastDbWrite: 0,
+    abort: opts.abort ?? (() => {}),
   };
   registry.set(jobId, job);
   if (opts.idemKey) idem.set(opts.idemKey, { jobId, at: now });
@@ -254,6 +257,28 @@ export async function* tail(job: Job): AsyncGenerator<Frame> {
 
 export function getJob(jobId: string): Job | null {
   return registry.get(jobId) ?? null;
+}
+
+/**
+ * Forcefully stop a running job: publish a terminal 'stopped' error to every
+ * tail, then signal the run to abort — which SIGKILLs the CLI child, unblocking
+ * the generator so it runs its finally (releases the site lock) and ends. No-op
+ * (returns false) if the job is unknown or already terminal. The drain loop sees
+ * status !== "running" and won't overwrite the stop with a generic failure.
+ */
+export function cancelJob(jobId: string): boolean {
+  const job = registry.get(jobId);
+  if (!job || TERMINAL.has(job.status)) return false;
+  job.status = "error";
+  job.error = { kind: "stopped", detail: "Stopped." };
+  job.updatedAt = Date.now();
+  publish(job, "error", job.error);
+  try {
+    job.abort();
+  } catch {
+    /* best-effort */
+  }
+  return true;
 }
 
 export function jobSnapshot(jobId: string): JobSnapshot | null {

@@ -25,6 +25,7 @@ import {
   startJob,
   tail,
   getJob,
+  cancelJob,
   jobSnapshot,
   listActive,
   jobForIdem,
@@ -327,8 +328,16 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const attachmentPaths = attachmentIds.length
     ? await resolveAttachments(site.id, attachmentIds)
     : [];
-  const gen = runMessageJob(site, { text, page, attachmentPaths });
-  const job = await startJob({ siteId: site.id, prompt: text, page, gen, idemKey: idemKey || undefined });
+  const ac = new AbortController();
+  const gen = runMessageJob(site, { text, page, attachmentPaths }, ac.signal);
+  const job = await startJob({
+    siteId: site.id,
+    prompt: text,
+    page,
+    gen,
+    abort: () => ac.abort(),
+    idemKey: idemKey || undefined,
+  });
   await streamJobTail(req, res, job);
 });
 
@@ -374,6 +383,13 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
   });
   bb.on("error", (err: unknown) => finish(400, { error: String(err).slice(0, 300) }));
   req.pipe(bb);
+});
+
+/** Forcefully stop a running job (kills the CLI child, releases the lock). The
+ *  job's stream then delivers a terminal 'stopped' error to every viewer. */
+app.post("/jobs/:jobId/cancel", authed, (req, res) => {
+  const stopped = cancelJob(req.params.jobId ?? "");
+  res.json({ stopped });
 });
 
 /** Re-attach to a running or finished job's stream. */
