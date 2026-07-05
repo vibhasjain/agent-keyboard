@@ -262,12 +262,18 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const job = getState().job
     if (job.phase === 'streaming' || job.phase === 'sending') {
       const prompt = getActivePrompt()
-      if (!liveUser) {
+      // The server persists the user turn as the job starts, so after a mid-turn
+      // history fetch (a refresh / re-attach) the same prompt is already in
+      // `history`. Don't also render the live bubble, or the prompt shows twice.
+      const norm = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim()
+      const lastUser = [...history].reverse().find((m) => m.role === 'user')
+      const dupOfHistory = !!prompt && !!lastUser && norm(lastUser.text) === norm(prompt)
+      if (!liveUser && !dupOfHistory) {
         // Prompt and thumbs are fixed for the lifetime of a job — build once.
         liveUser = msgEl('user', prompt || '', { thumbs: getActiveThumbs() })
         listEl.appendChild(liveUser)
       }
-      show(liveUser, !!prompt)
+      if (liveUser) show(liveUser, !!prompt && !dupOfHistory)
       if (!liveAsst) {
         // Claude Code's working line: "✻ Doing the thing… (0:24)"
         liveAsst = el('div')
