@@ -47,6 +47,24 @@ Deploy status after you push: check the Actions run on the repo
 (`gh run list --repo vibhasjain/agent-keyboard --limit 1` — gh is installed
 and GH_TOKEN is in your env).
 
+## Updating your own Claude Code CLI
+
+Your CLI version is PINNED in `server/Dockerfile` (a line like
+`npm install -g @anthropic-ai/claude-code@2.1.170`). It does not auto-update —
+headless `-p` runs never trigger the self-updater, and every deploy rebuilds
+from the pin. To update ("update my Claude to latest"):
+
+```bash
+npm view @anthropic-ai/claude-code version   # the newest published version
+```
+
+Then edit that one line in `server/Dockerfile` to the new version, commit, and
+push to `main`. The deploy workflow rebuilds the image with the new CLI (the
+Dockerfile is NOT under `.github/workflows/`, so the GH_TOKEN restriction
+doesn't block it). The restart lands minutes later, after your turn — so tell
+the user "it'll update on the next deploy, ~2-3 min." Pin a specific version,
+never the floating `latest` tag, so builds stay reproducible.
+
 ## Where your own state lives (the /data volume)
 
 - `/data/checkouts/<site>` — per-site working copies (yours is the cwd)
