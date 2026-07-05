@@ -431,10 +431,12 @@ export function mountBar(shadow: ShadowRoot): void {
     loggingIn = true
     disarmLoginIdle()
     goBtn.disabled = true
+    clearNode(goBtn)
+    goBtn.appendChild(el('div', 'ak-spin')) // signing-in spinner (was just a silent disable)
     try {
       await login(emailInput.value.trim(), pwInput.value)
       pwInput.value = ''
-      patchUi({ mode: 'composing' })
+      patchUi({ mode: 'composing' }) // straight into the prompt box — no refresh needed
       setTimeout(() => composer.focus(), 60)
     } catch {
       loginRow.classList.remove('shake')
@@ -444,6 +446,8 @@ export function mountBar(shadow: ShadowRoot): void {
     } finally {
       loggingIn = false
       goBtn.disabled = false
+      clearNode(goBtn)
+      goBtn.appendChild(icon('arrow-right', 15)) // restore the arrow
     }
   })
 
