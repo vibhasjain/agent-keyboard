@@ -245,9 +245,30 @@ function makeComposer(): Composer {
     /* ignore */
   }
 
-  on(cam, 'click', () => photos.openPicker())
-  on(mic, 'click', () => voice.toggle())
-  on(sendBtn, 'click', () => doSend())
+  const blurButton = (button: HTMLButtonElement) => {
+    button.blur()
+  }
+  on(cam, 'click', () => {
+    blurButton(cam)
+    photos.openPicker()
+  })
+  on(mic, 'click', () => {
+    blurButton(mic)
+    voice.toggle()
+  })
+  on(sendBtn, 'click', () => {
+    blurButton(sendBtn)
+    doSend()
+  })
+  on(root, 'keydown', (e) => {
+    const ke = e as KeyboardEvent
+    if (ke.key !== 'Enter' || ke.shiftKey || ke.metaKey || ke.ctrlKey || ke.altKey || ke.isComposing) return
+    const target = ke.target as HTMLElement | null
+    if (target === ta || !target?.closest('button')) return
+    e.preventDefault()
+    e.stopPropagation()
+    doSend()
+  }, true)
   on(ta, 'input', () => {
     // user typing re-anchors the dictation base
     baseText = ta.value

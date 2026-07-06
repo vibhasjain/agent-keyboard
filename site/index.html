@@ -47,6 +47,18 @@
   --wrap:960px;
 }
 *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+button, a, summary{
+  -webkit-tap-highlight-color:transparent;
+  outline:none;
+}
+button{
+  -webkit-appearance:none; appearance:none;
+  font:inherit;
+}
+button:focus, button:focus-visible,
+a:focus, a:focus-visible,
+summary:focus, summary:focus-visible{ outline:none; }
+button::-moz-focus-inner{ border:0; }
 html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; touch-action:pan-x pan-y; }
 body{
   min-height:100vh;

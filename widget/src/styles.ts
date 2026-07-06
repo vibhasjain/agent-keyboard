@@ -5,6 +5,13 @@
 export const STYLES = `
 :host{ all: initial; }
 *,*::before,*::after{ box-sizing: border-box; }
+button{
+  -webkit-appearance:none; appearance:none;
+  -webkit-tap-highlight-color:transparent;
+  outline:none; font:inherit;
+}
+button:focus, button:focus-visible{ outline:none; }
+button::-moz-focus-inner{ border:0; }
 
 :host{
   --ak-bg:#0a0a0a; --ak-bg2:#111110; --ak-ink:#f5f1ea; --ak-ink2:#b8b2a7; --ak-ink3:#6f6a61;
