@@ -4,31 +4,34 @@
 // (push-to-talk speech-to-text, no audio playback).
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
-// gpt-realtime-whisper: natively-streaming realtime transcription. It rejects
-// turn_detection ("not supported for this transcription model"), so this session
-// omits it — the widget commits the audio buffer manually to trigger the
-// transcript (see widget/src/voice.ts).
-const TRANSCRIBE_MODEL = process.env.REALTIME_TRANSCRIBE_MODEL ?? "gpt-realtime-whisper";
+const TRANSCRIBE_MODEL = process.env.REALTIME_TRANSCRIBE_MODEL ?? "gpt-4o-transcribe";
 const FALLBACK = process.env.REALTIME_FALLBACK === "1";
+
+function supportsTurnDetection(model: string): boolean {
+  return model !== "gpt-realtime-whisper";
+}
 
 export interface RealtimeToken {
   value: string;
   expires_at: number | null;
   session_type: string;
+  model: string;
 }
 
 /** Body for the primary transcription-only session. */
 function transcriptionBody() {
+  const input: Record<string, unknown> = {
+    transcription: { model: TRANSCRIBE_MODEL, language: "en" },
+    noise_reduction: { type: "near_field" },
+  };
+  if (supportsTurnDetection(TRANSCRIBE_MODEL)) {
+    input.turn_detection = { type: "server_vad", silence_duration_ms: 600 };
+  }
   return {
     session: {
       type: "transcription",
       audio: {
-        input: {
-          transcription: { model: TRANSCRIBE_MODEL, language: "en" },
-          // No turn_detection: gpt-realtime-whisper rejects it. The widget commits
-          // the buffer on mic-stop to trigger transcription.
-          noise_reduction: { type: "near_field" },
-        },
+        input,
       },
     },
   };
@@ -75,7 +78,7 @@ export async function mintRealtimeToken(): Promise<
     if (resp.status >= 400) return { error: "mint_failed", detail: data };
     const value = data.value ?? data.client_secret?.value;
     if (!value) return { error: "mint_failed", detail: data };
-    return { value, expires_at: data.expires_at ?? null, session_type: sessionType };
+    return { value, expires_at: data.expires_at ?? null, session_type: sessionType, model: TRANSCRIBE_MODEL };
   } catch (err) {
     return { error: "openai_unreachable", detail: String(err) };
   }

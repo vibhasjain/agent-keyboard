@@ -1,7 +1,7 @@
-# Agent Keyboard — a prompt bar that edits the site it's on
+# Agent Keyboard — a prompt bar that edits the app it's on
 
-> One script tag turns any static site into something you can change by asking. Type, dictate, or
-> photograph a change; a real Claude Code session edits the site's own repo and pushes to `main`.
+> One script tag puts a prompt bar inside the app you want to change. Type, dictate, or
+> photograph a change; a real Claude Code session edits that app's own repo and pushes to `main`.
 
 This file orients any agent (or human) working in this repo. Read it before touching code.
 
@@ -9,11 +9,11 @@ This file orients any agent (or human) working in this repo. Read it before touc
 
 ## What Agent Keyboard is (shipped, real)
 
-A floating **prompt bar** you embed on a static site with a single `<script>` tag. The site's owner
+A floating **prompt bar** you embed in an app with a single `<script>` tag. The app's owner
 taps the bar, signs in, and asks for a change — by typing, holding to dictate, or attaching a
 photo. The request goes to a small server that drives the **real Claude Code CLI** against a durable
-git checkout of that site's repo, makes the edit, commits as `Agent Keyboard`, and **pushes to
-`main`**. Wherever the site already deploys from (Netlify, etc.) redeploys. The bar streams every
+git checkout of that app's repo, makes the edit, commits as `Agent Keyboard`, and **pushes to
+`main`**. Wherever the app already deploys from (Vercel, Netlify, Fly, etc.) redeploys. The bar streams every
 step live and is **fire-and-forget**: close the tab and the job keeps running server-side; reopen and
 it re-attaches to the stream.
 
@@ -139,8 +139,8 @@ the slim **bar**, which streams in a pill with a live status **ticker**.
 Agent Keyboard began (2026-05) as a pitch for a "drop-in SDK that turns any app's flows into
 agent-callable actions" — an action layer an agent could operate by voice, demoed with a scripted
 flight-booking film. That vision is preserved as the film linked from the home page. The product that
-actually shipped is narrower and real: the prompt bar in this repo that edits static sites via their
-own git repos. When editing, describe the **shipped** product, not the old SDK pitch.
+actually shipped is narrower and real: the prompt bar in this repo that edits the codebase behind the
+app you're using via its own git repo. When editing, describe the **shipped** product, not the old SDK pitch.
 
 ## Working agreements
 - **Plan first** for non-trivial (3+ step) tasks; verify before marking done — prove it works, don't

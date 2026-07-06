@@ -1,7 +1,7 @@
 # Self-hosting Agent Keyboard
 
 A fork-to-working-bar walkthrough. Target: a competent developer gets from `git clone` to a live bar
-that edits one of their sites in **under an hour**. Most of that time is waiting on Fly builds.
+that edits one of their apps in **under an hour**. Most of that time is waiting on Fly builds.
 
 You will run your own server (on Fly.io) and your own Supabase project. The bar then edits repos you
 own and pushes to them; wherever those repos deploy from (Netlify, Vercel, GitHub Pages, …) redeploys.
@@ -21,13 +21,13 @@ real cost, and it's what actually does the editing.
   prescribes Fly and the committed config targets it; a Dockerfile exists if you're determined to run
   elsewhere, but you're on your own there. Fly is usage-billed — see the cost note in
   [step 5](#5-flyio-deploy-the-server-15-min).
-- [ ] **A static-site host you already use** — [Netlify](https://netlify.com),
-  [GitHub Pages](https://pages.github.com), [Cloudflare Pages](https://pages.cloudflare.com), or
+- [ ] **An app host you already use** — [Vercel](https://vercel.com),
+  [Netlify](https://netlify.com), [Fly.io](https://fly.io), [Cloudflare Pages](https://pages.cloudflare.com), or
   similar: whatever redeploys your repo when the agent pushes. **Agent Keyboard does not host your
-  site** — it only edits the repo and pushes; your existing host does the deploy.
+  app** — it only edits the repo and pushes; your existing host does the deploy.
 
-You'll also want **`flyctl`** installed, and (for local dev only) **Node 22+**. Each site you point the
-bar at must be a git repo that host deploys from a branch.
+You'll also want **`flyctl`** installed, and (for local dev only) **Node 22+**. Each app you point the
+bar at must be a git repo that your host deploys from a branch.
 
 Times below are rough and assume you have the accounts already.
 

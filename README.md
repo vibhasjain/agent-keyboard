@@ -1,13 +1,13 @@
 # Agent Keyboard
 
-> A prompt bar that edits the site it's on.
+> A prompt bar that edits the app it's on.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 ![Self-hosted](https://img.shields.io/badge/deploy-self--hosted-ffb86b.svg)
 
-One `<script>` tag turns a static site into something you change by asking. The owner taps the bar,
+One `<script>` tag puts a prompt bar inside the app you want to change. The owner taps the bar,
 signs in, and describes a change — typed, dictated, or photographed. A real **Claude Code** session
-edits that site's own git repo, commits as `Agent Keyboard`, and pushes to `main`; wherever you
+edits that app's own git repo, commits as `Agent Keyboard`, and pushes to `main`; wherever you
 deploy from redeploys. Every step streams live, and the job is fire-and-forget — close the tab and
 it keeps running server-side; reopen and the bar re-attaches.
 
@@ -44,11 +44,11 @@ made from the bar at the bottom of that page.
 ## What this is
 
 A personal tool, open-sourced because there's no reason to keep it closed. It scratches one itch: I
-own a handful of small static sites, I already pay for Claude Code, and I wanted to fix a typo or
-tweak a section from my phone without opening an editor. So it's narrow on purpose — an allow-list of
+own apps and codebases I keep looking at, I already pay for Claude Code, and I wanted to shape them
+from the product itself without opening an editor. So it's narrow on purpose — an allow-list of
 accounts (you, maybe a client or a partner), an allow-list of repos you control, no public signups,
 no dashboard. If you have a Claude Code subscription and
-static sites you deploy from git, you can fork it and point it at your own repos in under an hour (see
+apps you deploy from git, you can fork it and point it at your own repos in under an hour (see
 [SELF_HOSTING.md](./SELF_HOSTING.md)). If you don't, it probably isn't for you.
 
 ## How it works
@@ -80,7 +80,7 @@ Full walkthrough with time estimates in **[SELF_HOSTING.md](./SELF_HOSTING.md)**
 - A [Claude](https://claude.ai) **Pro or Max** subscription — `claude setup-token` mints the OAuth token the server's CLI edits with. This is the one cost that matters.
 - [Supabase](https://supabase.com) — auth (your one login) plus optional job history. Free tier is fine.
 - [Fly.io](https://fly.io) — runs the server. The guide prescribes Fly; a Dockerfile exists if you insist on hosting elsewhere.
-- A static-site host you already use — [Netlify](https://netlify.com), [GitHub Pages](https://pages.github.com), [Cloudflare Pages](https://pages.cloudflare.com), etc. Anything that redeploys your repo on push. **This project does not host your site.**
+- An app host you already use — [Vercel](https://vercel.com), [Netlify](https://netlify.com), [Fly.io](https://fly.io), [Cloudflare Pages](https://pages.cloudflare.com), etc. Anything that redeploys your repo on push. **This project does not host your app.**
 
 **What it costs.** Your existing Claude subscription does the editing, plus one small always-on Fly VM
 — usage-billed, on the order of a few dollars a month. It stays running on purpose so detached jobs
@@ -139,7 +139,7 @@ listing any missing *required* var.
 | `PORT` | Default `8080`. |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | Commit identity. Default `Agent Keyboard` / `agent@agentkeyboard.com`. |
 | `GIT_COMMITTER_NAME` / `GIT_COMMITTER_EMAIL` | Same defaults. |
-| `REALTIME_TRANSCRIBE_MODEL` | Voice transcription model. Default `gpt-realtime-whisper` (natively streaming, for live dictation). |
+| `REALTIME_TRANSCRIBE_MODEL` | Voice transcription model. Default `gpt-4o-transcribe` (higher-accuracy speech-to-text for push-to-talk prompts). |
 | `REALTIME_FALLBACK` | Set `1` to use the fallback realtime session shape. |
 
 Copy [`server/.env.example`](./server/.env.example) to `server/.env` for local dev.
@@ -245,7 +245,7 @@ reach, where the trust boundaries sit, and the residual risks stated plainly.
   zero-dep mock server plus a hostile host page under `dev/` for local testing. See
   [`widget/README.md`](./widget/README.md).
 - **Server** — `cd server && npm i`, copy `.env.example` to `.env`, then `npm run dev` (watch mode).
-- **Site** — static; open `site/index.html`.
+- **Site** — the marketing page; open `site/index.html`.
 
 ## Repo layout
 

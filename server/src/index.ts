@@ -1,7 +1,7 @@
 // Agent Keyboard — HTTP server that drives the real Claude Code CLI against
 // per-site git checkouts. The owner sends a prompt (text + optional photos) from
-// a widget on one of their static sites; the agent edits the site's code,
-// commits, pushes to main, and Netlify redeploys. Every run is a durable job
+// a widget embedded in their app; the agent edits that app's repo, commits,
+// pushes, and the host redeploys. Every run is a durable job
 // (fire-and-forget; the client can disconnect and re-attach). Single user.
 
 import express, { type Request, type Response } from "express";

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Embeddable Agent Keyboard prompt bar for static sites.",
+  "description": "Embeddable Agent Keyboard prompt bar for editing the app it lives in.",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --dev",

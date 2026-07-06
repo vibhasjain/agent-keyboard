@@ -23,19 +23,27 @@ function teardownLiveSession(): void {
   liveSession = null
 }
 
-const SESSION_UPDATE = {
-  type: 'session.update',
-  session: {
-    type: 'transcription',
-    audio: {
-      input: {
-        transcription: { model: 'gpt-realtime-whisper', language: 'en' },
-        // gpt-realtime-whisper rejects turn_detection; we commit the buffer on
-        // mic-stop instead (see finish()).
-        noise_reduction: { type: 'near_field' },
-      },
+const DEFAULT_TRANSCRIBE_MODEL = 'gpt-4o-transcribe'
+
+function supportsTurnDetection(model: string): boolean {
+  return model !== 'gpt-realtime-whisper'
+}
+
+function sessionUpdate(model: string): Record<string, unknown> {
+  const input: Record<string, unknown> = {
+    transcription: { model, language: 'en' },
+    noise_reduction: { type: 'near_field' },
+  }
+  if (supportsTurnDetection(model)) {
+    input.turn_detection = { type: 'server_vad', silence_duration_ms: 600 }
+  }
+  return {
+    type: 'session.update',
+    session: {
+      type: 'transcription',
+      audio: { input },
     },
-  },
+  }
 }
 
 export interface VoiceController {
@@ -86,6 +94,7 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
     try {
       const tok = await api.realtimeToken()
       if (!tok.value) throw new Error('voice not configured')
+      const transcribeModel = tok.model || DEFAULT_TRANSCRIBE_MODEL
       if (stale()) return
 
       const pc = new RTCPeerConnection()
@@ -104,7 +113,7 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
       const dc = pc.createDataChannel('oai-events')
       if (liveSession?.pc === pc) liveSession.dc = dc
       dc.onopen = () => {
-        send(SESSION_UPDATE) // belt-and-braces; the token already carries config
+        send(sessionUpdate(transcribeModel)) // belt-and-braces; the token already carries config
         h.onState('live')
       }
       dc.onmessage = (e) => {
@@ -114,17 +123,22 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
         } catch {
           return
         }
-        // gpt-realtime-whisper has no VAD: transcription runs after we commit
-        // (in finish()), then streams deltas and a final completed.
-        if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.delta) {
+        // VAD-capable models can produce deltas while recording. Manual flush()
+        // still commits trailing audio before Send reads the textarea.
+        if (msg.type === 'input_audio_buffer.speech_started') {
+          h.onTranscribing(true)
+        } else if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.delta) {
           h.onPartial(msg.delta)
         } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
+          const finishing = finishTimer != null || flushResolvers.length > 0
           clearFinish()
           if (msg.transcript) h.onFinal(String(msg.transcript).trim()) // fold text in BEFORE resolving flush
           h.onTranscribing(false)
-          teardownLiveSession()
-          h.onState('idle')
-          settleFlush()
+          if (finishing) {
+            teardownLiveSession()
+            h.onState('idle')
+            settleFlush()
+          }
         } else if (msg.type === 'error' && finishTimer) {
           // e.g. committing an empty/too-short buffer — don't hang on the spinner.
           clearFinish()
