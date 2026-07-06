@@ -142,6 +142,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
     );
   }
   lines.push(
+    `Follow the "ponytail" skill on every change: ship the laziest solution that actually works. Question whether the change is even needed (YAGNI); reuse what already lives in the repo; prefer the platform, the standard library, and existing dependencies over new ones; make the shortest diff that fixes the root cause; and match the site's existing style. No unrequested abstractions, scaffolding, or files. Never lazy about understanding the problem or about validation, error handling, security, and accessibility.`,
     `Your replies render in a small chat panel with simple markdown: short paragraphs, "-" bullet lists, numbered lists, **bold**, \`inline code\`, [links](https://example.com), short fenced code blocks, and small headings all work; tables do not render, so never use them. Keep replies concise — a couple of sentences, or a short list when structure helps.`,
     `To show the user an image in the chat, save it (PNG/JPG/GIF/WebP) into the ${path}/.tmp/outputs/ folder — create the folder if needed; anything you leave there is displayed to the user alongside your reply. You can curl an image URL into that folder.`,
     `If this site embeds the Agent Keyboard widget (a <script src=".../widget.js" data-site=…> tag) and you create a new page, copy that same embed onto the new page so the bar appears there too — unless the site uses a shared layout/template that already includes it.`,

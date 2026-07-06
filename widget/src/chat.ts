@@ -3,7 +3,7 @@
 // fetched on FIRST expand only; older pages load via a top IntersectionObserver.
 
 import { api, type ConversationMessage } from './api'
-import { logout } from './auth'
+import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { discoverJobs, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
@@ -12,6 +12,8 @@ import { getState, patchUi, subscribe } from './state'
 
 export interface Chat {
   footerEl: HTMLElement
+  /** Drop cached history so it refetches (with the authed token) on next expand — called after login. */
+  resetConversation: () => void
 }
 
 export interface ChatDeps {
@@ -195,10 +197,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       n.appendChild(icon(iconName, 16))
       n.appendChild(el('span', undefined, (s) => (s.textContent = label)))
     })
+  const identity = el('div', 'ak-menu-id') // "Signed in as X" — non-interactive header
   const stopItem = menuItem('stop', 'Stop')
   const refreshItem = menuItem('retry', 'Refresh')
   const logoutItem = menuItem('logout', 'Log out')
-  menu.append(stopItem, refreshItem, logoutItem)
+  menu.append(identity, stopItem, refreshItem, logoutItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -215,7 +218,12 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     menuOpen = open
     show(menu, open)
     settings.classList.toggle('on', open)
-    if (open) (stopItem as HTMLButtonElement).disabled = !isBusy() // Stop is live only while working
+    if (open) {
+      (stopItem as HTMLButtonElement).disabled = !isBusy() // Stop is live only while working
+      const email = getSessionEmail() // refresh on open so it's current
+      identity.textContent = email ? `Signed in as ${email}` : ''
+      show(identity, !!email)
+    }
   }
   on(settings, 'click', (e) => {
     e.stopPropagation()
@@ -376,6 +384,19 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     scroll.scrollTop = scroll.scrollHeight
   }
 
+  // Ghost skeleton while history fetches — reuses the streaming pill's .ak-shimmer
+  // sweep (reduced-motion aware). Shown the moment a load kicks off, replaced by
+  // rebuildStatic() when the fetch resolves.
+  const renderSkeleton = () => {
+    clearNode(listEl)
+    liveUser = liveAsst = liveTimer = liveBody = null
+    for (const w of ['58%', '82%', '40%', '70%']) {
+      const row = el('div', 'ak-skel-row', (n) => (n.style.width = w))
+      row.appendChild(el('div', 'ak-shimmer'))
+      listEl.appendChild(row)
+    }
+  }
+
   const loadHistory = async () => {
     loading = true
     // Cross-device: attach to a job another device started. First open only —
@@ -451,6 +472,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (footer.firstChild !== deps.composerEl) footer.appendChild(deps.composerEl)
     if (!loaded && !loading) {
       void loadHistory()
+      renderSkeleton() // paint the ghost state while the fetch is in flight
       return
     }
     const justOpened = !wasExpanded
@@ -470,6 +492,19 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (justOpened || pinned) toBottom()
   }
 
+  // After login, drop any stale (anon/empty) history so it refetches with the
+  // authed token — no manual page refresh. If expanded, render() reloads now
+  // (with the skeleton); otherwise the next expand picks it up.
+  const resetConversation = () => {
+    history = []
+    cursor = null
+    loaded = false
+    loading = false
+    lastLoadTurnCount = -1
+    renderedKey = ''
+    render()
+  }
+
   subscribe(render)
   render()
 
@@ -480,5 +515,5 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (st.ui.mode === 'expanded' && (st.job.phase === 'streaming' || st.job.phase === 'sending')) updateLive()
   }, 1000)
 
-  return { footerEl: footer }
+  return { footerEl: footer, resetConversation }
 }

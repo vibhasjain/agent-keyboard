@@ -52,6 +52,7 @@ interface Composer {
   hasContent: () => boolean
   setDisabled: (d: boolean) => void
   setNote: (text: string, isError?: boolean) => void
+  flashConfirm: (text: string) => void
   reset: () => void
   teardownVoice: () => void
 }
@@ -262,6 +263,15 @@ function makeComposer(): Composer {
       syncSend()
     },
     setNote,
+    // Flash a brief amber confirmation as the composer's placeholder, then clear it.
+    flashConfirm: (text) => {
+      ta.placeholder = text
+      ta.classList.add('ak-confirm')
+      setTimeout(() => {
+        ta.classList.remove('ak-confirm')
+        ta.placeholder = ''
+      }, 1200)
+    },
     reset,
     teardownVoice: () => voice.teardown(),
   }
@@ -330,9 +340,16 @@ export function mountBar(shadow: ShadowRoot): void {
     n.appendChild(icon('arrow-right', 15))
     n.setAttribute('aria-label', 'Sign in')
   })
+  // Dismiss the login form back to the empty composer — so a signed-out user is
+  // never trapped in the sign-in fields (the bar auto-focuses on open).
+  const loginBack = el('button', 'ak-lg-back', (n) => {
+    n.type = 'button'
+    n.textContent = '← back'
+    n.setAttribute('aria-label', 'Back')
+  })
   const lgMark = () => el('span', 'ak-lg-mark', (n) => (n.textContent = '>'))
   loginRow.append(
-    el('div', 'ak-lg-row', (n) => n.append(lgMark(), emailInput)),
+    el('div', 'ak-lg-row', (n) => n.append(lgMark(), emailInput, loginBack)),
     el('div', 'ak-lg-rule'),
     el('div', 'ak-lg-row', (n) => n.append(lgMark(), pwInput, goBtn)),
   )
@@ -386,8 +403,12 @@ export function mountBar(shadow: ShadowRoot): void {
 
   // -- auth gate --
   // The input bar is always visible; the first focus while signed out swaps it
-  // for the login form instead of letting the user type into nothing.
+  // for the login form instead of letting the user type into nothing. Pressing
+  // "back" dismisses it — a brief window then keeps the empty composer put so the
+  // dismiss doesn't immediately bounce back into login.
+  let lastLoginDismiss = 0
   on(composer.el, 'focusin', () => {
+    if (Date.now() - lastLoginDismiss < 600) return
     if (getState().auth !== 'authed' && getState().ui.mode !== 'login') {
       patchUi({ mode: 'login' })
       setTimeout(() => emailInput.focus(), 60)
@@ -426,6 +447,12 @@ export function mountBar(shadow: ShadowRoot): void {
     }, LOGIN_IDLE_MS)
   }
   for (const ev of ['input', 'keydown', 'pointerdown', 'focusin']) on(loginRow, ev, armLoginIdle)
+  on(loginBack, 'click', () => {
+    disarmLoginIdle()
+    lastLoginDismiss = Date.now()
+    ;(shadow.activeElement as HTMLElement | null)?.blur?.() // drop the keyboard, don't refocus into the gate
+    patchUi({ mode: 'composing' })
+  })
   on(loginRow, 'submit', async (e) => {
     e.preventDefault()
     if (loggingIn) return
@@ -437,10 +464,10 @@ export function mountBar(shadow: ShadowRoot): void {
     try {
       await login(emailInput.value.trim(), pwInput.value)
       pwInput.value = ''
+      chat.resetConversation() // drop stale/empty history so it reloads authed — no manual refresh
       patchUi({ mode: 'composing' }) // straight into the prompt box — no refresh needed
       setTimeout(() => composer.focus(), 60)
-      composer.setNote('✓ Signed in') // brief confirmation, then it clears itself
-      setTimeout(() => composer.setNote(''), 1800)
+      composer.flashConfirm('Logged in ✓') // brief amber confirmation in the prompt placeholder
     } catch {
       loginRow.classList.remove('shake')
       void loginRow.offsetWidth

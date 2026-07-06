@@ -60,9 +60,10 @@ RUN npm ci --omit=dev
 COPY server/tsconfig.json ./
 COPY server/src ./src
 
-# Repo-shipped agent skills (image-gen, verify-in-browser, provision-user) —
-# seeded into /data/.claude/skills at boot (see src/skills.ts). Below npm ci so
-# a skill edit doesn't bust the dependency layer (sharp's native build).
+# Repo-shipped agent skills (image-gen, verify-in-browser, provision-user,
+# self-ops, frontend-design, ponytail) — seeded into /data/.claude/skills at boot
+# (see src/skills.ts). Below npm ci so a skill edit doesn't bust the dependency
+# layer (sharp's native build).
 COPY server/skills /app/skills
 
 # Branded invite/recovery email templates — the provision-user skill reads them

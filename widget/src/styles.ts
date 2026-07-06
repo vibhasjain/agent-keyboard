@@ -163,6 +163,12 @@ export const STYLES = `
   caret-color:var(--ak-amber);
 }
 .ak-lg-go{ width:32px; height:32px; }
+.ak-lg-back{
+  flex:none; border:none; background:transparent; cursor:pointer;
+  font-family:var(--ak-mono); font-size:11px; color:var(--ak-ink3);
+  padding:4px 2px; transition:color .2s ease;
+}
+.ak-lg-back:hover{ color:var(--ak-amber); }
 
 /* ---- composer (Claude Code terminal input box) ---- */
 .ak-composer{
@@ -185,6 +191,7 @@ export const STYLES = `
   max-height:88px; padding:8px 4px; overflow-y:auto;
 }
 .ak-ta::placeholder{ color:var(--ak-ink3); }
+.ak-ta.ak-confirm::placeholder{ color:var(--ak-amber); opacity:1; } /* brief sign-in confirmation */
 .ak-ta:disabled{ opacity:.6; }
 
 .ak-icon-btn{
@@ -268,6 +275,11 @@ export const STYLES = `
   display:flex; flex-direction:column; gap:1px;
   animation:ak-pop .16s cubic-bezier(.2,.7,.2,1);
 }
+.ak-menu-id{
+  font-family:var(--ak-mono); font-size:10.5px; color:var(--ak-ink3);
+  padding:7px 11px 8px; margin-bottom:3px; border-bottom:1px solid var(--ak-rule);
+  max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
 .ak-menu-item{
   display:flex; align-items:center; gap:11px; width:100%;
   padding:9px 11px; border-radius:7px; border:none; background:none; cursor:pointer;
@@ -339,6 +351,13 @@ export const STYLES = `
 .ak-t-attach{ display:flex; align-items:center; gap:5px; color:var(--ak-ink3); font-size:11px; margin:1px 0 5px; }
 .ak-divider{ color:var(--ak-ink3); font-size:11px; letter-spacing:.06em; margin:16px 0 16px 22px; }
 .ak-empty{ color:var(--ak-ink3); font-size:13px; margin-top:30vh; }
+
+/* history-loading ghost: dim bars with the shared .ak-shimmer sweep */
+.ak-skel-row{
+  position:relative; height:13px; margin:0 0 14px; border-radius:5px;
+  background:var(--ak-bg2); overflow:hidden;
+}
+.ak-skel-row:first-child{ margin-top:4px; }
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){

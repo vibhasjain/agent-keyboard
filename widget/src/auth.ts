@@ -48,6 +48,11 @@ export function hasStoredSession(): boolean {
   return readSession() !== null
 }
 
+/** The signed-in user's email (from the stored session), or null when signed out. */
+export function getSessionEmail(): string | null {
+  return readSession()?.email ?? null
+}
+
 // ── invite / recovery landing ────────────────────────────────────────────────
 // Supabase's verify endpoint redirects the invite/recovery link back to an
 // allow-listed URL with the session in the hash (#access_token=…&type=invite).

@@ -84,8 +84,10 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   session; confirm first), "how much context left?", "install skill X",
   "invite a@b.com"). Per-site `settings.json` on the volume, edited by the agent, validated/applied
   per spawn by `server/src/harness.ts` (the KNOBS table — one entry per knob). Skills ship in
-  `server/skills/` (image-gen · verify-in-browser · provision-user), seeded to `/data/.claude/skills`
-  at boot; headless Chromium is baked into the image (`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`).
+  `server/skills/` (image-gen · verify-in-browser · provision-user · self-ops · frontend-design ·
+  ponytail) — committed to the repo, baked into the image, and seeded to `/data/.claude/skills` at
+  boot, so **every fork/clone inherits them**; skills the agent installs at runtime live only on that
+  instance's volume. Headless Chromium is baked into the image (`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`).
 
 ---
 
