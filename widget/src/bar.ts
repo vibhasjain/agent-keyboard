@@ -84,9 +84,14 @@ function makeComposer(): Composer {
     n.appendChild(icon('arrow-up'))
     n.setAttribute('aria-label', 'Send')
   })
-  row.append(ta, cam, mic, sendBtn)
+  // Inline "transcribing…" cue: a small amber spinner that sits after the text
+  // while dictation audio is being transcribed, so the gap before words appear
+  // reads as "working", not "stuck".
+  const vspin = el('div', 'ak-spin ak-vspin')
+  row.append(ta, vspin, cam, mic, sendBtn)
   root.append(photos.el, row, note)
   show(note, false)
+  show(vspin, false)
 
   // -- voice / dictation --
   let baseText = ''
@@ -100,10 +105,12 @@ function makeComposer(): Composer {
       const cur = getState().ui
       if (cur.voice !== s || cur.voiceError !== err) patchUi({ voice: s, voiceError: err })
       renderMic()
+      if (s !== 'live') show(vspin, false) // leaving the live session clears any lingering spinner
       // No "Listening…" note — the mic button's live state already says it.
       if (s === 'error' && err) setNote(err, true)
       else if (s === 'idle' || s === 'live') setNote('')
     },
+    onTranscribing: (active) => show(vspin, active),
     onPartial: (delta) => {
       partial = joinText(partial, delta)
       ta.value = joinText(baseText, partial)

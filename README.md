@@ -139,7 +139,7 @@ listing any missing *required* var.
 | `PORT` | Default `8080`. |
 | `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL` | Commit identity. Default `Agent Keyboard` / `agent@agentkeyboard.com`. |
 | `GIT_COMMITTER_NAME` / `GIT_COMMITTER_EMAIL` | Same defaults. |
-| `REALTIME_TRANSCRIBE_MODEL` | Default `gpt-4o-transcribe`. |
+| `REALTIME_TRANSCRIBE_MODEL` | Voice transcription model. Default `gpt-realtime-whisper` (natively streaming, for live dictation). |
 | `REALTIME_FALLBACK` | Set `1` to use the fallback realtime session shape. |
 
 Copy [`server/.env.example`](./server/.env.example) to `server/.env` for local dev.

@@ -217,6 +217,8 @@ export const STYLES = `
 @keyframes ak-ping{ 0%{ transform:scale(.7); opacity:.7; } 80%,100%{ transform:scale(1.9); opacity:0; } }
 .ak-note{ font-family:var(--ak-mono); font-size:10px; color:var(--ak-ink3); padding:0 6px 2px; }
 .ak-note.err{ color:var(--ak-err); }
+/* inline transcribing cue — a smaller amber .ak-spin that rides beside the text */
+.ak-vspin{ width:14px; height:14px; border-width:2px; align-self:center; margin:0 4px; }
 
 /* ---- photo chips ---- */
 .ak-chips{ display:none; flex-wrap:wrap; gap:6px; padding:2px 4px 0; }
