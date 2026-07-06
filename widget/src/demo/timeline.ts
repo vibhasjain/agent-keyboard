@@ -68,14 +68,25 @@ export function runTimeline(steps: TimelineStep[], opts: TimelineOpts): void {
     clearTimer()
   }
 
-  // The ONLY pause is a hidden document (tab switch) — literally invisible.
-  // No IntersectionObserver, no prefers-reduced-motion, no other gatekeepers:
-  // the owner's standing rule is that demo animations play on every device,
-  // always. (A hidden tab still banks its offset and resumes exactly in place.)
+  // Play only when actually on screen: a hidden tab (visibilitychange) OR the
+  // iframe scrolled out of the parent's viewport. The parent can't be observed
+  // from inside a cross-origin iframe, so the embedding page watches the frame
+  // with an IntersectionObserver and posts {type:'ak-demo-vis', visible} here.
+  // Default visible=true so an older embedder that never posts still plays (no
+  // regression) — the message only ever PAUSES an off-screen frame. Freezing
+  // banks the offset, so a scene resumes exactly where it left off, never jumps.
+  // This matters most on mobile, where a forever-looping off-screen demo would
+  // otherwise burn the main thread and make scrolling janky.
+  let inView = true
   const sync = (): void => {
-    if (!document.hidden) resume()
+    if (!document.hidden && inView) resume()
     else pause()
   }
+  window.addEventListener('message', (e: MessageEvent) => {
+    if (e.source !== window.parent || !e.data || e.data.type !== 'ak-demo-vis') return
+    inView = !!e.data.visible
+    sync()
+  })
   document.addEventListener('visibilitychange', sync)
   sync()
 }

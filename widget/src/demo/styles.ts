@@ -10,6 +10,10 @@ export const DEMO_STYLES = `
 .ak-lg-row.demo-focus .ak-lg-mark{ color:var(--ak-amber); }
 /* the bar floats above the fake browser chrome (.demo-chrome, light DOM) */
 .ak-zone{ padding-bottom:74px; }
+/* backdrop-filter blur is a heavy mobile GPU cost, recomposited every frame of a
+   forever-looping demo. The surfaces are near-opaque already, so it reads the
+   same without the blur — drop it in the demo only (the shipped widget keeps it). */
+.ak-pill, .ak-composer, .ak-mini{ backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
 /* demos ignore Reduce Motion by design (owner's call): restore the widget's
    own animations that STYLES turns off under the media query */
 @media (prefers-reduced-motion: reduce){

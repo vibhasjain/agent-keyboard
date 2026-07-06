@@ -34,14 +34,16 @@ export const ship: Scene = {
       loopAt: 20200,
       posterAt: 17600,
       steps: [
-        // 0–2.2s: establish — you are on a website; nothing else happens.
+        // 0–0.9s: establish — you're on a website, the bar resting as the ⌨️ corner.
         {
-          at: 2200,
+          at: 900,
           run: () => {
+            patchUi({ mode: 'composing' }) // the corner opens into the prompt bar, so the prompt is visible going in
             minisite.dim() // the page recedes; the bar becomes the subject
-            typeInto(ta, PROMPT, 12)
           },
         },
+        // now the composer is on screen — type the prompt where it can be seen.
+        { at: 1900, run: () => typeInto(ta, PROMPT, 12) },
         {
           at: 5600,
           run: () => {
@@ -60,7 +62,7 @@ export const ship: Scene = {
       onReset: () => {
         clearTextarea(ta)
         setJob({ phase: 'idle' })
-        patchUi({ mode: 'collapsed' })
+        patchUi({ mode: 'mini' }) // back to the ⌨️ corner, so each loop opens the bar again
         minisite.reset()
       },
     }
