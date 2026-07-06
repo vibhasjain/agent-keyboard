@@ -298,16 +298,37 @@ button::-moz-focus-inner{ border:0; }
   max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
 }
 .ak-menu-item{
-  display:flex; align-items:center; gap:11px; width:100%;
+  position:relative; display:flex; align-items:center; gap:11px; width:100%;
   padding:9px 11px; border-radius:7px; border:none; background:none; cursor:pointer;
   font-family:var(--ak-mono); font-size:13px; color:var(--ak-ink2); text-align:left;
 }
 .ak-menu-item svg{ width:16px; height:16px; color:var(--ak-ink3); flex:none; }
 .ak-menu-item:hover{ background:rgba(255,255,255,.05); color:var(--ak-ink); }
 .ak-menu-item:hover svg{ color:var(--ak-amber); }
-.ak-menu-item:disabled{ opacity:.38; cursor:default; }
-.ak-menu-item:disabled:hover{ background:none; color:var(--ak-ink2); }
-.ak-menu-item:disabled:hover svg{ color:var(--ak-ink3); }
+.ak-menu-item[data-tip]::after{
+  content:attr(data-tip); position:absolute; left:calc(100% + 8px); top:50%;
+  width:max-content; max-width:238px; padding:7px 9px; border-radius:7px;
+  border:1px solid rgba(255,255,255,.09); background:rgba(12,11,10,.98);
+  color:var(--ak-ink2); box-shadow:0 8px 26px rgba(0,0,0,.46);
+  font-size:11px; line-height:1.35; white-space:normal; text-align:left;
+  opacity:0; transform:translate(-4px,-50%); pointer-events:none;
+  transition:opacity .14s ease, transform .14s ease; z-index:5;
+}
+.ak-menu-item[data-tip]::before{
+  content:''; position:absolute; left:calc(100% + 3px); top:50%;
+  width:8px; height:8px; background:rgba(12,11,10,.98);
+  border-left:1px solid rgba(255,255,255,.09); border-bottom:1px solid rgba(255,255,255,.09);
+  opacity:0; transform:translate(-4px,-50%) rotate(45deg); pointer-events:none;
+  transition:opacity .14s ease, transform .14s ease; z-index:6;
+}
+.ak-menu-item[data-tip]:hover::after,
+.ak-menu-item[data-tip]:focus-visible::after{ opacity:1; transform:translate(0,-50%); }
+.ak-menu-item[data-tip]:hover::before,
+.ak-menu-item[data-tip]:focus-visible::before{ opacity:1; transform:translate(0,-50%) rotate(45deg); }
+.ak-menu-item:disabled{ cursor:default; color:rgba(184,178,167,.38); }
+.ak-menu-item:disabled svg{ color:rgba(111,106,97,.38); }
+.ak-menu-item:disabled:hover{ background:none; color:rgba(184,178,167,.38); }
+.ak-menu-item:disabled:hover svg{ color:rgba(111,106,97,.38); }
 .ak-menu-spin{ width:16px; height:16px; border-width:2px; }
 .ak-ov-scroll{
   flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;

@@ -209,25 +209,29 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     n.setAttribute('aria-label', 'Collapse')
   })
 
-  // Settings (top-left) → a small dropdown: stop (only while working), refresh, log out.
+  // Settings (top-left) → a small dropdown: stop, restart, refresh, log out.
   const settings = el('button', 'ak-ov-settings', (n) => {
     n.type = 'button'
     n.appendChild(icon('settings', 18))
     n.setAttribute('aria-label', 'Settings')
   })
   const menu = el('div', 'ak-menu')
-  const menuItem = (iconName: string, label: string) => {
+  const menuItem = (iconName: string, label: string, tip?: string) => {
     const btn = el('button', 'ak-menu-item', (n) => {
       n.type = 'button'
+      if (tip) {
+        n.dataset.tip = tip
+        n.setAttribute('aria-description', tip)
+      }
       n.appendChild(icon(iconName, 16))
       n.appendChild(el('span', undefined, (s) => (s.textContent = label)))
     })
     return btn
   }
   const identity = el('div', 'ak-menu-id') // "Signed in as X" — non-interactive header
-  const stopItem = menuItem('stop', 'Stop')
-  const restartItem = menuItem('restart', 'Restart')
-  const refreshItem = menuItem('retry', 'Refresh')
+  const stopItem = menuItem('stop', 'Stop', 'Cancel the current agent run.')
+  const restartItem = menuItem('restart', 'Restart', 'Clear context, discard local checkout changes, and pull latest.')
+  const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
   menu.append(identity, stopItem, restartItem, refreshItem, logoutItem)
   show(menu, false)
