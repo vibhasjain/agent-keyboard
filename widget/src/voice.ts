@@ -151,13 +151,15 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
 
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
-      const model = tok.model ? `?model=${encodeURIComponent(tok.model)}` : ''
-      const sdpRes = await fetch(`https://api.openai.com/v1/realtime/calls${model}`, {
+      // The ephemeral token already carries the transcription session config.
+      // Do not pass tok.model here: it is the transcription model, not a
+      // realtime transport model, and /realtime/calls rejects it with 400.
+      const sdpRes = await fetch('https://api.openai.com/v1/realtime/calls', {
         method: 'POST',
         body: offer.sdp,
         headers: { Authorization: `Bearer ${tok.value}`, 'Content-Type': 'application/sdp' },
       })
-      if (!sdpRes.ok) throw new Error(`realtime dial failed (${sdpRes.status})`)
+      if (!sdpRes.ok) throw new Error('Voice connection failed')
       const answerSdp = await sdpRes.text()
       if (stale()) {
         teardownLiveSession()
