@@ -157,24 +157,26 @@ h2 em{ font-style:italic; color:var(--warm); }
 .honesty{ max-width:680px; margin:16px auto 0; text-align:center; font-family:var(--mono); font-size:11.5px; color:var(--ink-3); }
 
 /* ---- architecture: many editors → one server → many repos (an hourglass) ---- */
-.arch{ max-width:460px; margin:40px auto 0; display:flex; flex-direction:column; align-items:center; }
-.arch-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
-.arch-chip{ font-family:var(--mono); font-size:12px; color:var(--ink-2);
-  background:var(--bg-2); border:1px solid var(--rule-2); border-radius:999px; padding:6px 13px; }
-.arch-repo{ font-family:var(--mono); font-size:12px; color:var(--amber);
-  background:var(--bg-2); border:1px solid var(--rule-2); border-radius:8px; padding:6px 12px; }
-.arch-note{ max-width:360px; margin:11px auto 0; text-align:center;
-  font-family:var(--mono); font-size:11px; line-height:1.55; color:var(--ink-3); }
+.arch{ max-width:360px; margin:40px auto 0; display:flex; flex-direction:column; align-items:center; }
+.arch-note{ max-width:340px; margin:14px auto 0; text-align:center;
+  font-family:var(--mono); font-size:11px; line-height:1.6; color:var(--ink-3); }
 .arch-note b{ color:var(--warm); font-weight:500; }
-/* the shared-server card — the hero of the diagram */
-.arch-core{ width:100%; max-width:340px; margin:4px 0; text-align:center;
-  background:linear-gradient(180deg, rgba(255,184,107,.05), rgba(255,184,107,0));
-  border:1px solid rgba(255,184,107,.45); border-radius:14px; padding:17px 20px;
-  box-shadow:0 10px 34px rgba(255,184,107,.06); }
-.arch-core-title{ font-family:var(--mono); font-size:14px; color:var(--amber); }
-.arch-core-title .think{ color:var(--violet); font-style:normal; margin-right:2px; }
-.arch-core-sub{ font-family:var(--mono); font-size:11.5px; line-height:1.6; color:var(--ink-3); margin-top:8px; }
-.arch-core-sub b{ color:var(--warm); font-weight:500; }
+/* the flow: your app → the CLI → your repo → your app, changed (same place) */
+.arch-node{ width:100%; background:var(--bg-2); border:1px solid var(--rule-2);
+  border-radius:14px; padding:15px 18px; text-align:center; }
+.arch-node b{ display:block; font-family:var(--mono); font-size:13.5px; font-weight:500; color:var(--amber); }
+.arch-node span{ display:block; font-family:var(--mono); font-size:11px; line-height:1.55; color:var(--ink-3); margin-top:6px; }
+.arch-node .think{ color:var(--violet); font-style:normal; margin-right:2px; }
+/* the CLI — the hero card */
+.arch-node.core{ background:linear-gradient(180deg, rgba(255,184,107,.05), rgba(255,184,107,0));
+  border-color:rgba(255,184,107,.45); box-shadow:0 10px 34px rgba(255,184,107,.06); }
+/* the changed app — the payoff, landed in place */
+.arch-node.done{ border-color:rgba(109,211,150,.45); }
+.arch-node.done b{ color:var(--ok); }
+/* the loop-back rail: the payoff app is the same place you started */
+.arch-loop{ display:flex; align-items:center; gap:8px; margin:12px auto 0; max-width:340px;
+  font-family:var(--mono); font-size:11px; line-height:1.5; color:var(--warm); }
+.arch-loop svg{ width:16px; height:16px; flex:none; color:var(--ok); }
 /* vertical connector: a slim track, a downward-travelling pulse, an arrowhead, a side label */
 .arch-link{ position:relative; width:2px; height:46px; background:var(--rule-2); border-radius:2px; margin:8px 0; }
 .arch-link::after{ content:""; position:absolute; left:50%; bottom:-1px; transform:translateX(-50%);
@@ -306,31 +308,34 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="kicker">How it works</div>
     <h2>Your keys. <em>Your boxes.</em></h2>
     <div class="arch">
-      <!-- many editors, one login -->
-      <div class="arch-row">
-        <span class="arch-chip">you</span>
-        <span class="arch-chip">a teammate</span>
-        <span class="arch-chip">anyone you invite</span>
+      <!-- you're on your app; the bar is right here -->
+      <div class="arch-node">
+        <b>Your app</b>
+        <span>the bar sits right here — you, or anyone you invite</span>
       </div>
-      <p class="arch-note">Everyone signs in through one <b>Supabase</b>. No public signups — you pick who's in.</p>
+      <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">you prompt</span></div>
 
-      <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">sign in</span></div>
-
-      <!-- the one shared server: the point of the whole picture -->
-      <div class="arch-core">
-        <div class="arch-core-title"><em class="think">✻</em> One Fly server</div>
-        <div class="arch-core-sub">A single Claude&nbsp;Code CLI lives here. It keeps <b>one session per site</b>, so every editor shares the same agent and the same history — invite ten people, it's still one conversation.</div>
+      <!-- the shared brain on your server -->
+      <div class="arch-node core">
+        <b><em class="think">✻</em> Claude&nbsp;Code CLI</b>
+        <span>on your Fly server — one shared session per site, so everyone you invite edits with the same agent and history</span>
       </div>
-
       <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">commit&nbsp;+&nbsp;push</span></div>
 
-      <!-- one server, many repos -->
-      <div class="arch-row">
-        <span class="arch-repo">blog.git</span>
-        <span class="arch-repo">shop.git</span>
-        <span class="arch-repo">docs.git</span>
+      <!-- git -->
+      <div class="arch-node">
+        <b>Your repo</b>
+        <span>git — one for every site you connect; your host redeploys on push</span>
       </div>
-      <p class="arch-note">That one server pushes to <b>every repo you connect</b> — any editor can ship to any of your sites.</p>
+      <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">deploys</span></div>
+
+      <!-- back to your app, changed, in the same place -->
+      <div class="arch-node done">
+        <b>Your app, changed</b>
+        <span>the same page you're looking at — live</span>
+      </div>
+
+      <p class="arch-loop"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg>You never leave the page — you ask, and the change lands right where you're looking.</p>
     </div>
   </div>
 </section>
