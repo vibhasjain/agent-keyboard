@@ -221,7 +221,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (open) {
       (stopItem as HTMLButtonElement).disabled = !isBusy() // Stop is live only while working
       const email = getSessionEmail() // refresh on open so it's current
-      identity.textContent = email ? `Signed in as ${email}` : ''
+      identity.textContent = email ?? ''
       show(identity, !!email)
     }
   }

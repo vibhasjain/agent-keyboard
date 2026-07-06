@@ -4,9 +4,10 @@
 // (push-to-talk speech-to-text, no audio playback).
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
-// gpt-realtime-whisper is OpenAI's natively-streaming transcription model, built
-// for live push-to-talk: transcript deltas arrive as you speak instead of in one
-// lump at the end (which gpt-4o-transcribe, a file/request-response model, does).
+// gpt-realtime-whisper: natively-streaming realtime transcription. It rejects
+// turn_detection ("not supported for this transcription model"), so this session
+// omits it — the widget commits the audio buffer manually to trigger the
+// transcript (see widget/src/voice.ts).
 const TRANSCRIBE_MODEL = process.env.REALTIME_TRANSCRIBE_MODEL ?? "gpt-realtime-whisper";
 const FALLBACK = process.env.REALTIME_FALLBACK === "1";
 
@@ -24,7 +25,8 @@ function transcriptionBody() {
       audio: {
         input: {
           transcription: { model: TRANSCRIBE_MODEL, language: "en" },
-          turn_detection: { type: "server_vad", silence_duration_ms: 600 },
+          // No turn_detection: gpt-realtime-whisper rejects it. The widget commits
+          // the buffer on mic-stop to trigger transcription.
           noise_reduction: { type: "near_field" },
         },
       },

@@ -167,23 +167,33 @@ function makeComposer(): Composer {
     show(note, !!text)
   }
 
-  const doSend = () => {
-    const text = ta.value.trim()
-    if (!text && !photos.hasAttachments()) return
+  let sending = false
+  const doSend = async () => {
+    if (sending) return
     if (photos.isUploading()) {
       // Don't silently drop an in-flight photo from the send payload.
       setNote('Photo still uploading…', true)
       return
     }
-    voice.teardown()
-    const attachmentIds = photos.getAttachmentIds()
-    const thumbs = photos.takeThumbUrls() // transfers ownership for transcript display
-    start({ text, attachmentIds, page: location.pathname, thumbs })
-    reset()
-    // No "Queued" note — the queue is already visible (dim lines + the +N badge).
-    // Stay in the expanded chat if that's where the message was sent from;
-    // otherwise let the bar fall back to its streaming pill.
-    if (getState().ui.mode !== 'expanded') patchUi({ mode: 'collapsed' })
+    sending = true
+    try {
+      // If dictation is live, commit + fold its transcript in FIRST — hitting send
+      // without tapping the mic off must not drop what was just spoken. No-op when
+      // not dictating; brief spinner while the last words transcribe.
+      await voice.flush()
+      const text = ta.value.trim()
+      if (!text && !photos.hasAttachments()) return
+      const attachmentIds = photos.getAttachmentIds()
+      const thumbs = photos.takeThumbUrls() // transfers ownership for transcript display
+      start({ text, attachmentIds, page: location.pathname, thumbs })
+      reset()
+      // No "Queued" note — the queue is already visible (dim lines + the +N badge).
+      // Stay in the expanded chat if that's where the message was sent from;
+      // otherwise let the bar fall back to its streaming pill.
+      if (getState().ui.mode !== 'expanded') patchUi({ mode: 'collapsed' })
+    } finally {
+      sending = false
+    }
   }
 
   const reset = () => {

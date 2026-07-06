@@ -30,7 +30,8 @@ const SESSION_UPDATE = {
     audio: {
       input: {
         transcription: { model: 'gpt-realtime-whisper', language: 'en' },
-        turn_detection: { type: 'server_vad', silence_duration_ms: 600 },
+        // gpt-realtime-whisper rejects turn_detection; we commit the buffer on
+        // mic-stop instead (see finish()).
         noise_reduction: { type: 'near_field' },
       },
     },
@@ -39,6 +40,9 @@ const SESSION_UPDATE = {
 
 export interface VoiceController {
   toggle: () => void
+  // Commit any in-flight dictation and resolve once its transcript is folded in —
+  // await before sending so nothing spoken is dropped. No-op when not dictating.
+  flush: () => Promise<void>
   teardown: () => void
 }
 
@@ -55,6 +59,24 @@ export interface VoiceHandlers {
 
 export function makeVoice(h: VoiceHandlers): VoiceController {
   const send = (obj: unknown) => liveSession?.dc?.send(JSON.stringify(obj))
+  // Non-null while a committed buffer is being transcribed (mic stopped → waiting
+  // for the transcript). Doubles as the "we're finishing" flag.
+  let finishTimer: ReturnType<typeof setTimeout> | null = null
+  const clearFinish = () => {
+    if (finishTimer) {
+      clearTimeout(finishTimer)
+      finishTimer = null
+    }
+  }
+  // Callers awaiting the in-flight transcript (send() flushes before reading the
+  // text so nothing spoken is lost). Resolved once the transcript lands (or we
+  // give up), so they never hang.
+  let flushResolvers: Array<() => void> = []
+  const settleFlush = () => {
+    const rs = flushResolvers
+    flushResolvers = []
+    rs.forEach((r) => r())
+  }
 
   const connect = async () => {
     const mySeq = ++connectSeq
@@ -92,14 +114,24 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
         } catch {
           return
         }
-        // Server VAD heard speech → transcript is now in flight (spinner on).
-        if (msg.type === 'input_audio_buffer.speech_started') {
-          h.onTranscribing(true)
-        } else if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.delta) {
+        // gpt-realtime-whisper has no VAD: transcription runs after we commit
+        // (in finish()), then streams deltas and a final completed.
+        if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.delta) {
           h.onPartial(msg.delta)
         } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
-          h.onTranscribing(false) // this segment's transcript landed (spinner off)
-          if (msg.transcript) h.onFinal(String(msg.transcript).trim())
+          clearFinish()
+          if (msg.transcript) h.onFinal(String(msg.transcript).trim()) // fold text in BEFORE resolving flush
+          h.onTranscribing(false)
+          teardownLiveSession()
+          h.onState('idle')
+          settleFlush()
+        } else if (msg.type === 'error' && finishTimer) {
+          // e.g. committing an empty/too-short buffer — don't hang on the spinner.
+          clearFinish()
+          h.onTranscribing(false)
+          teardownLiveSession()
+          h.onState('idle')
+          settleFlush()
         }
       }
 
@@ -131,19 +163,48 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
     }
   }
 
+  // Hard stop: cancel everything now, no transcript wait (used when leaving the
+  // composer). Resolves any pending flush so an awaiting send() never hangs.
   const stop = () => {
     connectSeq++ // cancels any in-flight connect at its next checkpoint
+    clearFinish()
     teardownLiveSession()
     h.onTranscribing(false)
     h.onState('idle')
+    settleFlush()
   }
+
+  // Graceful stop: stop capturing, commit the buffered audio, and RESOLVE ONLY
+  // once the transcript has landed (folded into the composer by onFinal). Both the
+  // mic-off tap and send() call this, so whatever was spoken is captured before it
+  // matters — nothing is lost by hitting send without tapping the mic off first.
+  // A no-op (resolves immediately) when there's no live session.
+  const flush = (): Promise<void> =>
+    new Promise<void>((resolve) => {
+      const s = liveSession
+      if (!s || s.dc?.readyState !== 'open') return resolve()
+      flushResolvers.push(resolve)
+      if (finishTimer) return // already committed; this caller settles with it
+      s.stream?.getTracks().forEach((t) => t.stop())
+      s.pc.getSenders().forEach((sn) => sn.track?.stop())
+      h.onTranscribing(true)
+      send({ type: 'input_audio_buffer.commit' })
+      finishTimer = setTimeout(() => {
+        finishTimer = null
+        h.onTranscribing(false)
+        teardownLiveSession()
+        h.onState('idle')
+        settleFlush()
+      }, 8000)
+    })
 
   return {
     toggle: () => {
       const s = h.getState()
       if (s === 'idle' || s === 'error') void connect()
-      else stop()
+      else void flush()
     },
+    flush,
     teardown: stop,
   }
 }
