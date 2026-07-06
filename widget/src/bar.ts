@@ -253,6 +253,18 @@ function makeComposer(): Composer {
   syncSend()
   renderMic()
 
+  // Camera + mic fire on click without the textarea focus that gates the rest of
+  // the composer (focusing the textarea is what opens the login form), so they'd
+  // leak while signed out. Disable both until authed — a disabled button neither
+  // clicks nor focuses, and the .ak-icon-btn:disabled style dims it.
+  const applyAuthLock = () => {
+    const locked = getState().auth !== 'authed'
+    cam.disabled = locked
+    mic.disabled = locked
+  }
+  applyAuthLock()
+  subscribe(applyAuthLock)
+
   return {
     el: root,
     focus: () => ta.focus(),
