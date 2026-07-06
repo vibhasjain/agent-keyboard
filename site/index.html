@@ -156,32 +156,35 @@ h2 em{ font-style:italic; color:var(--warm); }
 .demo-scene{ max-width:380px; margin:36px auto 0; }
 .honesty{ max-width:680px; margin:16px auto 0; text-align:center; font-family:var(--mono); font-size:11.5px; color:var(--ink-3); }
 
-/* ---- architecture: pure-css flow ---- */
-.flow{ display:flex; align-items:stretch; justify-content:center; margin-top:44px; }
-.node{ flex:1 1 0; min-width:0; background:var(--bg-2); border:1px solid var(--rule-2); border-radius:12px; padding:16px 12px; text-align:center; }
-.node b{ display:block; font-family:var(--mono); font-size:12px; font-weight:500; color:var(--amber); }
-.node span{ display:block; font-family:var(--mono); font-size:10.5px; color:var(--ink-3); margin-top:6px; line-height:1.5; }
-.node .think{ color:var(--violet); font-style:normal; }
-.node.loop b{ color:var(--ok); }
-.node .n-ico{ width:17px; height:17px; color:var(--ink-3); display:block; margin:0 auto 9px; }
-.conn{ flex:0 0 auto; align-self:center; display:flex; flex-direction:column; align-items:center; gap:6px; padding:0 7px; }
-.conn-label{ font-family:var(--mono); font-size:9.5px; color:var(--ink-3); text-align:center; line-height:1.35; max-width:58px; }
-.conn-line{ position:relative; width:38px; height:1px; background:var(--rule-2); }
-.conn-line::after{ content:""; position:absolute; right:-2px; top:-3px; width:6px; height:6px;
-  border-top:1px solid var(--ink-3); border-right:1px solid var(--ink-3); transform:rotate(45deg); }
-.conn-line .pulse{ position:absolute; top:-1px; left:0; width:4px; height:3px; border-radius:2px;
-  background:rgba(255,184,107,.5); box-shadow:0 0 4px rgba(255,184,107,.3); animation:flow-x 2.8s linear infinite; }
-@keyframes flow-x{ 0%{ transform:translateX(0); opacity:0; } 15%{ opacity:1; } 85%{ opacity:1; } 100%{ transform:translateX(34px); opacity:0; } }
-@media (max-width:860px){
-  .flow{ flex-direction:column; align-items:stretch; max-width:270px; margin-left:auto; margin-right:auto; }
-  .node{ width:100%; padding:15px 14px; }
-  .node .n-ico{ width:28px; height:28px; margin-bottom:11px; }
-  .conn{ flex-direction:column; padding:9px 0; }
-  .conn-line{ width:1px; height:30px; background:var(--rule-2); }
-  .conn-line::after{ right:auto; left:-2.5px; top:auto; bottom:-2px; transform:rotate(135deg); }
-  .conn-line .pulse{ left:-1.5px; top:0; animation-name:flow-y; }
-}
-@keyframes flow-y{ 0%{ transform:translateY(0); opacity:0; } 15%{ opacity:1; } 85%{ opacity:1; } 100%{ transform:translateY(26px); opacity:0; } }
+/* ---- architecture: many editors → one server → many repos (an hourglass) ---- */
+.arch{ max-width:460px; margin:40px auto 0; display:flex; flex-direction:column; align-items:center; }
+.arch-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+.arch-chip{ font-family:var(--mono); font-size:12px; color:var(--ink-2);
+  background:var(--bg-2); border:1px solid var(--rule-2); border-radius:999px; padding:6px 13px; }
+.arch-repo{ font-family:var(--mono); font-size:12px; color:var(--amber);
+  background:var(--bg-2); border:1px solid var(--rule-2); border-radius:8px; padding:6px 12px; }
+.arch-note{ max-width:360px; margin:11px auto 0; text-align:center;
+  font-family:var(--mono); font-size:11px; line-height:1.55; color:var(--ink-3); }
+.arch-note b{ color:var(--warm); font-weight:500; }
+/* the shared-server card — the hero of the diagram */
+.arch-core{ width:100%; max-width:340px; margin:4px 0; text-align:center;
+  background:linear-gradient(180deg, rgba(255,184,107,.05), rgba(255,184,107,0));
+  border:1px solid rgba(255,184,107,.45); border-radius:14px; padding:17px 20px;
+  box-shadow:0 10px 34px rgba(255,184,107,.06); }
+.arch-core-title{ font-family:var(--mono); font-size:14px; color:var(--amber); }
+.arch-core-title .think{ color:var(--violet); font-style:normal; margin-right:2px; }
+.arch-core-sub{ font-family:var(--mono); font-size:11.5px; line-height:1.6; color:var(--ink-3); margin-top:8px; }
+.arch-core-sub b{ color:var(--warm); font-weight:500; }
+/* vertical connector: a slim track, a downward-travelling pulse, an arrowhead, a side label */
+.arch-link{ position:relative; width:2px; height:46px; background:var(--rule-2); border-radius:2px; margin:8px 0; }
+.arch-link::after{ content:""; position:absolute; left:50%; bottom:-1px; transform:translateX(-50%);
+  border-left:4px solid transparent; border-right:4px solid transparent; border-top:5px solid var(--amber); }
+.arch-link i{ position:absolute; left:50%; top:0; width:4px; height:4px; margin-left:-2px; border-radius:50%;
+  background:var(--amber); box-shadow:0 0 8px rgba(255,184,107,.6); animation:arch-flow 2.6s ease-in-out infinite; }
+.arch-link-label{ position:absolute; left:12px; top:50%; transform:translateY(-50%); white-space:nowrap;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.04em; color:var(--ink-3); }
+@keyframes arch-flow{ 0%{ top:0; opacity:0; } 12%{ opacity:1; } 80%{ opacity:1; } 100%{ top:44px; opacity:0; } }
+@media (prefers-reduced-motion: reduce){ .arch-link i{ animation:none; } }
 
 /* ---- self-host ---- */
 .term{ position:relative; max-width:820px; margin:34px auto 0; }
@@ -321,33 +324,33 @@ footer .meta a:hover{ color:var(--amber); }
   <div class="wrap">
     <div class="kicker">How it works</div>
     <h2>Your keys. <em>Your boxes.</em></h2>
-    <div class="flow">
-      <div class="node">
-        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><path d="M3.5 9h17"/></svg>
-        <b>Your app</b><span>one script tag</span>
+    <div class="arch">
+      <!-- many editors, one login -->
+      <div class="arch-row">
+        <span class="arch-chip">you</span>
+        <span class="arch-chip">a teammate</span>
+        <span class="arch-chip">anyone you invite</span>
       </div>
-      <div class="conn"><span class="conn-label">prompt</span><span class="conn-line"><i class="pulse"></i></span></div>
-      <div class="node">
-        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M5 7.5l4.5 4.5L5 16.5M12.5 16.5H19"/></svg>
-        <b>Your server</b><span><em class="think">✻</em> Claude Code CLI</span>
+      <p class="arch-note">Everyone signs in through one <b>Supabase</b>. No public signups — you pick who's in.</p>
+
+      <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">sign in</span></div>
+
+      <!-- the one shared server: the point of the whole picture -->
+      <div class="arch-core">
+        <div class="arch-core-title"><em class="think">✻</em> One Fly server</div>
+        <div class="arch-core-sub">A single Claude&nbsp;Code CLI lives here. It keeps <b>one session per site</b>, so every editor shares the same agent and the same history — invite ten people, it's still one conversation.</div>
       </div>
-      <div class="conn"><span class="conn-label">commit + push</span><span class="conn-line"><i class="pulse" style="animation-delay:.7s"></i></span></div>
-      <div class="node">
-        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="7" cy="6.5" r="2.2"/><circle cx="7" cy="17.5" r="2.2"/><circle cx="17" cy="8.5" r="2.2"/><path d="M7 8.7v6.6M17 10.7c0 2.8-3.2 3.6-7 4"/></svg>
-        <b>Your repo</b><span>your branch</span>
+
+      <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">commit&nbsp;+&nbsp;push</span></div>
+
+      <!-- one server, many repos -->
+      <div class="arch-row">
+        <span class="arch-repo">blog.git</span>
+        <span class="arch-repo">shop.git</span>
+        <span class="arch-repo">docs.git</span>
       </div>
-      <div class="conn"><span class="conn-label">deploy hook</span><span class="conn-line"><i class="pulse" style="animation-delay:1.4s"></i></span></div>
-      <div class="node">
-        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.7 2.7 2.7 14.3 0 17-2.7-2.7-2.7-14.3 0-17z"/></svg>
-        <b>Your host</b><span>redeploys</span>
-      </div>
-      <div class="conn"><span class="conn-label">refresh</span><span class="conn-line"><i class="pulse" style="animation-delay:2.1s"></i></span></div>
-      <div class="node loop">
-        <svg class="n-ico" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5"/></svg>
-        <b>Your app</b><span>it's changed</span>
-      </div>
+      <p class="arch-note">That one server pushes to <b>every repo you connect</b> — any editor can ship to any of your sites.</p>
     </div>
-    <p class="honesty">Every editor you invite gets all your sites — one Fly server, one Supabase, one shared Claude Code stream and history behind them.</p>
   </div>
 </section>
 
