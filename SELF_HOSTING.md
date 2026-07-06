@@ -243,9 +243,13 @@ There is no settings UI. The agent's own runtime is steered in the same chat:
   dangerously bypass permissions" leaves it (the agent can exit plan mode even though it can't edit
   files there — the server handles it).
 - **Compact** — "compact your memory" compresses the conversation right after the current turn.
+- **Clear context** — "clear the context" is destructive: a fresh session (the agent forgets this
+  conversation) *and* a wiped chat history. The agent confirms once before it does it.
 - **Skills** — "install a skill that does X" writes to `/data/.claude/skills`; it loads next turn and
-  survives deploys. Three skills ship built in: `image-gen` (needs `GEMINI_API_KEY`),
-  `verify-in-browser` (headless Chromium is preinstalled), `provision-user` (below).
+  survives deploys. Six ship built in (committed in `server/skills/`, so every fork inherits them):
+  `image-gen` (needs `GEMINI_API_KEY`), `verify-in-browser` (headless Chromium is preinstalled),
+  `provision-user` (below), `self-ops` (needs `FLY_API_TOKEN`), `frontend-design`, and `ponytail`
+  (lazy-senior-dev discipline, on by default).
 
 State lives in `/data/agent-keyboard/sites/<id>/settings.json`. If the agent ever wedges its own
 settings, reset from your machine:

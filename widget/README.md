@@ -5,7 +5,7 @@ page: a slim composer that streams the agent's progress in a pill, expands into 
 transcript, and re-attaches to running jobs after a reload.
 
 - **Zero runtime dependencies.** TypeScript → one `dist/widget.js` via esbuild.
-- **~15 KB gzip.** The whole bar — styles, auth, SSE reader, photo upload, voice — ships in that.
+- **~21 KB gzip.** The whole bar — styles, auth, SSE reader, photo upload, voice — ships in that.
 - **Shadow-DOM isolated.** Styles are scoped to a shadow root, so the host page can't leak in and the
   bar can't leak out.
 
@@ -88,7 +88,7 @@ Over one job's stream you'll see:
 
 ## Size budget
 
-The bar is meant to be a nearly-free addition to a page — currently ~15 KB gzip, with a hard 30 KB
+The bar is meant to be a nearly-free addition to a page — currently ~21 KB gzip, with a hard 30 KB
 gzip budget enforced by `build.mjs`: no runtime dependencies, no framework. Check the size `npm run
 build` prints if you add anything heavy.
 

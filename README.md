@@ -174,12 +174,14 @@ site change:
 - *"Switch to plan mode."* — the agent explores and proposes without committing; *"go back to
   dangerously bypass permissions"* to leave (works even from inside plan mode).
 - *"Compact your memory."* — compacts the conversation right after the current turn.
+- *"Clear the context."* — **destructive**: starts a fresh session (wipes the agent's memory of this
+  conversation) *and* clears the chat history. The agent confirms once before doing it.
 - *"Install a skill that does X."* — the agent writes it to its own skills directory on the volume;
   it loads from the next turn and survives deploys.
 
 Under the hood each site has a small settings file on the volume
 (`/data/agent-keyboard/sites/<id>/settings.json`, keys `model` · `effort` · `permissionMode` ·
-`compactNow`) that the agent itself edits and the server validates and applies to the next CLI spawn.
+`compactNow` · `clearNow`) that the agent itself edits and the server validates and applies to the next CLI spawn.
 Bad values fall back to defaults with a warning the agent sees and fixes. Delete the file to reset
 everything.
 
@@ -204,6 +206,8 @@ volume at boot — deploys update them, agent-installed ones persist:
 | `verify-in-browser` | Serves the checkout locally, screenshots it with the preinstalled headless Chromium, and inspects the render. | nothing (baked into the image) |
 | `provision-user` | Invites a new user by email + allow-lists them. | `SUPABASE_SERVICE_KEY` |
 | `self-ops` | The agent operates its own deployment: logs, status, secrets, deploy flow, Supabase auth config. Knows a restart kills its own turn. | `FLY_API_TOKEN` (optionally `SUPABASE_ACCESS_TOKEN`) |
+| `frontend-design` | Anthropic's official design skill — distinctive, intentional UI when the agent builds or reshapes a page. | nothing |
+| `ponytail` | Lazy-senior-dev discipline: simplest thing that works, reuse before adding, shortest root-cause diff. Always on — a directive in the operating-scope prompt applies it every turn. | nothing |
 
 Branded invite/recovery email templates live in
 [`server/email-templates/`](./server/email-templates) — see that README for the
@@ -249,7 +253,7 @@ reach, where the trust boundaries sit, and the residual risks stated plainly.
 |-----|-----------|
 | `site/` | The marketing site (agentkeyboard.com) and the original vision film. |
 | `server/` | Express API + the Claude Code CLI runner; serves `/widget.js`, streams SSE. |
-| `widget/` | The embeddable bundle: TypeScript, zero runtime deps, ~15 KB gzip, Shadow-DOM isolated. |
+| `widget/` | The embeddable bundle: TypeScript, zero runtime deps, ~21 KB gzip, Shadow-DOM isolated. |
 
 ## License
 
