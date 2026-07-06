@@ -317,9 +317,9 @@ button::-moz-focus-inner{ border:0; }
 }
 .ak-ov-scroll::-webkit-scrollbar{ display:none; width:0; height:0; }
 .ak-overlay{ touch-action:pan-y; }
-.ak-ov-list{ max-width:860px; }
+.ak-ov-list{ max-width:860px; margin:0 auto; }
 .ak-ov-sentinel{ height:1px; }
-.ak-ov-foot{ padding:6px 14px; padding-bottom:calc(10px + max(env(safe-area-inset-bottom,0px), var(--ak-kb))); max-width:888px; box-sizing:border-box; width:100%; }
+.ak-ov-foot{ padding:6px 14px; padding-bottom:calc(10px + max(env(safe-area-inset-bottom,0px), var(--ak-kb))); max-width:888px; box-sizing:border-box; width:100%; margin:0 auto; }
 
 /* transcript lines: marker column + body, no bubbles */
 .ak-t{ display:flex; gap:9px; font-size:13px; line-height:1.6; margin:0 0 10px; word-wrap:break-word; overflow-wrap:anywhere; }
