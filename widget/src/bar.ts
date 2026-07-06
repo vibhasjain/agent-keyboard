@@ -387,15 +387,14 @@ export function mountBar(shadow: ShadowRoot): void {
   const statusRow = el('div', 'ak-status')
   const statusDot = el('div', 'dot')
   const statusMsg = el('div', 'msg')
-  const retryBtn = el('button', 'ak-retry', (n) => (n.textContent = 'Retry'))
-  // Corner chat button: talk some more from right here — straight into the
-  // composer, no full modal (the row tap is what opens the full chat).
-  const statusChat = el('button', 'ak-expand', (n) => {
+  // Corner status action: success lets you talk some more; errors only expand
+  // to the transcript so the failure can be inspected in context.
+  const statusAction = el('button', 'ak-expand', (n) => {
     n.type = 'button'
     n.appendChild(icon('chat', 15))
     n.setAttribute('aria-label', 'Reply')
   })
-  statusRow.append(statusDot, statusMsg, statusChat)
+  statusRow.append(statusDot, statusMsg, statusAction)
 
   // Login styled as a Claude Code prompt sequence: "> email" / "> password",
   // chromeless mono inputs, dim marks that go amber on focus, hairline between.
@@ -592,23 +591,31 @@ export function mountBar(shadow: ShadowRoot): void {
   // -- expand / collapse (chat is reachable from every state) --
   on(expandBtn, 'click', () => patchUi({ mode: 'expanded' }))
   on(composerExpand, 'click', () => patchUi({ mode: 'expanded' }))
-  on(statusChat, 'click', (e) => {
+  const setStatusAction = (kind: 'reply' | 'expand') => {
+    clearNode(statusAction)
+    statusAction.appendChild(icon(kind === 'expand' ? 'expand' : 'chat', 15))
+    statusAction.setAttribute('aria-label', kind === 'expand' ? 'Expand chat' : 'Reply')
+  }
+  on(statusAction, 'click', (e) => {
     e.stopPropagation()
-    patchUi({ mode: 'composing' })
-    setTimeout(() => composer.focus(), 60)
-  })
-  // Tapping a SUCCESS row opens the full chat (read the change in context);
-  // tapping an error row still drops into the composer to reply/retry.
-  on(statusRow, 'click', () => {
-    if (getState().ui.mode === 'expanded') return
-    if (getState().job.phase === 'done') {
+    if (getState().job.phase === 'error') {
       patchUi({ mode: 'expanded' })
       return
     }
     patchUi({ mode: 'composing' })
     setTimeout(() => composer.focus(), 60)
   })
-  on(retryBtn, 'click', (e) => e.stopPropagation())
+  // Tapping a SUCCESS row opens the full chat (read the change in context);
+  // tapping an ERROR row does the same so you can inspect what happened.
+  on(statusRow, 'click', () => {
+    if (getState().ui.mode === 'expanded') return
+    if (getState().job.phase === 'done' || getState().job.phase === 'error') {
+      patchUi({ mode: 'expanded' })
+      return
+    }
+    patchUi({ mode: 'composing' })
+    setTimeout(() => composer.focus(), 60)
+  })
 
   // -- streaming timer --
   let timerId: ReturnType<typeof setInterval> | null = null
@@ -807,11 +814,10 @@ export function mountBar(shadow: ShadowRoot): void {
     // status row content
     if (view === 'done' && job.phase === 'done') {
       statusMsg.textContent = job.summary
-      if (retryBtn.parentNode) retryBtn.remove()
+      setStatusAction('reply')
     } else if (view === 'error' && job.phase === 'error') {
       statusMsg.textContent = job.message
-      if (!retryBtn.parentNode) statusRow.appendChild(retryBtn)
-      retryBtn.onclick = () => job.retry?.()
+      setStatusAction('expand')
     }
 
     // composer state — typing is allowed while a job runs (sends queue up)

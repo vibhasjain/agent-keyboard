@@ -137,11 +137,6 @@ button::-moz-focus-inner{ border:0; }
 .ak-status .dot{ flex:none; width:8px; height:8px; border-radius:50%; }
 .ak-pill.done .dot{ background:var(--ak-ok); }
 .ak-pill.error .dot{ background:var(--ak-err); }
-.ak-retry{
-  flex:none; border:1px solid var(--ak-err); background:transparent; color:var(--ak-err);
-  font-family:var(--ak-mono); font-size:11px; padding:5px 10px; border-radius:9px; cursor:pointer;
-}
-.ak-retry:hover{ background:rgba(249,112,102,.12); }
 
 /* ---- login (Claude Code prompt sequence: "> email" / "> password") ---- */
 .ak-login{ display:flex; flex-direction:column; width:100%; }

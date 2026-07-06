@@ -20,7 +20,7 @@ export type JobState =
       disconnected?: boolean
     }
   | { phase: 'done'; jobId: string; summary: string; ok: boolean; cleared?: boolean }
-  | { phase: 'error'; message: string; retry?: () => void }
+  | { phase: 'error'; message: string }
 
 export type UiMode = 'mini' | 'collapsed' | 'login' | 'setpw' | 'composing' | 'expanded'
 export type VoiceState = 'idle' | 'connecting' | 'live' | 'error'

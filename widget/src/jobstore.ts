@@ -397,27 +397,16 @@ function finishDone(data: Record<string, unknown>): void {
   dispatchQueue()
 }
 
-// A retry after a REAL failure gets a fresh idemKey (re-sending the old one
-// would just re-tail the failed job). A retry after a pre-job connection loss
-// passes `reuseKey` so the server re-tails the job if it did start.
-function makeRetry(reuseKey?: string): () => void {
-  const p = prompt
-  const ids = [...lastAttachmentIds]
-  const page = lastPage
-  return () => start({ text: p, attachmentIds: ids, page, idemKey: reuseKey })
-}
-
 function finishError(data: Record<string, unknown>): void {
   const detail = String(data.detail ?? data.kind ?? '') || 'Something went wrong'
-  const retry = makeRetry()
   markHandled(jobId ?? '')
   clearPersist()
   clearActivityFlag()
-  // The failed send leaves the outbox — the error row offers Retry; silently
-  // auto-refiring it on the next reload would be surprising.
+  // Drop the failed send from the outbox — silently auto-refiring it on the next
+  // reload would be surprising. The error pill opens the transcript instead.
   outboxRemove(activeIdemKey)
   reset()
-  setJob({ phase: 'error', message: detail, retry })
+  setJob({ phase: 'error', message: detail })
   dispatchQueue()
 }
 
@@ -474,13 +463,11 @@ function onDisconnect(gen: number): void {
   if (gen !== generation) return
   if (!jobId) {
     // Stream died before we ever learned the job id → can't re-attach. The job
-    // may still have started server-side, so the retry reuses the idemKey —
-    // and the outbox entry stays: a reload re-sends the same key, which the
-    // server re-tails instead of re-running.
-    const retry = makeRetry(activeIdemKey)
+    // may still have started server-side, so the outbox entry stays: a reload
+    // re-sends the same key, which the server re-tails instead of re-running.
     clearPersist()
     reset()
-    setJob({ phase: 'error', message: 'Lost the connection before the job started.', retry })
+    setJob({ phase: 'error', message: 'Lost the connection before the job started.' })
     dispatchQueue()
     return
   }
@@ -516,9 +503,8 @@ function reattach(gen: number, isBoot: boolean): void {
           setJob({ phase: 'idle' })
         } else {
           // Mid-session re-attach 404 ⇒ genuine failure.
-          const retry = makeRetry()
           reset()
-          setJob({ phase: 'error', message: 'That job is no longer available.', retry })
+          setJob({ phase: 'error', message: 'That job is no longer available.' })
         }
         // Sends queued behind the dead job (e.g. restored from the outbox at
         // boot) must not strand — drain like every other terminal path.
@@ -623,12 +609,11 @@ export function start(input: {
       if (jobId) {
         onDisconnect(gen) // network blip after the job started → reconnect
       } else {
-        // POST may have reached the server: retry reuses the idemKey, and the
-        // outbox entry stays so a reload recovers the send either way.
-        const retry = makeRetry(activeIdemKey)
+        // POST may have reached the server, so the outbox entry stays and a
+        // reload recovers the send either way.
         clearPersist()
         reset()
-        setJob({ phase: 'error', message: errMsg(e), retry })
+        setJob({ phase: 'error', message: errMsg(e) })
         dispatchQueue()
       }
     })
