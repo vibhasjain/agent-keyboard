@@ -183,7 +183,8 @@ export const STYLES = `
 .ak-bar > .ak-composer{ position:absolute; left:0; right:0; bottom:0; max-width:640px; margin-left:auto; animation:ak-pop .28s cubic-bezier(.2,.7,.2,1); }
 .ak-ov-foot > .ak-composer{ box-shadow:none; background:transparent; }
 .ak-input-row{ display:flex; align-items:flex-end; gap:2px; }
-.ak-input-row .ak-ta{ padding-left:8px; }
+.ak-ta-wrap{ position:relative; flex:1; min-width:0; display:flex; }
+.ak-ta-wrap .ak-ta{ width:100%; padding-left:8px; }
 .ak-ta{
   flex:1; min-width:0; border:none; outline:none; resize:none; background:transparent;
   display:block; box-sizing:border-box; height:36px; min-height:36px;
@@ -193,6 +194,14 @@ export const STYLES = `
 .ak-ta::placeholder{ color:var(--ak-ink3); }
 .ak-ta.ak-confirm::placeholder{ color:var(--ak-amber); opacity:1; } /* brief sign-in confirmation */
 .ak-ta:disabled{ opacity:.6; }
+.ak-ta-mirror{
+  position:absolute; inset:0; visibility:hidden; pointer-events:none;
+  box-sizing:border-box; width:100%; min-height:36px; max-height:88px; overflow:hidden;
+  padding:8px 4px 8px 8px;
+  color:transparent; font-family:var(--ak-mono); font-size:16px; line-height:20px;
+  white-space:pre-wrap; overflow-wrap:anywhere;
+}
+.ak-ta-caret{ display:inline-block; width:0; height:20px; vertical-align:top; }
 
 .ak-icon-btn{
   flex:none; width:36px; height:36px; border-radius:50%; border:none; background:transparent;
@@ -217,8 +226,12 @@ export const STYLES = `
 @keyframes ak-ping{ 0%{ transform:scale(.7); opacity:.7; } 80%,100%{ transform:scale(1.9); opacity:0; } }
 .ak-note{ font-family:var(--ak-mono); font-size:10px; color:var(--ak-ink3); padding:0 6px 2px; }
 .ak-note.err{ color:var(--ak-err); }
-/* inline transcribing cue — a smaller amber .ak-spin that rides beside the text */
-.ak-vspin{ width:14px; height:14px; border-width:2px; align-self:center; margin:0 4px; }
+/* inline transcribing cue — a tiny amber .ak-spin positioned at the textarea caret */
+.ak-vspin{
+  position:absolute; left:0; top:0; z-index:1;
+  width:9px; height:9px; border-width:1.5px; margin:0;
+  pointer-events:none;
+}
 
 /* ---- photo chips ---- */
 .ak-chips{ display:none; flex-wrap:wrap; gap:6px; padding:2px 4px 0; }
@@ -293,6 +306,7 @@ export const STYLES = `
 .ak-menu-item:disabled{ opacity:.38; cursor:default; }
 .ak-menu-item:disabled:hover{ background:none; color:var(--ak-ink2); }
 .ak-menu-item:disabled:hover svg{ color:var(--ak-ink3); }
+.ak-menu-spin{ width:16px; height:16px; border-width:2px; }
 .ak-ov-scroll{
   flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch;
   padding:calc(20px + env(safe-area-inset-top,0px)) 18px 10px;
@@ -352,7 +366,12 @@ export const STYLES = `
 .ak-lightbox img{ max-width:94vw; max-height:90vh; border-radius:8px; display:block; }
 .ak-t-attach{ display:flex; align-items:center; gap:5px; color:var(--ak-ink3); font-size:11px; margin:1px 0 5px; }
 .ak-divider{ color:var(--ak-ink3); font-size:11px; letter-spacing:.06em; margin:16px 0 16px 22px; }
-.ak-empty{ color:var(--ak-ink3); font-size:13px; margin-top:30vh; }
+.ak-empty{
+  min-height:55vh;
+  display:flex; align-items:center; justify-content:center;
+  color:rgba(111,106,97,.42);
+}
+.ak-empty-mark{ width:28px; height:auto; display:block; }
 
 /* history-loading ghost: dim bars with the shared .ak-shimmer sweep */
 .ak-skel-row{

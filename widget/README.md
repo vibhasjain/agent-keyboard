@@ -57,6 +57,7 @@ headers).
 | `POST /sites/:id/messages` | Send a prompt (`{text, page, idemKey, attachmentIds?}`). **The response IS the SSE stream.** A duplicate `idemKey` re-tails the original job. |
 | `GET /jobs/:jobId/stream` | Re-attach to a running or finished job; replays current state, then live frames. |
 | `GET /jobs?siteId=` | List active jobs plus a short finished window for a site. |
+| `POST /sites/:id/restart` | Clean slate: stop active work, discard local checkout changes, reset to latest `origin/<branch>`, and rotate to a fresh conversation. |
 | `POST /sites/:id/uploads` | Upload one photo (multipart, field `photo`, ≤15 MB) → `{id, path}` to attach. |
 | `GET /sites/:id/conversation` | Chat history (`?limit`, `?before`) from the agent's durable session. |
 | `POST /realtime/token` | Mint a short-lived OpenAI realtime token for voice dictation. |

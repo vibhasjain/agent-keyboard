@@ -33,6 +33,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let doneTimer: ReturnType<typeof setTimeout> | null = null
 // Bumped every start / rehydrate; stale async handlers compare against it and bail.
 let generation = 0
+let restartInFlight = false
 
 // Turns completed during this page load (rendered under any server-fetched history).
 // `thumbs` = the user's attached photos; `images` = images the agent chose to show.
@@ -103,8 +104,8 @@ export function isBusy(): boolean {
 
 /** Forcefully stop the active job. The server publishes a terminal 'stopped'
  *  error on the job's stream, which flows back through onFrame → finishError. */
-export function stop(): void {
-  if (jobId && isBusy()) void api.cancelJob(jobId).catch(() => {})
+export async function stop(): Promise<void> {
+  if (jobId && isBusy()) await api.cancelJob(jobId).catch(() => {})
 }
 
 // Messages sent while a job is running queue client-side (like Claude Code)
@@ -117,6 +118,7 @@ export function getQueued(): readonly QueuedInput[] {
 }
 
 function dispatchQueue(): void {
+  if (restartInFlight) return
   const next = queue.shift()
   if (next) setTimeout(() => start(next), 50)
 }
@@ -332,6 +334,12 @@ function onFrame(name: string, data: Record<string, unknown>): void {
   }
 }
 
+function frameHandler(gen: number): (name: string, data: Record<string, unknown>) => void {
+  return (name, data) => {
+    if (gen === generation) onFrame(name, data)
+  }
+}
+
 function currentFullText(): string {
   const j = getState().job
   return j.phase === 'streaming' ? j.fullText : ''
@@ -421,6 +429,46 @@ function reset(): void {
   clearTimers()
 }
 
+export function beginRestart(): void {
+  restartInFlight = true
+}
+
+export function endRestartAttempt(): void {
+  restartInFlight = false
+}
+
+/** Local half of the server restart action: drop chat tail, queued sends, active
+ *  reattach state, and force the expanded transcript to refetch the fresh empty
+ *  conversation. Call only after the server confirms reset+rotate completed. */
+export function clearAfterRestart(): void {
+  const finishedId = jobId || `restart-${Date.now()}`
+  generation++ // ignore any frames from the pre-restart stream
+  restartInFlight = false
+  if (jobId) markHandled(jobId)
+  clearTimers()
+  clearPersist()
+  clearActivityFlag()
+  writeOutbox([])
+  queue.length = 0
+  liveTurns.length = 0
+  prompt = ''
+  activeIdemKey = ''
+  lastPage = ''
+  lastAttachmentIds = []
+  activeThumbs = undefined
+  terminal = true
+  jobId = null
+  startedAt = 0
+  attempt = 0
+  clearEpoch++
+  setJob({ phase: 'done', jobId: finishedId, summary: 'Restarted — clean slate', ok: true, cleared: true })
+  if (doneTimer != null) clearTimeout(doneTimer)
+  doneTimer = setTimeout(() => {
+    const j = getState().job
+    if (j.phase === 'done' && j.jobId === finishedId) setJob({ phase: 'idle' })
+  }, DONE_LINGER_MS)
+}
+
 // -- disconnect / reconnect ---------------------------------------------------
 function onDisconnect(gen: number): void {
   if (gen !== generation) return
@@ -454,7 +502,7 @@ function reattach(gen: number, isBoot: boolean): void {
   if (gen !== generation || !jobId) return
   const myJob = jobId
   api
-    .jobStream(myJob, onFrame)
+    .jobStream(myJob, frameHandler(gen))
     .then(() => {
       if (gen === generation && !terminal) onDisconnect(gen)
     })
@@ -565,7 +613,7 @@ export function start(input: {
         idemKey: activeIdemKey,
         attachmentIds: lastAttachmentIds.length ? lastAttachmentIds : undefined,
       },
-      onFrame,
+      frameHandler(gen),
     )
     .then(() => {
       if (gen === generation && !terminal) onDisconnect(gen)

@@ -15,8 +15,8 @@ import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
 import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
-import { runMessageJob, killAllChildren } from "./claude.js";
-import { ensureCheckout } from "./checkouts.js";
+import { runMessageJob, killAllChildren, rotateConversation } from "./claude.js";
+import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
 import { stageUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { mintRealtimeToken } from "./realtime.js";
@@ -390,6 +390,37 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
 app.post("/jobs/:jobId/cancel", authed, (req, res) => {
   const stopped = cancelJob(req.params.jobId ?? "");
   res.json({ stopped });
+});
+
+/** Clean slate for a site: stop live work, discard local checkout changes,
+ *  reset to latest origin/<branch>, and rotate to a fresh conversation. */
+app.post("/sites/:siteId/restart", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+
+  const running = listActive(site.id).filter((j) => j.status === "running");
+  for (const job of running) cancelJob(job.job_id);
+
+  let release: (() => void) | undefined;
+  try {
+    release = await acquireSiteLock(site.id);
+    const reset = await resetCheckoutToOrigin(site);
+    const conversationId = await rotateConversation(site.id);
+    res.json({
+      ok: true,
+      cancelled: running.length,
+      cleared: true,
+      conversation_id: conversationId,
+      reset,
+    });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error)?.message ?? err).slice(0, 300) });
+  } finally {
+    release?.();
+  }
 });
 
 /** Re-attach to a running or finished job's stream. */

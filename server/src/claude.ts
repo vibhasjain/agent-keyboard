@@ -479,6 +479,7 @@ export async function* runMessageJob(
   try {
     if (signal?.aborted) return; // stopped before we even started
     release = await acquireSiteLock(site.id);
+    if (signal?.aborted) return; // stopped while waiting for this site's checkout
 
     yield ["status", { phase: "syncing", detail: `Syncing ${site.domain}` }];
     const preJobSha = await syncCheckout(site);

@@ -68,12 +68,15 @@ function makeComposer(): Composer {
     n.appendChild(icon('camera'))
     n.setAttribute('aria-label', 'Add photo')
   })
+  const taWrap = el('div', 'ak-ta-wrap')
   const ta = el('textarea', 'ak-ta', (n) => {
     n.rows = 1
     n.placeholder = ''
     n.setAttribute('enterkeyhint', 'send')
     n.setAttribute('aria-label', 'Message')
   })
+  const mirror = el('div', 'ak-ta-mirror')
+  const caret = el('span', 'ak-ta-caret')
   const mic = el('button', 'ak-icon-btn ak-mic', (n) => {
     n.type = 'button'
     n.appendChild(icon('mic'))
@@ -88,7 +91,8 @@ function makeComposer(): Composer {
   // while dictation audio is being transcribed, so the gap before words appear
   // reads as "working", not "stuck".
   const vspin = el('div', 'ak-spin ak-vspin')
-  row.append(ta, vspin, cam, mic, sendBtn)
+  taWrap.append(ta, mirror, vspin)
+  row.append(taWrap, cam, mic, sendBtn)
   root.append(photos.el, row, note)
   show(note, false)
   show(vspin, false)
@@ -96,6 +100,7 @@ function makeComposer(): Composer {
   // -- voice / dictation --
   let baseText = ''
   let partial = ''
+  let transcribing = false
   const joinText = (a: string, b: string) => (a.trim() ? a.trim() + ' ' + b.trim() : b.trim())
   const voice: VoiceController = makeVoice({
     getState: () => getState().ui.voice,
@@ -105,17 +110,20 @@ function makeComposer(): Composer {
       const cur = getState().ui
       if (cur.voice !== s || cur.voiceError !== err) patchUi({ voice: s, voiceError: err })
       renderMic()
-      if (s !== 'live') show(vspin, false) // leaving the live session clears any lingering spinner
       // No "Listening…" note — the mic button's live state already says it.
       if (s === 'error' && err) setNote(err, true)
       else if (s === 'idle' || s === 'live') setNote('')
     },
-    onTranscribing: (active) => show(vspin, active),
+    onTranscribing: (active) => {
+      transcribing = active
+      updateTranscribingCue()
+    },
     onPartial: (delta) => {
       partial = joinText(partial, delta)
       ta.value = joinText(baseText, partial)
       autogrow()
       pinToEnd() // dictation past the height cap: keep the last spoken word in view
+      updateTranscribingCue()
     },
     onFinal: (transcript) => {
       baseText = joinText(baseText, transcript)
@@ -125,6 +133,7 @@ function makeComposer(): Composer {
       pinToEnd()
       saveDraft()
       syncSend()
+      updateTranscribingCue()
     },
   })
 
@@ -141,10 +150,29 @@ function makeComposer(): Composer {
     // scrollHeight is 0 while hidden/mid-reparent — don't persist a 0px height.
     if (ta.scrollHeight > 0) ta.style.height = Math.min(ta.scrollHeight, 88) + 'px'
     else ta.style.height = ''
+    updateTranscribingCue()
   }
 
   const pinToEnd = () => {
     ta.scrollTop = ta.scrollHeight
+  }
+
+  const updateTranscribingCue = () => {
+    if (!transcribing) {
+      show(vspin, false)
+      return
+    }
+    const end = ta.selectionStart ?? ta.value.length
+    const before = ta.value.slice(0, end)
+    mirror.textContent = ''
+    mirror.appendChild(document.createTextNode(before.endsWith('\n') ? before + '\u200b' : before || '\u200b'))
+    mirror.appendChild(caret)
+    const maxX = Math.max(8, ta.clientWidth - 12)
+    const maxY = Math.max(8, ta.clientHeight - 9)
+    const x = Math.min(Math.max(8, caret.offsetLeft + 8), maxX)
+    const y = Math.min(Math.max(7, caret.offsetTop - ta.scrollTop + 13), maxY)
+    vspin.style.transform = `translate(${x}px, ${y}px)`
+    show(vspin, true)
   }
 
   const saveDraft = () => {
@@ -157,8 +185,7 @@ function makeComposer(): Composer {
   }
 
   const syncSend = () => {
-    const has = ta.value.trim().length > 0 || photos.hasAttachments()
-    sendBtn.disabled = !has || ta.disabled
+    sendBtn.disabled = false
   }
 
   const setNote = (text: string, isError = false) => {

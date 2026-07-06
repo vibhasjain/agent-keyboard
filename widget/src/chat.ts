@@ -6,7 +6,7 @@ import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { discoverJobs, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
+import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe } from './state'
 
@@ -163,6 +163,31 @@ function dividerEl(text: string): HTMLElement {
   return el('div', 'ak-divider', (n) => (n.textContent = `· ${(text || 'session compacted').toLowerCase()} ·`))
 }
 
+function emptyStateEl(): HTMLElement {
+  const wrap = el('div', 'ak-empty')
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('class', 'ak-empty-mark')
+  svg.setAttribute('viewBox', '0 0 11 8.5')
+  svg.setAttribute('aria-hidden', 'true')
+  const cells = [
+    [2, 0], [8, 0], [1, 1], [2, 1], [3, 1], [7, 1], [8, 1], [9, 1], [2, 2], [8, 2],
+    [3, 3], [4, 3], [5, 3], [6, 3], [7, 3], [2, 4], [3, 4], [5, 4], [7, 4], [8, 4],
+    [2, 5], [3, 5], [4, 5], [5, 5], [6, 5], [7, 5], [8, 5], [3, 6], [4, 6], [5, 6],
+    [6, 6], [7, 6], [1, 7], [3, 7], [7, 7], [9, 7],
+  ]
+  for (const [x, y] of cells) {
+    const r = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    r.setAttribute('x', String(x))
+    r.setAttribute('y', String(y))
+    r.setAttribute('width', '1.02')
+    r.setAttribute('height', '1.02')
+    r.setAttribute('fill', 'currentColor')
+    svg.appendChild(r)
+  }
+  wrap.appendChild(svg)
+  return wrap
+}
+
 function nodeForMessage(m: ConversationMessage): HTMLElement {
   if (m.role === 'system') return dividerEl(m.text)
   const tools = Array.isArray(m.tools) ? (m.tools as unknown[]).map(String).filter(Boolean) : []
@@ -191,17 +216,20 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     n.setAttribute('aria-label', 'Settings')
   })
   const menu = el('div', 'ak-menu')
-  const menuItem = (iconName: string, label: string) =>
-    el('button', 'ak-menu-item', (n) => {
+  const menuItem = (iconName: string, label: string) => {
+    const btn = el('button', 'ak-menu-item', (n) => {
       n.type = 'button'
       n.appendChild(icon(iconName, 16))
       n.appendChild(el('span', undefined, (s) => (s.textContent = label)))
     })
+    return btn
+  }
   const identity = el('div', 'ak-menu-id') // "Signed in as X" — non-interactive header
   const stopItem = menuItem('stop', 'Stop')
+  const restartItem = menuItem('restart', 'Restart')
   const refreshItem = menuItem('retry', 'Refresh')
   const logoutItem = menuItem('logout', 'Log out')
-  menu.append(identity, stopItem, refreshItem, logoutItem)
+  menu.append(identity, stopItem, restartItem, refreshItem, logoutItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -214,31 +242,89 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   // -- settings menu open/close + actions --
   let menuOpen = false
+  let busyAction: 'stop' | 'restart' | null = null
+  const renderMenuItem = (btn: HTMLButtonElement, iconName: string, label: string, busy = false) => {
+    clearNode(btn)
+    btn.appendChild(busy ? el('div', 'ak-spin ak-menu-spin') : icon(iconName, 16))
+    btn.appendChild(el('span', undefined, (s) => (s.textContent = label)))
+  }
+  const refreshBusyMenu = () => {
+    renderMenuItem(stopItem as HTMLButtonElement, 'stop', busyAction === 'stop' ? 'Stopping…' : 'Stop', busyAction === 'stop')
+    renderMenuItem(restartItem as HTMLButtonElement, 'restart', busyAction === 'restart' ? 'Restarting…' : 'Restart', busyAction === 'restart')
+    ;(stopItem as HTMLButtonElement).disabled = busyAction !== null || !isBusy()
+    ;(restartItem as HTMLButtonElement).disabled = busyAction !== null
+    ;(refreshItem as HTMLButtonElement).disabled = busyAction !== null
+    ;(logoutItem as HTMLButtonElement).disabled = busyAction !== null
+  }
   const setMenu = (open: boolean) => {
+    if (busyAction && !open) return
     menuOpen = open
     show(menu, open)
     settings.classList.toggle('on', open)
     if (open) {
-      (stopItem as HTMLButtonElement).disabled = !isBusy() // Stop is live only while working
       const email = getSessionEmail() // refresh on open so it's current
       identity.textContent = email ?? ''
       show(identity, !!email)
+      refreshBusyMenu()
     }
   }
   on(settings, 'click', (e) => {
     e.stopPropagation()
+    if (busyAction) return
     setMenu(!menuOpen)
   })
   // A click anywhere else in the overlay closes the menu.
   on(overlay, 'click', (e) => {
     const t = e.target as Node
-    if (menuOpen && !menu.contains(t) && !settings.contains(t)) setMenu(false)
+    if (!busyAction && menuOpen && !menu.contains(t) && !settings.contains(t)) setMenu(false)
   })
-  on(stopItem, 'click', () => {
-    stop()
-    setMenu(false)
+  on(stopItem, 'click', async () => {
+    if (busyAction || !isBusy()) return
+    busyAction = 'stop'
+    refreshBusyMenu()
+    try {
+      await stop()
+    } finally {
+      busyAction = null
+      refreshBusyMenu()
+      setMenu(false)
+    }
+  })
+  on(restartItem, 'click', async () => {
+    if (busyAction) return
+    busyAction = 'restart'
+    refreshBusyMenu()
+    let restarted = false
+    beginRestart()
+    try {
+      await api.restartSite(CONFIG.site)
+      clearAfterRestart()
+      history = []
+      cursor = null
+      loaded = false
+      loading = false
+      lastLoadTurnCount = -1
+      renderedKey = ''
+      restarted = true
+    } catch {
+      /* label updated after the busy state clears */
+    } finally {
+      busyAction = null
+      if (!restarted) endRestartAttempt()
+      refreshBusyMenu()
+    }
+    if (restarted) {
+      setMenu(false)
+      render()
+    } else {
+      renderMenuItem(restartItem as HTMLButtonElement, 'restart', 'Restart failed')
+      setTimeout(() => {
+        if (busyAction === null) refreshBusyMenu()
+      }, 1600)
+    }
   })
   on(refreshItem, 'click', () => {
+    if (busyAction) return
     // Land back in the expanded chat after the reload (one-shot flag read at boot).
     try {
       localStorage.setItem(lsKey('reopen-expanded'), '1')
@@ -248,6 +334,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     location.reload()
   })
   on(logoutItem, 'click', () => {
+    if (busyAction) return
     setMenu(false)
     deps.collapse() // minimize to the bottom bar
     logout() // wipe the session immediately — logged out even if a job is mid-think
@@ -322,7 +409,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     for (const m of history) listEl.appendChild(nodeForMessage(m))
     for (const t of getLiveTurns()) listEl.appendChild(msgEl(t.role, t.text, { thumbs: t.thumbs, images: t.images }))
     if (!history.length && !getLiveTurns().length) {
-      listEl.appendChild(el('div', 'ak-empty', (n) => (n.textContent = '> Ask for a change to this site.')))
+      listEl.appendChild(emptyStateEl())
     }
   }
 

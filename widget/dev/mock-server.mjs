@@ -20,6 +20,8 @@ const jobsById = new Map()
 const jobsByIdem = new Map()
 /** siteId -> completed turns, appended to /conversation like the real session log */
 const turnsBySite = new Map()
+/** siteIds whose mock conversation was cleared by restart */
+const clearedSites = new Set()
 let msgSeq = 0
 
 const frame = (name, data) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
@@ -254,6 +256,7 @@ const server = createServer(async (req, res) => {
       }
       const job = makeJob(decodeURIComponent(m[1]), text)
       if (idemKey) jobsByIdem.set(idemKey, job)
+      clearedSites.delete(job.siteId)
       attach(job, res)
     })
     return
@@ -274,6 +277,7 @@ const server = createServer(async (req, res) => {
   m = p.match(/^\/sites\/([^/]+)\/conversation$/)
   if (m && req.method === 'GET') {
     const site = decodeURIComponent(m[1])
+    if (clearedSites.has(site)) return json(res, 200, { messages: [], cursor: null })
     return json(res, 200, {
       messages: [
         { id: 'h1', role: 'user', text: 'make the footer say 2026', ts: Date.now() - 90000 },
@@ -284,6 +288,36 @@ const server = createServer(async (req, res) => {
         ...(turnsBySite.get(site) || []),
       ],
       cursor: null,
+    })
+  }
+
+  // POST /sites/:id/restart -> clear mock history and report a clean reset.
+  m = p.match(/^\/sites\/([^/]+)\/restart$/)
+  if (m && req.method === 'POST') {
+    const site = decodeURIComponent(m[1])
+    const job = jobsBySite.get(site)
+    if (job && job.status === 'running') {
+      job.status = 'error'
+      job.error = { kind: 'stopped', detail: 'Stopped.' }
+      for (const w of job.writers) {
+        try {
+          w.write(frame('error', job.error))
+          w.end()
+        } catch {
+          /* ignore */
+        }
+      }
+      job.writers.clear()
+    }
+    jobsBySite.delete(site)
+    turnsBySite.delete(site)
+    clearedSites.add(site)
+    return json(res, 200, {
+      ok: true,
+      cancelled: job ? 1 : 0,
+      cleared: true,
+      conversation_id: `conv_${site}_${Date.now().toString(36)}`,
+      reset: { headSha: 'restart1234567890', branch: 'main', dirty: false },
     })
   }
 

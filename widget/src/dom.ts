@@ -52,6 +52,7 @@ const ICON_PATHS: Record<string, string> = {
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none"/>',
   check: '<path d="M4.5 12.5 10 18 19.5 6.5" fill="none"/>',
   retry: '<path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5" fill="none"/>',
+  restart: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" fill="none"/><path d="M12 8v5l3 2" fill="none"/>',
   x: '<path d="M6 6l12 12M18 6 6 18" fill="none"/>',
   settings:
     '<path d="M4 8h16M4 16h16" fill="none"/><circle cx="9" cy="8" r="2.4" fill="none"/><circle cx="15" cy="16" r="2.4" fill="none"/>',

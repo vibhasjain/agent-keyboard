@@ -157,6 +157,10 @@ export const api = {
   cancelJob: (jobId: string): Promise<{ stopped: boolean }> =>
     jsonFetch(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
 
+  /** Clean slate: stop active work, reset checkout to origin, and clear conversation context. */
+  restartSite: (siteId: string): Promise<{ ok: boolean; cleared?: boolean; reset?: unknown }> =>
+    jsonFetch(`/sites/${encodeURIComponent(siteId)}/restart`, { method: 'POST' }),
+
   conversation: (siteId: string, opts: { limit?: number; before?: string } = {}): Promise<{ messages: ConversationMessage[]; cursor: string | null }> => {
     const q = new URLSearchParams()
     q.set('limit', String(opts.limit ?? 40))

@@ -175,6 +175,28 @@ export async function gitSummary(
   };
 }
 
+export interface CheckoutReset {
+  headSha: string;
+  branch: string;
+  dirty: boolean;
+}
+
+/**
+ * Restart action reset: discard every local checkout change and land exactly on
+ * origin/<branch>. Unlike syncCheckout(), this intentionally does NOT stash
+ * dirty work; Restart means "clean slate."
+ */
+export async function resetCheckoutToOrigin(site: Site): Promise<CheckoutReset> {
+  const dir = await ensureCheckout(site);
+  await git(dir, ["remote", "set-url", "origin", tokenizedRemote(site.repo)]);
+  await git(dir, ["fetch", "origin", site.branch]);
+  await git(dir, ["reset", "--hard", `origin/${site.branch}`]);
+  await git(dir, ["clean", "-fdx"]);
+  const headSha = (await git(dir, ["rev-parse", "HEAD"])).trim();
+  const status = (await git(dir, ["status", "--porcelain"]).catch(() => "")).trim();
+  return { headSha, branch: site.branch, dirty: status.length > 0 };
+}
+
 /** Read a small pointer file inside a checkout's data area (best-effort). */
 export async function readDataFile(relPath: string): Promise<string | null> {
   try {
