@@ -161,6 +161,14 @@ function makeComposer(): Composer {
     show(note, !!text)
   }
 
+  const stopVoiceKeepingPrompt = () => {
+    voice.teardown()
+    baseText = ta.value
+    partial = ''
+    saveDraft()
+    syncSend()
+  }
+
   let sending = false
   const doSend = async () => {
     if (sending) return
@@ -234,6 +242,22 @@ function makeComposer(): Composer {
     if (target === ta || !target?.closest('button')) return
     e.preventDefault()
     e.stopPropagation()
+    doSend()
+  }, true)
+  on(document, 'keydown', (e) => {
+    const voiceState = getState().ui.voice
+    if (voiceState !== 'connecting' && voiceState !== 'live') return
+    const ke = e as KeyboardEvent
+    if (ke.key === 'Escape') {
+      e.preventDefault()
+      e.stopPropagation()
+      stopVoiceKeepingPrompt()
+      return
+    }
+    if (ke.key !== 'Enter' || ke.shiftKey || ke.metaKey || ke.ctrlKey || ke.altKey || ke.isComposing) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (voiceState === 'connecting') stopVoiceKeepingPrompt()
     doSend()
   }, true)
   on(ta, 'input', () => {
