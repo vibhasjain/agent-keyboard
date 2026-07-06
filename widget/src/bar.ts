@@ -75,8 +75,6 @@ function makeComposer(): Composer {
     n.setAttribute('enterkeyhint', 'send')
     n.setAttribute('aria-label', 'Message')
   })
-  const mirror = el('div', 'ak-ta-mirror')
-  const caret = el('span', 'ak-ta-caret')
   const mic = el('button', 'ak-icon-btn ak-mic', (n) => {
     n.type = 'button'
     n.appendChild(icon('mic'))
@@ -87,20 +85,14 @@ function makeComposer(): Composer {
     n.appendChild(icon('arrow-up'))
     n.setAttribute('aria-label', 'Send')
   })
-  // Inline "transcribing…" cue: a small amber spinner that sits after the text
-  // while dictation audio is being transcribed, so the gap before words appear
-  // reads as "working", not "stuck".
-  const vspin = el('div', 'ak-spin ak-vspin')
-  taWrap.append(ta, mirror, vspin)
+  taWrap.append(ta)
   row.append(taWrap, cam, mic, sendBtn)
   root.append(photos.el, row, note)
   show(note, false)
-  show(vspin, false)
 
   // -- voice / dictation --
   let baseText = ''
   let partial = ''
-  let transcribing = false
   const joinText = (a: string, b: string) => (a.trim() ? a.trim() + ' ' + b.trim() : b.trim())
   const voice: VoiceController = makeVoice({
     getState: () => getState().ui.voice,
@@ -114,16 +106,11 @@ function makeComposer(): Composer {
       if (s === 'error' && err) setNote(err, true)
       else if (s === 'idle' || s === 'live') setNote('')
     },
-    onTranscribing: (active) => {
-      transcribing = active
-      updateTranscribingCue()
-    },
     onPartial: (delta) => {
       partial = joinText(partial, delta)
       ta.value = joinText(baseText, partial)
       autogrow()
       pinToEnd() // dictation past the height cap: keep the last spoken word in view
-      updateTranscribingCue()
     },
     onFinal: (transcript) => {
       baseText = joinText(baseText, transcript)
@@ -133,7 +120,6 @@ function makeComposer(): Composer {
       pinToEnd()
       saveDraft()
       syncSend()
-      updateTranscribingCue()
     },
   })
 
@@ -150,29 +136,10 @@ function makeComposer(): Composer {
     // scrollHeight is 0 while hidden/mid-reparent — don't persist a 0px height.
     if (ta.scrollHeight > 0) ta.style.height = Math.min(ta.scrollHeight, 88) + 'px'
     else ta.style.height = ''
-    updateTranscribingCue()
   }
 
   const pinToEnd = () => {
     ta.scrollTop = ta.scrollHeight
-  }
-
-  const updateTranscribingCue = () => {
-    if (!transcribing) {
-      show(vspin, false)
-      return
-    }
-    const end = ta.selectionStart ?? ta.value.length
-    const before = ta.value.slice(0, end)
-    mirror.textContent = ''
-    mirror.appendChild(document.createTextNode(before.endsWith('\n') ? before + '\u200b' : before || '\u200b'))
-    mirror.appendChild(caret)
-    const maxX = Math.max(8, ta.clientWidth - 12)
-    const maxY = Math.max(8, ta.clientHeight - 9)
-    const x = Math.min(Math.max(8, caret.offsetLeft + 8), maxX)
-    const y = Math.min(Math.max(7, caret.offsetTop - ta.scrollTop + 13), maxY)
-    vspin.style.transform = `translate(${x}px, ${y}px)`
-    show(vspin, true)
   }
 
   const saveDraft = () => {
@@ -206,7 +173,7 @@ function makeComposer(): Composer {
     try {
       // If dictation is live, commit + fold its transcript in FIRST — hitting send
       // without tapping the mic off must not drop what was just spoken. No-op when
-      // not dictating; brief spinner while the last words transcribe.
+      // not dictating.
       await voice.flush()
       const text = ta.value.trim()
       if (!text && !photos.hasAttachments()) return

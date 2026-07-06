@@ -59,9 +59,6 @@ export interface VoiceHandlers {
   // Partial (live) and final (folded) transcript deltas for the textarea.
   onPartial: (text: string) => void
   onFinal: (text: string) => void
-  // True while speech is detected and its transcript is still pending (drives the
-  // inline "transcribing" spinner), false once that segment's transcript lands.
-  onTranscribing: (active: boolean) => void
   getState: () => VoiceState
 }
 
@@ -125,24 +122,20 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
         }
         // VAD-capable models can produce deltas while recording. Manual flush()
         // still commits trailing audio before Send reads the textarea.
-        if (msg.type === 'input_audio_buffer.speech_started') {
-          h.onTranscribing(true)
-        } else if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.delta) {
+        if (msg.type === 'conversation.item.input_audio_transcription.delta' && msg.delta) {
           h.onPartial(msg.delta)
         } else if (msg.type === 'conversation.item.input_audio_transcription.completed') {
           const finishing = finishTimer != null || flushResolvers.length > 0
           clearFinish()
           if (msg.transcript) h.onFinal(String(msg.transcript).trim()) // fold text in BEFORE resolving flush
-          h.onTranscribing(false)
           if (finishing) {
             teardownLiveSession()
             h.onState('idle')
             settleFlush()
           }
         } else if (msg.type === 'error' && finishTimer) {
-          // e.g. committing an empty/too-short buffer — don't hang on the spinner.
+          // e.g. committing an empty/too-short buffer — don't leave send() waiting.
           clearFinish()
-          h.onTranscribing(false)
           teardownLiveSession()
           h.onState('idle')
           settleFlush()
@@ -169,7 +162,6 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
     } catch (e) {
       if (mySeq !== connectSeq) return
       teardownLiveSession()
-      h.onTranscribing(false)
       const err = e as Error
       if (err && err.name === 'NotAllowedError') {
         h.onState('error', 'Mic blocked — enable it in Safari settings')
@@ -185,7 +177,6 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
     connectSeq++ // cancels any in-flight connect at its next checkpoint
     clearFinish()
     teardownLiveSession()
-    h.onTranscribing(false)
     h.onState('idle')
     settleFlush()
   }
@@ -203,11 +194,9 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
       if (finishTimer) return // already committed; this caller settles with it
       s.stream?.getTracks().forEach((t) => t.stop())
       s.pc.getSenders().forEach((sn) => sn.track?.stop())
-      h.onTranscribing(true)
       send({ type: 'input_audio_buffer.commit' })
       finishTimer = setTimeout(() => {
         finishTimer = null
-        h.onTranscribing(false)
         teardownLiveSession()
         h.onState('idle')
         settleFlush()

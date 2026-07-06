@@ -196,15 +196,6 @@ button::-moz-focus-inner{ border:0; }
 .ak-ta::placeholder{ color:var(--ak-ink3); }
 .ak-ta.ak-confirm::placeholder{ color:var(--ak-amber); opacity:1; } /* brief sign-in confirmation */
 .ak-ta:disabled{ opacity:.6; }
-.ak-ta-mirror{
-  position:absolute; inset:0; visibility:hidden; pointer-events:none;
-  box-sizing:border-box; width:100%; min-height:36px; max-height:88px; overflow:hidden;
-  padding:8px 4px 8px 8px;
-  color:transparent; font-family:var(--ak-mono); font-size:16px; line-height:20px;
-  white-space:pre-wrap; overflow-wrap:anywhere;
-}
-.ak-ta-caret{ display:inline-block; width:0; height:20px; vertical-align:top; }
-
 .ak-icon-btn{
   flex:none; width:36px; height:36px; border-radius:50%; border:none; background:transparent;
   color:var(--ak-ink2); line-height:0; cursor:pointer; position:relative;
@@ -228,12 +219,6 @@ button::-moz-focus-inner{ border:0; }
 @keyframes ak-ping{ 0%{ transform:scale(.7); opacity:.7; } 80%,100%{ transform:scale(1.9); opacity:0; } }
 .ak-note{ font-family:var(--ak-mono); font-size:10px; color:var(--ak-ink3); padding:0 6px 2px; }
 .ak-note.err{ color:var(--ak-err); }
-/* inline transcribing cue — a tiny amber .ak-spin positioned at the textarea caret */
-.ak-vspin{
-  position:absolute; left:0; top:0; z-index:1;
-  width:9px; height:9px; border-width:1.5px; margin:0;
-  pointer-events:none;
-}
 
 /* ---- photo chips ---- */
 .ak-chips{ display:none; flex-wrap:wrap; gap:6px; padding:2px 4px 0; }
