@@ -13,7 +13,7 @@ export type Frame = [atMs: number, event: string, data: Record<string, unknown>]
 export interface SceneScript {
   /** Frames sendMessage (and a jobStream re-attach) plays, relative to the call. */
   send?: Frame[]
-  /** Photo upload: sweep onProgress 0→1 over durationMs, then resolve. */
+  /** Attachment upload: sweep onProgress 0->1 over durationMs, then resolve. */
   upload?: { durationMs: number; result?: UploadResult }
   /** Fixed history for the expanded chat. */
   conversation?: { messages: ConversationMessage[]; cursor: string | null }
@@ -70,6 +70,7 @@ export function installFakeApi(script: SceneScript): void {
   api.conversation = () =>
     Promise.resolve(script.conversation ?? { messages: [], cursor: null })
   api.uploadPhoto = (_siteId, _file, _filename, onProgress) => fakeUpload(script.upload, onProgress)
+  api.uploadFile = (_siteId, _file, _filename, onProgress) => fakeUpload(script.upload, onProgress)
   api.listJobs = () => Promise.resolve({ jobs: [] })
   api.realtimeToken = () => Promise.resolve({ value: 'demo', session_type: 'transcription' })
 }

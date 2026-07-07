@@ -1,13 +1,13 @@
-// Photo staging for the prompt bar. An uploaded image is normalized with sharp
-// (rotate → resize ≤1568px → JPEG q85 — Claude's effective vision cap) and
-// written under the site checkout's `.tmp/uploads/` dir, so the agent can Read
-// it with a repo-relative path.
+// Attachment staging for the prompt bar. Camera/photo uploads are normalized
+// with sharp (rotate -> resize <=1568px -> JPEG q85, Claude's effective vision
+// cap). Other files are written as-is. Everything lives under the site checkout's
+// `.tmp/uploads/` dir so the agent can Read it with a repo-relative path.
 //
 // Uploads live under .git/info/exclude'd `.tmp/`, so they never get committed.
 // A boot sweep purges anything older than 24h across all checkouts.
 
 import { mkdir, writeFile, readdir, stat, rm, rename } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { basename, join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
 import { checkoutPath } from "./checkouts.js";
 
@@ -25,6 +25,10 @@ export interface StagedPhoto {
   id: string;
   path: string; // repo-relative, e.g. ".tmp/uploads/<uuid>.jpg"
   absPath: string;
+  kind: "photo" | "file";
+  name: string;
+  size: number;
+  mime?: string;
 }
 
 function uploadsDir(siteId: string): string {
@@ -44,17 +48,56 @@ export async function stageUpload(siteId: string, input: Buffer): Promise<Staged
     .jpeg({ quality: 85 })
     .toBuffer();
   await writeFile(absPath, jpeg);
-  return { id, path: relative(checkoutPath(siteId), absPath), absPath };
+  return {
+    id,
+    path: relative(checkoutPath(siteId), absPath),
+    absPath,
+    kind: "photo",
+    name: "photo.jpg",
+    size: jpeg.length,
+    mime: "image/jpeg",
+  };
+}
+
+function safeFileName(name: string): string {
+  const base = basename(name || "attachment").replace(/[^\w.\-()+ ]+/g, "_").replace(/\s+/g, "_");
+  const trimmed = base.replace(/^_+|_+$/g, "").slice(0, 96);
+  return trimmed || "attachment";
+}
+
+/** Write one arbitrary uploaded file into a site's staging dir. */
+export async function stageFileUpload(
+  siteId: string,
+  input: Buffer,
+  filename: string,
+  mime?: string,
+): Promise<StagedPhoto> {
+  const dir = uploadsDir(siteId);
+  await mkdir(dir, { recursive: true });
+  const id = randomUUID();
+  const name = safeFileName(filename);
+  const absPath = join(dir, `${id}-${name}`);
+  await writeFile(absPath, input);
+  return {
+    id,
+    path: relative(checkoutPath(siteId), absPath),
+    absPath,
+    kind: "file",
+    name,
+    size: input.length,
+    mime,
+  };
 }
 
 /**
  * Resolve upload ids (from POST /messages) to their repo-relative paths for the
  * given site. Silently drops ids whose staged file is gone (expired / never
- * existed) — a missing photo shouldn't sink the whole message.
+ * existed) — a missing attachment shouldn't sink the whole message.
  */
 export async function resolveAttachments(siteId: string, ids: string[]): Promise<string[]> {
   const dir = uploadsDir(siteId);
   const out: string[] = [];
+  let files: string[] | null = null;
   for (const rawId of ids) {
     const id = String(rawId).replace(/[^a-fA-F0-9-]/g, ""); // never let an id escape the dir
     if (!id) continue;
@@ -62,6 +105,17 @@ export async function resolveAttachments(siteId: string, ids: string[]): Promise
     try {
       await stat(abs);
       out.push(relative(checkoutPath(siteId), abs));
+      continue;
+    } catch {
+      /* may be a generic file staged as <id>-<safeName> */
+    }
+    try {
+      files ??= await readdir(dir);
+      const name = files.find((f) => f.startsWith(`${id}-`));
+      if (!name) continue;
+      const fileAbs = join(dir, name);
+      const s = await stat(fileAbs);
+      if (s.isFile()) out.push(relative(checkoutPath(siteId), fileAbs));
     } catch {
       /* expired or unknown id */
     }

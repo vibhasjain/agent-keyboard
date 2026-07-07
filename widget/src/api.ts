@@ -116,6 +116,7 @@ export interface ConversationMessage {
   kind?: 'compact'
   text: string
   tools?: unknown
+  attachments?: number
   photos?: number
   ts?: number | string
 }
@@ -123,6 +124,10 @@ export interface ConversationMessage {
 export interface UploadResult {
   id: string
   path: string
+  kind?: 'photo' | 'file'
+  name?: string
+  mime?: string
+  size?: number
 }
 
 export interface RealtimeToken {
@@ -168,18 +173,28 @@ export const api = {
     return jsonFetch(`/sites/${encodeURIComponent(siteId)}/conversation?${q.toString()}`)
   },
 
-  /** Upload one photo (multipart, field 'photo', ≤15MB). onProgress in 0..1. */
+  /** Upload one photo (multipart, field 'photo', <=15MB). onProgress in 0..1. */
   uploadPhoto: (siteId: string, file: Blob, filename: string, onProgress?: (p: number) => void): Promise<UploadResult> =>
-    xhrUpload(url(`/sites/${encodeURIComponent(siteId)}/uploads`), file, filename, onProgress),
+    xhrUpload(url(`/sites/${encodeURIComponent(siteId)}/uploads`), 'photo', file, filename, onProgress),
+
+  /** Upload one arbitrary file (multipart, field 'file', <=15MB). onProgress in 0..1. */
+  uploadFile: (siteId: string, file: Blob, filename: string, onProgress?: (p: number) => void): Promise<UploadResult> =>
+    xhrUpload(url(`/sites/${encodeURIComponent(siteId)}/uploads`), 'file', file, filename, onProgress),
 
   realtimeToken: (): Promise<RealtimeToken> => jsonFetch(`/realtime/token`, { method: 'POST' }),
 }
 
 // XHR (not fetch) so we get upload progress events for the chip's progress ring.
-async function xhrUpload(fullUrl: string, file: Blob, filename: string, onProgress?: (p: number) => void): Promise<UploadResult> {
+async function xhrUpload(
+  fullUrl: string,
+  field: 'photo' | 'file',
+  file: Blob,
+  filename: string,
+  onProgress?: (p: number) => void,
+): Promise<UploadResult> {
   const token = await getToken()
   const form = new FormData()
-  form.append('photo', file, filename)
+  form.append(field, file, filename)
   return new Promise<UploadResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('POST', fullUrl)

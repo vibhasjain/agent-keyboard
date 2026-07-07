@@ -150,14 +150,14 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   return lines.join(" ");
 }
 
-/** Build the user turn: a "[Sent from …]" context line, the text, and any photos. */
+/** Build the user turn: a "[Sent from …]" context line, the text, and any attachments. */
 function buildPrompt(site: Site, opts: { text: string; page: string; attachmentPaths: string[] }): string {
   const page = opts.page || "/";
   const lines = [`[Sent from https://${site.domain}${page}]`, "", opts.text];
   if (opts.attachmentPaths.length) {
     lines.push("");
     lines.push(
-      `Photo(s) attached — use the Read tool to view: ${opts.attachmentPaths.join(", ")}`,
+      `Attachment(s) attached — use the Read tool to inspect: ${opts.attachmentPaths.join(", ")}`,
     );
   }
   return lines.join("\n");

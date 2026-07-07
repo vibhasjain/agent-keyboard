@@ -220,7 +220,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-note{ font-family:var(--ak-mono); font-size:10px; color:var(--ak-ink3); padding:0 6px 2px; }
 .ak-note.err{ color:var(--ak-err); }
 
-/* ---- photo chips ---- */
+/* ---- attachment chips ---- */
 .ak-chips{ display:none; flex-wrap:wrap; gap:6px; padding:2px 4px 0; }
 .ak-file{ display:none; }
 .ak-chip{
@@ -230,6 +230,15 @@ button::-moz-focus-inner{ border:0; }
 .ak-chip.error{ border-color:var(--ak-err); cursor:pointer; }
 .ak-chip.done{ border-color:rgba(109,211,150,.6); }
 .ak-chip-img{ width:100%; height:100%; object-fit:cover; display:block; }
+.ak-chip-file{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:2px; padding:5px 4px; color:var(--ak-ink2);
+}
+.ak-chip-file svg{ color:var(--ak-amber); flex:0 0 auto; }
+.ak-chip-ext{
+  max-width:34px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:var(--ak-mono); font-size:9px; line-height:1; color:var(--ak-ink3);
+}
 .ak-chip-ring{
   position:absolute; inset:0; background:conic-gradient(rgba(255,184,107,.9) calc(var(--p,0)*1%), rgba(0,0,0,.45) 0);
   mask:radial-gradient(circle 22px at center, transparent 12px, #000 13px);

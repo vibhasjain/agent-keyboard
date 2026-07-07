@@ -68,6 +68,11 @@ function makeComposer(): Composer {
     n.appendChild(icon('camera'))
     n.setAttribute('aria-label', 'Add photo')
   })
+  const attach = el('button', 'ak-icon-btn', (n) => {
+    n.type = 'button'
+    n.appendChild(icon('paperclip'))
+    n.setAttribute('aria-label', 'Attach file')
+  })
   const taWrap = el('div', 'ak-ta-wrap')
   const ta = el('textarea', 'ak-ta', (n) => {
     n.rows = 1
@@ -86,7 +91,7 @@ function makeComposer(): Composer {
     n.setAttribute('aria-label', 'Send')
   })
   taWrap.append(ta)
-  row.append(taWrap, cam, mic, sendBtn)
+  row.append(taWrap, cam, attach, mic, sendBtn)
   root.append(photos.el, row, note)
   show(note, false)
 
@@ -173,8 +178,8 @@ function makeComposer(): Composer {
   const doSend = async () => {
     if (sending) return
     if (photos.isUploading()) {
-      // Don't silently drop an in-flight photo from the send payload.
-      setNote('Photo still uploading…', true)
+      // Don't silently drop an in-flight attachment from the send payload.
+      setNote('Attachment still uploading…', true)
       return
     }
     sending = true
@@ -186,8 +191,8 @@ function makeComposer(): Composer {
       const text = ta.value.trim()
       if (!text && !photos.hasAttachments()) return
       const attachmentIds = photos.getAttachmentIds()
-      const thumbs = photos.takeThumbUrls() // transfers ownership for transcript display
-      start({ text, attachmentIds, page: location.pathname, thumbs })
+      const previews = photos.takePreviews() // transfers thumbnail ownership for transcript display
+      start({ text, attachmentIds, page: location.pathname, thumbs: previews.thumbs, files: previews.files })
       reset()
       // No "Queued" note — the queue is already visible (dim lines + the +N badge).
       // Stay in the expanded chat if that's where the message was sent from;
@@ -227,6 +232,10 @@ function makeComposer(): Composer {
     blurButton(cam)
     photos.openPicker()
   })
+  on(attach, 'click', () => {
+    blurButton(attach)
+    photos.openFilePicker()
+  })
   on(mic, 'click', () => {
     blurButton(mic)
     voice.toggle()
@@ -244,6 +253,20 @@ function makeComposer(): Composer {
     e.stopPropagation()
     doSend()
   }, true)
+
+  const filesFromTransfer = (dt: DataTransfer | null): File[] => {
+    if (!dt) return []
+    const files: File[] = []
+    for (const item of Array.from(dt.items || [])) {
+      if (item.kind === 'file') {
+        const f = item.getAsFile()
+        if (f) files.push(f)
+      }
+    }
+    if (!files.length) files.push(...Array.from(dt.files || []))
+    return files
+  }
+
   on(document, 'keydown', (e) => {
     const voiceState = getState().ui.voice
     if (voiceState !== 'connecting' && voiceState !== 'live') return
@@ -276,19 +299,21 @@ function makeComposer(): Composer {
     }
   })
 
-  // paste an image straight into the composer (screenshots, copied pics). Text
-  // pastes fall through untouched — we only swallow the event when it carries images.
+  // Paste attachments straight into the composer. Text pastes fall through
+  // untouched — we only swallow the event when it carries files.
   on(ta, 'paste', (e) => {
-    const dt = (e as ClipboardEvent).clipboardData
-    if (!dt) return
-    const files: File[] = []
-    for (const item of Array.from(dt.items || [])) {
-      if (item.kind === 'file' && item.type.startsWith('image/')) {
-        const f = item.getAsFile()
-        if (f) files.push(f)
-      }
-    }
-    if (!files.length) for (const f of Array.from(dt.files || [])) if (f.type.startsWith('image/')) files.push(f)
+    const files = filesFromTransfer((e as ClipboardEvent).clipboardData)
+    if (!files.length) return
+    e.preventDefault()
+    photos.addFiles(files)
+  })
+  on(root, 'dragover', (e) => {
+    const files = filesFromTransfer((e as DragEvent).dataTransfer)
+    if (!files.length) return
+    e.preventDefault()
+  })
+  on(root, 'drop', (e) => {
+    const files = filesFromTransfer((e as DragEvent).dataTransfer)
     if (!files.length) return
     e.preventDefault()
     photos.addFiles(files)
@@ -316,6 +341,7 @@ function makeComposer(): Composer {
   const applyAuthLock = () => {
     const locked = getState().auth !== 'authed'
     cam.disabled = locked
+    attach.disabled = locked
     mic.disabled = locked
   }
   applyAuthLock()
@@ -328,6 +354,8 @@ function makeComposer(): Composer {
     setDisabled: (d) => {
       ta.disabled = d
       cam.disabled = d
+      attach.disabled = d
+      mic.disabled = d
       syncSend()
     },
     setNote,

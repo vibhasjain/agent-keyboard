@@ -1,5 +1,5 @@
 // Agent Keyboard — HTTP server that drives the real Claude Code CLI against
-// per-site git checkouts. The owner sends a prompt (text + optional photos) from
+// per-site git checkouts. The owner sends a prompt (text + optional attachments) from
 // a widget embedded in their app; the agent edits that app's repo, commits,
 // pushes, and the host redeploys. Every run is a durable job
 // (fire-and-forget; the client can disconnect and re-attach). Single user.
@@ -17,7 +17,7 @@ import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
 import { runMessageJob, killAllChildren, rotateConversation } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
-import { stageUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
+import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { seedSkills } from "./skills.js";
@@ -75,7 +75,7 @@ app.use(
     methods: ["GET", "POST", "OPTIONS"],
   }),
 );
-app.use(express.json({ limit: "1mb" })); // photos go via multipart, so 1mb is plenty
+app.use(express.json({ limit: "1mb" })); // attachments go via multipart, so 1mb is plenty
 
 const authed = requireOwner();
 
@@ -341,7 +341,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   await streamJobTail(req, res, job);
 });
 
-/** Upload a single photo (multipart field `photo`); returns {id, path} to attach. */
+/** Upload a single attachment (multipart field `photo` or `file`); returns {id, path} to attach. */
 app.post("/sites/:siteId/uploads", authed, (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   if (!site) {
@@ -350,7 +350,9 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
   }
   const bb = busboy({ headers: req.headers, limits: { files: 1, fileSize: 15 * 1024 * 1024 } });
   const chunks: Buffer[] = [];
-  let gotFile = false;
+  let fieldName: "photo" | "file" | null = null;
+  let filename = "attachment";
+  let mime = "";
   let tooBig = false;
   let handled = false;
   const finish = (status: number, payload: unknown) => {
@@ -359,24 +361,36 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
     res.status(status).json(payload);
   };
 
-  bb.on("file", (name, stream) => {
-    if (name !== "photo") {
+  bb.on("file", (name, stream, info) => {
+    if (fieldName || (name !== "photo" && name !== "file")) {
       stream.resume();
       return;
     }
-    gotFile = true;
+    fieldName = name;
+    filename = info.filename || (name === "photo" ? "photo.jpg" : "attachment");
+    mime = info.mimeType || "";
     stream.on("data", (d: Buffer) => chunks.push(d));
     stream.on("limit", () => {
       tooBig = true;
     });
   });
   bb.on("close", async () => {
-    if (tooBig) return finish(413, { error: "photo too large (max 15MB)" });
-    if (!gotFile || chunks.length === 0) return finish(400, { error: "no `photo` field" });
+    if (tooBig) return finish(413, { error: "attachment too large (max 15MB)" });
+    if (!fieldName || chunks.length === 0) return finish(400, { error: "no `photo` or `file` field" });
     try {
       await ensureCheckout(site);
-      const staged = await stageUpload(site.id, Buffer.concat(chunks));
-      finish(200, { id: staged.id, path: staged.path });
+      const input = Buffer.concat(chunks);
+      const staged = fieldName === "photo"
+        ? await stageUpload(site.id, input)
+        : await stageFileUpload(site.id, input, filename, mime);
+      finish(200, {
+        id: staged.id,
+        path: staged.path,
+        kind: staged.kind,
+        name: staged.name,
+        mime: staged.mime,
+        size: staged.size,
+      });
     } catch (err) {
       finish(500, { error: String(err).slice(0, 300) });
     }

@@ -6,7 +6,7 @@ import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
+import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe } from './state'
 
@@ -128,7 +128,7 @@ function thumbRow(urls: string[]): HTMLElement {
   return r
 }
 
-/** Dim "N photos" marker for history turns (staged photos are deleted server-side). */
+/** Dim "N photos" marker for older history turns (staged photos are deleted server-side). */
 function photoMarker(count: number): HTMLElement {
   const m = el('div', 'ak-t-attach')
   m.appendChild(icon('camera', 11))
@@ -136,14 +136,23 @@ function photoMarker(count: number): HTMLElement {
   return m
 }
 
+function attachmentMarker(count: number, noun = 'attachment'): HTMLElement {
+  const m = el('div', 'ak-t-attach')
+  m.appendChild(icon('paperclip', 11))
+  m.appendChild(el('span', undefined, (n) => (n.textContent = count === 1 ? `1 ${noun}` : `${count} ${noun}s`)))
+  return m
+}
+
 function msgEl(
   role: 'user' | 'assistant',
   text: string,
-  extras?: { thumbs?: string[]; photos?: number; images?: string[] },
+  extras?: { thumbs?: string[]; files?: string[]; attachments?: number; photos?: number; images?: string[] },
 ): HTMLElement {
   if (role === 'user') {
     const body = el('div')
     if (extras?.thumbs?.length) body.appendChild(thumbRow(extras.thumbs))
+    if (extras?.files?.length) body.appendChild(attachmentMarker(extras.files.length, 'file'))
+    if (extras?.attachments) body.appendChild(attachmentMarker(extras.attachments))
     else if (extras?.photos) body.appendChild(photoMarker(extras.photos))
     body.appendChild(el('div', undefined, (n) => (n.textContent = text)))
     return lineEl('user', '>', body)
@@ -197,7 +206,7 @@ function nodeForMessage(m: ConversationMessage): HTMLElement {
     if (m.text) wrap.appendChild(msgEl('assistant', m.text))
     return wrap
   }
-  return msgEl(m.role, m.text, { photos: m.photos })
+  return msgEl(m.role, m.text, { attachments: m.attachments, photos: m.photos })
 }
 
 export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
@@ -411,7 +420,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     clearNode(listEl)
     liveUser = liveAsst = liveTimer = liveBody = null
     for (const m of history) listEl.appendChild(nodeForMessage(m))
-    for (const t of getLiveTurns()) listEl.appendChild(msgEl(t.role, t.text, { thumbs: t.thumbs, images: t.images }))
+    for (const t of getLiveTurns()) listEl.appendChild(msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images }))
     if (!history.length && !getLiveTurns().length) {
       listEl.appendChild(emptyStateEl())
     }
@@ -426,13 +435,19 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       // `history`. Don't also render the live bubble, or the prompt shows twice.
       const norm = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim()
       const lastUser = [...history].reverse().find((m) => m.role === 'user')
-      const dupOfHistory = !!prompt && !!lastUser && norm(lastUser.text) === norm(prompt)
+      const activeFiles = getActiveFiles()
+      const activeThumbs = getActiveThumbs()
+      const activeAttachmentOnly = !prompt && (!!activeThumbs?.length || !!activeFiles?.length)
+      const dupOfHistory =
+        !!lastUser &&
+        ((!!prompt && norm(lastUser.text) === norm(prompt)) ||
+          (activeAttachmentOnly && !norm(lastUser.text) && (lastUser.attachments ?? lastUser.photos ?? 0) > 0))
       if (!liveUser && !dupOfHistory) {
-        // Prompt and thumbs are fixed for the lifetime of a job — build once.
-        liveUser = msgEl('user', prompt || '', { thumbs: getActiveThumbs() })
+        // Prompt and attachment previews are fixed for the lifetime of a job — build once.
+        liveUser = msgEl('user', prompt || '', { thumbs: activeThumbs, files: activeFiles })
         listEl.appendChild(liveUser)
       }
-      if (liveUser) show(liveUser, !!prompt && !dupOfHistory)
+      if (liveUser) show(liveUser, (!!prompt || activeAttachmentOnly) && !dupOfHistory)
       if (!liveAsst) {
         // Claude Code's working line: "✻ Doing the thing… (0:24)"
         liveAsst = el('div')
@@ -462,7 +477,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const q = getQueued()
     clearNode(queuedBox)
     for (const m of q) {
-      const line = msgEl('user', m.text, { thumbs: m.thumbs })
+      const line = msgEl('user', m.text, { thumbs: m.thumbs, files: m.files })
       line.classList.add('queued')
       queuedBox.appendChild(line)
     }

@@ -106,7 +106,7 @@ async function doEnsureCheckout(site: Site): Promise<string> {
  * origin at the start of every job means rotating it is just
  * `fly secrets set GH_TOKEN=…` (the next job picks up the new value). Then
  * fetches, hard-resets, and cleans everything EXCEPT our .tmp staging dir (staged
- * photos for the in-flight job live there). Returns the post-sync HEAD sha
+ * attachments for the in-flight job live there). Returns the post-sync HEAD sha
  * (preJobSha). MUST be called inside withSiteLock.
  */
 export async function syncCheckout(site: Site): Promise<string> {
@@ -116,7 +116,7 @@ export async function syncCheckout(site: Site): Promise<string> {
   // Preserve, don't destroy. If a prior (e.g. interrupted) turn left uncommitted
   // work, stash it — recoverable via `git stash pop` — instead of the reset/clean
   // below blowing it away. .tmp is git-ignored, so status/stash never touch the
-  // in-flight job's staged photos. Best-effort: a stash failure just falls through
+  // in-flight job's staged attachments. Best-effort: a stash failure just falls through
   // to the old hard-reset behaviour, never worse.
   const dirty = (await git(dir, ["status", "--porcelain"]).catch(() => "")).trim();
   if (dirty) {

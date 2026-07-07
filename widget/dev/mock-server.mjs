@@ -268,7 +268,7 @@ const server = createServer(async (req, res) => {
     req.on('data', () => {}) // drain
     req.on('end', () => {
       const id = `up_${Math.random().toString(36).slice(2, 9)}`
-      json(res, 200, { id, path: `uploads/${id}.jpg` })
+      json(res, 200, { id, path: `uploads/${id}`, kind: 'file', name: 'attachment' })
     })
     return
   }

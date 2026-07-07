@@ -19,7 +19,9 @@ export interface ChatMessage {
   // Only set on system dividers (e.g. "compact") so the widget can render them
   // specially; user/assistant messages omit it.
   kind?: "compact";
-  // Count of photos that were attached to a user turn (files are gone; count survives).
+  // Count of attachments that were attached to a user turn (files are gone; count survives).
+  attachments?: number;
+  // Back-compat for older turns injected with "Photo(s) attached".
   photos?: number;
 }
 
@@ -47,15 +49,20 @@ export async function sessionFilePath(sessionId: string, cwd: string): Promise<s
 }
 
 /**
- * Strip the context + photo boilerplate we inject, so the user bubble is clean.
- * Returns the photo count from the stripped boilerplate so the widget can show
- * an attachment marker (the staged files themselves are deleted after the job).
+ * Strip the context + attachment boilerplate we inject, so the user bubble is
+ * clean. Returns the count from the stripped boilerplate so the widget can show
+ * a marker (the staged files themselves are deleted after the job).
  */
-function cleanUserText(raw: string): { text: string; photos: number } {
+function cleanUserText(raw: string): { text: string; attachments: number; photos: number } {
+  let attachments = 0;
   let photos = 0;
   const text = raw
     .split("\n")
     .filter((l) => {
+      if (/^Attachment\(s\) attached( — use the Read tool[^:]*)?:/i.test(l)) {
+        attachments += (l.match(/\.tmp\//g) ?? []).length || 1;
+        return false;
+      }
       if (/^Photo\(s\) attached( — use the Read tool[^:]*)?:/i.test(l)) {
         photos += (l.match(/\.tmp\//g) ?? []).length || 1;
         return false;
@@ -64,7 +71,7 @@ function cleanUserText(raw: string): { text: string; photos: number } {
     })
     .join("\n")
     .trim();
-  return { text, photos };
+  return { text, attachments, photos };
 }
 
 function userText(content: unknown): string | null {
@@ -131,11 +138,12 @@ export async function readConversation(
       const text = userText(o.message?.content);
       if (text) {
         const clean = cleanUserText(text);
-        if (clean.text || clean.photos)
+        if (clean.text || clean.attachments || clean.photos)
           all.push({
             id: o.uuid ?? `u${idx}`,
             role: "user",
             text: clean.text,
+            ...(clean.attachments ? { attachments: clean.attachments } : {}),
             ...(clean.photos ? { photos: clean.photos } : {}),
             ts,
             tools: [],

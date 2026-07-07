@@ -36,8 +36,9 @@ let generation = 0
 let restartInFlight = false
 
 // Turns completed during this page load (rendered under any server-fetched history).
-// `thumbs` = the user's attached photos; `images` = images the agent chose to show.
-export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[]; images?: string[] }
+// `thumbs` = the user's attached photos; `files` = non-image attachments;
+// `images` = images the agent chose to show.
+export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[]; files?: string[]; images?: string[] }
 const liveTurns: LiveTurn[] = []
 
 export function getLiveTurns(): ReadonlyArray<LiveTurn> {
@@ -56,9 +57,9 @@ export function getClearEpoch(): number {
  * twice (history is fetched lazily — a turn that completed before the first
  * expand exists in BOTH). History ids are Claude-session uuids with no relation
  * to idemKey, so matching keys on normalized user-turn text; positions must
- * strictly increase so repeated identical prompts pair 1:1. A photo-only turn
- * has empty text — it may only match a history user turn that is also
- * photo-only (photos > 0, empty text), never an arbitrary empty row.
+ * strictly increase so repeated identical prompts pair 1:1. An attachment-only
+ * turn has empty text — it may only match a history user turn that is also
+ * attachment-only, never an arbitrary empty row.
  * Returns whether anything was removed.
  */
 export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
@@ -78,7 +79,7 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
       if (m.role !== 'user') continue
       const matches = target
         ? norm(m.text) === target
-        : !!t.thumbs?.length && (m.photos ?? 0) > 0 && !norm(m.text)
+        : (!!t.thumbs?.length || !!t.files?.length) && ((m.attachments ?? m.photos ?? 0) > 0) && !norm(m.text)
       if (matches) {
         drop.add(i)
         if (liveTurns[i + 1]?.role === 'assistant') drop.add(i + 1)
@@ -110,7 +111,7 @@ export async function stop(): Promise<void> {
 
 // Messages sent while a job is running queue client-side (like Claude Code)
 // and dispatch as soon as the current job reaches a terminal state.
-type QueuedInput = { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[]; idemKey?: string }
+type QueuedInput = { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[]; files?: string[]; idemKey?: string }
 const queue: QueuedInput[] = []
 
 export function getQueued(): readonly QueuedInput[] {
@@ -362,9 +363,9 @@ function finishDone(data: Record<string, unknown>): void {
   // A job attached without its prompt (cross-device discovery) pushes no live
   // turn — an empty user bubble can't reconcile against history; the next
   // history fetch renders the turn canonically instead.
-  if (prompt || activeThumbs?.length) {
+  if (prompt || activeThumbs?.length || activeFiles?.length) {
     liveTurns.push(
-      { role: 'user', text: prompt, thumbs: activeThumbs },
+      { role: 'user', text: prompt, thumbs: activeThumbs, files: activeFiles },
       { role: 'assistant', text: reply, images: imageUrls(data) },
     )
   }
@@ -445,6 +446,7 @@ export function clearAfterRestart(): void {
   lastPage = ''
   lastAttachmentIds = []
   activeThumbs = undefined
+  activeFiles = undefined
   terminal = true
   jobId = null
   startedAt = 0
@@ -537,9 +539,14 @@ function bindWake(): void {
 
 // -- public API ---------------------------------------------------------------
 let activeThumbs: string[] | undefined
+let activeFiles: string[] | undefined
 
 export function getActiveThumbs(): string[] | undefined {
   return isBusy() ? activeThumbs : undefined
+}
+
+export function getActiveFiles(): string[] | undefined {
+  return isBusy() ? activeFiles : undefined
 }
 
 export function start(input: {
@@ -547,6 +554,7 @@ export function start(input: {
   attachmentIds?: string[]
   page?: string
   thumbs?: string[]
+  files?: string[]
   idemKey?: string
 }): void {
   if (isBusy()) {
@@ -574,6 +582,7 @@ export function start(input: {
   prompt = input.text
   activeIdemKey = input.idemKey || uuid()
   activeThumbs = input.thumbs?.length ? input.thumbs : undefined
+  activeFiles = input.files?.length ? input.files : undefined
   lastPage = input.page || location.pathname
   lastAttachmentIds = input.attachmentIds ?? []
   terminal = false
@@ -647,6 +656,7 @@ function attachToRunningJob(job: { jobId: string; startedAt: number; prompt: str
   prompt = job.prompt
   activeIdemKey = ''
   activeThumbs = undefined // never carry thumbs from a previous page's job
+  activeFiles = undefined
   lastPage = location.pathname
   lastAttachmentIds = []
   terminal = false
