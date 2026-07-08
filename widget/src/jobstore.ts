@@ -45,6 +45,18 @@ export function getLiveTurns(): ReadonlyArray<LiveTurn> {
   return liveTurns
 }
 
+function normTurnText(s: string): string {
+  return s.replace(/\s+/g, ' ').trim()
+}
+
+function sameTerminalText(a: string, b: string): boolean {
+  const x = normTurnText(a)
+  const y = normTurnText(b)
+  if (!x || !y) return false
+  if (x === y) return true
+  return Math.min(x.length, y.length) >= 12 && (x.includes(y) || y.includes(x))
+}
+
 // Bumped when a "clear context" lands, so the transcript can drop its cached
 // server history and refetch the now-empty conversation exactly once.
 let clearEpoch = 0
@@ -64,7 +76,6 @@ export function getClearEpoch(): number {
  */
 export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
   if (!liveTurns.length || !history.length) return false
-  const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
   const drop = new Set<number>()
   let pos = 0
   for (let i = 0; i < liveTurns.length; i++) {
@@ -73,16 +84,28 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
     // Agent-shown images live ONLY on the live turn (history never carries
     // them; the files are one-turn transient) — never prune that pair.
     if (liveTurns[i + 1]?.role === 'assistant' && liveTurns[i + 1]?.images?.length) continue
-    const target = norm(t.text)
+    const target = normTurnText(t.text)
     for (let j = pos; j < history.length; j++) {
       const m = history[j]
       if (m.role !== 'user') continue
       const matches = target
-        ? norm(m.text) === target
-        : (!!t.thumbs?.length || !!t.files?.length) && ((m.attachments ?? m.photos ?? 0) > 0) && !norm(m.text)
+        ? normTurnText(m.text) === target
+        : (!!t.thumbs?.length || !!t.files?.length) && ((m.attachments ?? m.photos ?? 0) > 0) && !normTurnText(m.text)
       if (matches) {
         drop.add(i)
-        if (liveTurns[i + 1]?.role === 'assistant') drop.add(i + 1)
+        const liveReply = liveTurns[i + 1]
+        const liveError = liveTurns[i + 2]?.role === 'error' ? liveTurns[i + 2] : liveTurns[i + 1]?.role === 'error' ? liveTurns[i + 1] : null
+        const following = history.slice(j + 1)
+        const nextUser = following.findIndex((h) => h.role === 'user')
+        const historyReply = (nextUser >= 0 ? following.slice(0, nextUser) : following).find((h) => h.role === 'assistant')
+        if (liveReply?.role === 'assistant') drop.add(i + 1)
+        if (
+          liveError &&
+          ((liveReply?.role === 'assistant' && sameTerminalText(liveReply.text, liveError.text)) ||
+            (!!historyReply && sameTerminalText(historyReply.text, liveError.text)))
+        ) {
+          drop.add(liveTurns.indexOf(liveError))
+        }
         pos = j + 1
         break
       }
@@ -405,7 +428,7 @@ function finishError(data: Record<string, unknown>): void {
     liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs, files: activeFiles })
   }
   if (partial) liveTurns.push({ role: 'assistant', text: partial })
-  liveTurns.push({ role: 'error', text: detail })
+  if (!partial || !sameTerminalText(partial, detail)) liveTurns.push({ role: 'error', text: detail })
   markHandled(jobId ?? '')
   clearPersist()
   clearActivityFlag()
