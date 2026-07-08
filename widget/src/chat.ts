@@ -586,15 +586,17 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (footer.firstChild !== deps.composerEl) footer.appendChild(deps.composerEl)
     if (!loaded && !loading) {
       void loadHistory()
-      renderSkeleton() // paint the ghost state while the fetch is in flight
-      return
+      if (!getLiveTurns().length) {
+        renderSkeleton() // paint the ghost state while the fetch is in flight
+        return
+      }
     }
     const justOpened = !wasExpanded
     wasExpanded = true
-    // Turns completed while collapsed → refresh the tail so ordering is canonical.
+    // Turns completed while collapsed must render immediately; refresh the tail
+    // in the background so history can absorb/reorder them when the fetch returns.
     if (justOpened && !loading && getLiveTurns().length !== lastLoadTurnCount) {
       void loadHistory()
-      return
     }
     const pinned = isPinned()
     const key = staticKey()
