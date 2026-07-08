@@ -51,14 +51,12 @@ button::-moz-focus-inner{ border:0; }
   width:52px; height:52px; padding:0;
   border-radius:50%; border:none; overflow:hidden; isolation:isolate;
   background:
-    radial-gradient(circle at 34% 18%, rgba(255,255,255,.18), rgba(255,255,255,.04) 24%, transparent 42%),
-    radial-gradient(circle at 72% 78%, rgba(255,184,107,.12), transparent 44%),
-    linear-gradient(145deg, rgba(24,23,21,.58), rgba(3,3,3,.76) 62%, rgba(0,0,0,.66));
+    linear-gradient(145deg, rgba(22,21,20,.54), rgba(4,4,4,.76) 62%, rgba(0,0,0,.66));
   box-shadow:
     0 16px 40px rgba(0,0,0,.48),
     0 4px 14px rgba(0,0,0,.34),
-    inset 0 1px 1px rgba(255,255,255,.16),
-    inset 0 -16px 24px rgba(0,0,0,.34);
+    inset 0 1px 1px rgba(255,255,255,.08),
+    inset 0 -14px 22px rgba(0,0,0,.34);
   backdrop-filter:blur(18px) saturate(160%);
   -webkit-backdrop-filter:blur(18px) saturate(160%);
   cursor:pointer;
@@ -70,8 +68,8 @@ button::-moz-focus-inner{ border:0; }
   box-shadow:
     0 20px 46px rgba(0,0,0,.54),
     0 6px 18px rgba(0,0,0,.38),
-    inset 0 1px 1px rgba(255,255,255,.2),
-    inset 0 -16px 24px rgba(0,0,0,.32);
+    inset 0 1px 1px rgba(255,255,255,.1),
+    inset 0 -14px 22px rgba(0,0,0,.32);
 }
 .ak-mini:active{ transform:scale(.96); }
 .ak-mini-glyph{
