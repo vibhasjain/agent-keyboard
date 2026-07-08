@@ -38,7 +38,7 @@ let restartInFlight = false
 // Turns completed during this page load (rendered under any server-fetched history).
 // `thumbs` = the user's attached photos; `files` = non-image attachments;
 // `images` = images the agent chose to show.
-export interface LiveTurn { role: 'user' | 'assistant'; text: string; thumbs?: string[]; files?: string[]; images?: string[] }
+export interface LiveTurn { role: 'user' | 'assistant' | 'error'; text: string; thumbs?: string[]; files?: string[]; images?: string[] }
 const liveTurns: LiveTurn[] = []
 
 export function getLiveTurns(): ReadonlyArray<LiveTurn> {
@@ -400,6 +400,12 @@ function finishDone(data: Record<string, unknown>): void {
 
 function finishError(data: Record<string, unknown>): void {
   const detail = String(data.detail ?? data.kind ?? '') || 'Something went wrong'
+  const partial = currentFullText()
+  if (prompt || activeThumbs?.length || activeFiles?.length) {
+    liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs, files: activeFiles })
+  }
+  if (partial) liveTurns.push({ role: 'assistant', text: partial })
+  liveTurns.push({ role: 'error', text: detail })
   markHandled(jobId ?? '')
   clearPersist()
   clearActivityFlag()
@@ -620,9 +626,14 @@ export function start(input: {
       } else {
         // POST may have reached the server, so the outbox entry stays and a
         // reload recovers the send either way.
+        const message = errMsg(e)
+        if (prompt || activeThumbs?.length || activeFiles?.length) {
+          liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs, files: activeFiles })
+        }
+        liveTurns.push({ role: 'error', text: message })
         clearPersist()
         reset()
-        setJob({ phase: 'error', message: errMsg(e) })
+        setJob({ phase: 'error', message })
         dispatchQueue()
       }
     })

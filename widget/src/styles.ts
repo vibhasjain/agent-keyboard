@@ -345,6 +345,8 @@ button::-moz-focus-inner{ border:0; }
 .ak-t.asst{ color:var(--ak-ink); }
 .ak-t.asst .ak-t-mark{ color:var(--ak-warm); }
 .ak-t.asst .ak-t-body{ white-space:normal; }
+.ak-t.error{ color:var(--ak-err); }
+.ak-t.error .ak-t-mark{ color:var(--ak-err); }
 .ak-t.tool{ color:var(--ak-ink2); margin-bottom:4px; }
 .ak-t.tool .ak-t-mark{ color:var(--ak-ok); }
 .ak-t.live{ color:var(--ak-amber); }

@@ -168,6 +168,10 @@ function msgEl(
   return lineEl('asst', '●', body)
 }
 
+function errorEl(text: string): HTMLElement {
+  return lineEl('error', '●', el('div', undefined, (n) => (n.textContent = text)))
+}
+
 function dividerEl(text: string): HTMLElement {
   return el('div', 'ak-divider', (n) => (n.textContent = `· ${(text || 'session compacted').toLowerCase()} ·`))
 }
@@ -420,7 +424,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     clearNode(listEl)
     liveUser = liveAsst = liveTimer = liveBody = null
     for (const m of history) listEl.appendChild(nodeForMessage(m))
-    for (const t of getLiveTurns()) listEl.appendChild(msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images }))
+    for (const t of getLiveTurns()) {
+      listEl.appendChild(
+        t.role === 'error' ? errorEl(t.text) : msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images }),
+      )
+    }
     if (!history.length && !getLiveTurns().length) {
       listEl.appendChild(emptyStateEl())
     }
