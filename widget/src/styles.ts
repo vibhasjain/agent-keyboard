@@ -49,16 +49,30 @@ button::-moz-focus-inner{ border:0; }
   display:flex; align-items:center; justify-content:center;
   margin-left:auto; margin-right:0; /* desktop: bottom-right within the padded zone */
   width:52px; height:52px; padding:0;
-  border-radius:50%; border:1px solid #3d372e;
-  background:rgba(12,11,10,.96);
-  box-shadow:0 6px 22px rgba(0,0,0,.5);
-  backdrop-filter:blur(14px) saturate(140%);
-  -webkit-backdrop-filter:blur(14px) saturate(140%);
+  border-radius:50%; border:none; overflow:hidden; isolation:isolate;
+  background:
+    radial-gradient(circle at 34% 18%, rgba(255,255,255,.18), rgba(255,255,255,.04) 24%, transparent 42%),
+    radial-gradient(circle at 72% 78%, rgba(255,184,107,.12), transparent 44%),
+    linear-gradient(145deg, rgba(24,23,21,.58), rgba(3,3,3,.76) 62%, rgba(0,0,0,.66));
+  box-shadow:
+    0 16px 40px rgba(0,0,0,.48),
+    0 4px 14px rgba(0,0,0,.34),
+    inset 0 1px 1px rgba(255,255,255,.16),
+    inset 0 -16px 24px rgba(0,0,0,.34);
+  backdrop-filter:blur(18px) saturate(160%);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
   cursor:pointer;
   animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
-  transition:transform .16s ease, border-color .16s ease;
+  transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
 }
-.ak-mini:hover{ transform:scale(1.06); border-color:rgba(255,184,107,.5); }
+.ak-mini:hover{
+  transform:scale(1.06);
+  box-shadow:
+    0 20px 46px rgba(0,0,0,.54),
+    0 6px 18px rgba(0,0,0,.38),
+    inset 0 1px 1px rgba(255,255,255,.2),
+    inset 0 -16px 24px rgba(0,0,0,.32);
+}
 .ak-mini:active{ transform:scale(.96); }
 .ak-mini-glyph{
   font-size:24px; line-height:1;
