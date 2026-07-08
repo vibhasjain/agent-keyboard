@@ -84,4 +84,38 @@ assert.deepEqual(parseStreamLine("   ").events, [], "blank line → no events");
 assert.deepEqual(parseStreamLine("{oops").events, [], "malformed line → no events");
 assert.equal(parseStreamLine("{oops").result, undefined);
 
-console.log("parse-check OK — accumulation, tool condensation, thinking, and result parsing all pass.");
+// TodoWrite → a `todos` event carrying the full checklist (content+status,
+// blank entries dropped), on top of the one-line "planning" tool status.
+{
+  const { events } = parseStreamLine(
+    assistantTool("TodoWrite", {
+      todos: [
+        { content: "Read the config", status: "completed", activeForm: "Reading the config" },
+        { content: "Wire the frame", status: "in_progress", activeForm: "Wiring the frame" },
+        { content: "", status: "pending" },
+      ],
+    }),
+  );
+  const todos = events.find((e): e is Extract<LowEvent, { t: "todos" }> => e.t === "todos");
+  assert.ok(todos, "TodoWrite yields a todos event");
+  assert.deepEqual(
+    todos.items,
+    [
+      { content: "Read the config", status: "completed" },
+      { content: "Wire the frame", status: "in_progress" },
+    ],
+    "todos carry content+status; blank entries are dropped",
+  );
+  assert.ok(events.some((e) => e.t === "tool" && e.detail === "planning"), "TodoWrite still emits the planning status");
+}
+
+// Task (subagent) → a compact "delegating: <description>" activity line.
+{
+  const { events } = parseStreamLine(assistantTool("Task", { description: "audit the styles", subagent_type: "Explore" }));
+  assert.ok(
+    events.some((e) => e.t === "tool" && e.detail === "delegating: audit the styles"),
+    "Task condenses to a delegating line",
+  );
+}
+
+console.log("parse-check OK — accumulation, tool condensation, todos, subagent, thinking, and result parsing all pass.");

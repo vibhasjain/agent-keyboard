@@ -399,6 +399,29 @@ button::-moz-focus-inner{ border:0; }
 }
 .ak-skel-row:first-child{ margin-top:4px; }
 
+/* ---- live task checklist (agent TodoWrite) ---- */
+.ak-todos{ display:flex; flex-direction:column; gap:3px; margin:0 0 10px 22px; }
+.ak-todo{ display:flex; gap:8px; font-size:12.5px; line-height:1.5; }
+.ak-todo-box{ flex:none; width:12px; text-align:center; user-select:none; }
+.ak-todo-txt{ flex:1; min-width:0; }
+.ak-todo.pending{ color:var(--ak-ink3); }
+.ak-todo.pending .ak-todo-box{ color:var(--ak-ink3); }
+.ak-todo.active{ color:var(--ak-ink); }
+.ak-todo.active .ak-todo-box{ color:var(--ak-amber); }
+.ak-todo.done{ color:var(--ak-ink2); }
+.ak-todo.done .ak-todo-box{ color:var(--ak-ok); }
+
+/* ---- tappable option buttons (\`\`\`options block in a reply) ---- */
+.ak-opts{ display:flex; flex-wrap:wrap; gap:7px; margin:4px 0 8px; }
+.ak-opt{
+  font-family:var(--ak-mono); font-size:12.5px; line-height:1.2; color:var(--ak-ink);
+  background:rgba(255,184,107,.06); border:1px solid #3d372e; border-radius:8px;
+  padding:7px 12px; cursor:pointer;
+  transition:color .16s ease, background .16s ease, border-color .16s ease;
+}
+.ak-opt:hover{ color:var(--ak-amber); border-color:var(--ak-amber); background:rgba(255,184,107,.12); }
+.ak-opt:active{ transform:translateY(1px); }
+
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
   .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph{ animation:none !important; }

@@ -6,9 +6,9 @@ import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, stop } from './jobstore'
+import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
-import { getState, patchUi, subscribe } from './state'
+import { getState, patchUi, subscribe, type TodoItem } from './state'
 
 export interface Chat {
   footerEl: HTMLElement
@@ -170,6 +170,26 @@ function msgEl(
 
 function errorEl(text: string): HTMLElement {
   return lineEl('error', '●', el('div', undefined, (n) => (n.textContent = text)))
+}
+
+// Live task checklist (agent TodoWrite): pending ○ dim → in-progress ◐ amber →
+// done ● green. Geometric-shape glyphs only (never emoji codepoints — see the
+// marker note above). Rebuilt in place from the latest list; hidden when empty.
+function renderTodos(host: HTMLElement, todos: TodoItem[] | undefined): void {
+  clearNode(host)
+  if (!todos?.length) {
+    show(host, false)
+    return
+  }
+  show(host, true)
+  for (const t of todos) {
+    const state = t.status === 'completed' ? 'done' : t.status === 'in_progress' ? 'active' : 'pending'
+    const box = state === 'done' ? '●' : state === 'active' ? '◐' : '○'
+    const row = el('div', 'ak-todo ' + state)
+    row.appendChild(el('span', 'ak-todo-box', (n) => (n.textContent = box)))
+    row.appendChild(el('span', 'ak-todo-txt', (n) => (n.textContent = t.content)))
+    host.appendChild(row)
+  }
 }
 
 function dividerEl(text: string): HTMLElement {
@@ -414,6 +434,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   let liveUser: HTMLElement | null = null
   let liveAsst: HTMLElement | null = null
   let liveTimer: HTMLElement | null = null
+  let liveTodos: HTMLElement | null = null
   let liveBody: HTMLElement | null = null
   const queuedBox = el('div')
 
@@ -422,7 +443,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const rebuildStatic = () => {
     clearNode(listEl)
-    liveUser = liveAsst = liveTimer = liveBody = null
+    liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
     for (const m of history) listEl.appendChild(nodeForMessage(m))
     for (const t of getLiveTurns()) {
       listEl.appendChild(
@@ -463,11 +484,13 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         h.appendChild(el('span', 'ak-t-mark ak-t-star', (n) => (n.textContent = '✻')))
         liveTimer = el('div', 'ak-t-body')
         h.appendChild(liveTimer)
+        liveTodos = el('div', 'ak-todos')
         liveBody = el('div')
-        liveAsst.append(h, lineEl('asst', '●', liveBody))
+        liveAsst.append(h, liveTodos, lineEl('asst', '●', liveBody))
         listEl.appendChild(liveAsst)
       }
       const streaming = job.phase === 'streaming' ? job : null
+      if (liveTodos) renderTodos(liveTodos, streaming?.todos)
       if (liveTimer) {
         const detail = ((streaming ? streaming.line : '') || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
         liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
@@ -479,7 +502,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     } else if (liveUser || liveAsst) {
       liveUser?.remove()
       liveAsst?.remove()
-      liveUser = liveAsst = liveTimer = liveBody = null
+      liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
     }
     // queued sends render dim after the live block, and always last
     const q = getQueued()
@@ -503,7 +526,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // rebuildStatic() when the fetch resolves.
   const renderSkeleton = () => {
     clearNode(listEl)
-    liveUser = liveAsst = liveTimer = liveBody = null
+    liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
     for (const w of ['58%', '82%', '40%', '70%']) {
       const row = el('div', 'ak-skel-row', (n) => (n.style.width = w))
       row.appendChild(el('div', 'ak-shimmer'))
@@ -558,6 +581,17 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     { root: scroll },
   )
   io.observe(sentinel)
+
+  // Tappable option buttons from a ```options block in a reply (see markdown.ts).
+  // One delegated listener covers live, history, and every re-render. A tap sends
+  // the option's text as the next message — start() queues it behind a running
+  // job; tapping an already-answered option in scrollback simply re-sends it.
+  on(listEl, 'click', (e) => {
+    const btn = (e.target as HTMLElement)?.closest?.('.ak-opt') as HTMLElement | null
+    if (!btn) return
+    const text = (btn.dataset.send || btn.textContent || '').trim()
+    if (text) start({ text, page: location.pathname })
+  })
 
   // Re-opening the chat always lands at the bottom (latest messages), even if
   // the user had scrolled up before collapsing — track the collapsed→expanded

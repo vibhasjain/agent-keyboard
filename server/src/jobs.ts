@@ -33,6 +33,7 @@ interface Job {
   status: JobStatus;
   statusLine: Record<string, unknown>;
   lastAssistant: Record<string, unknown> | null;
+  lastTodos: Record<string, unknown> | null;
   result: Record<string, unknown> | null;
   error: Record<string, unknown> | null;
   createdAt: number;
@@ -136,6 +137,11 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
       } else if (event === "assistant") {
         job.lastAssistant = payload as Record<string, unknown>;
         publish(job, event, payload);
+      } else if (event === "todos") {
+        // Latest checklist, so a mid-job re-attach can replay it. Live-only:
+        // never flushed to the DB, and not replayed once the job is terminal.
+        job.lastTodos = payload as Record<string, unknown>;
+        publish(job, event, payload);
       } else if (event === "error") {
         job.error = payload as Record<string, unknown>;
         job.status = "error";
@@ -198,6 +204,7 @@ export async function startJob(opts: {
     status: "running",
     statusLine: { phase: "queued", detail: "Waiting for a free slot" },
     lastAssistant: null,
+    lastTodos: null,
     result: null,
     error: null,
     createdAt: now,
@@ -240,6 +247,7 @@ export async function* tail(job: Job): AsyncGenerator<Frame> {
   try {
     if (Object.keys(job.statusLine).length) yield ["status", job.statusLine];
     if (job.lastAssistant) yield ["assistant", job.lastAssistant];
+    if (job.lastTodos) yield ["todos", job.lastTodos];
     for (;;) {
       const item = await q.get();
       if (item === null) {

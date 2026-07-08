@@ -144,6 +144,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   lines.push(
     `Follow the "ponytail" skill on every change: ship the laziest solution that actually works. Question whether the change is even needed (YAGNI); reuse what already lives in the repo; prefer the platform, the standard library, and existing dependencies over new ones; make the shortest diff that fixes the root cause; and match the site's existing style. No unrequested abstractions, scaffolding, or files. Never lazy about understanding the problem or about validation, error handling, security, and accessibility.`,
     `Your replies render in a small chat panel with simple markdown: short paragraphs, "-" bullet lists, numbered lists, **bold**, \`inline code\`, [links](https://example.com), short fenced code blocks, and small headings all work; tables do not render, so never use them. Keep replies concise — a couple of sentences, or a short list when structure helps.`,
+    `When you need the user to pick between a few discrete options, or to confirm an irreversible action (like clearing context), present the choices as a fenced code block whose info string is \`options\`, one option per line. The panel turns each line into a tappable button that sends that exact line back as the user's next message — so word each option as the message you want to receive (e.g. "Yes, clear the context"). Use it only for genuine pick-one or confirm moments, never for ordinary lists.`,
     `To show the user an image in the chat, save it (PNG/JPG/GIF/WebP) into the ${path}/.tmp/outputs/ folder — create the folder if needed; anything you leave there is displayed to the user alongside your reply. You can curl an image URL into that folder.`,
     `If this site embeds the Agent Keyboard widget (a <script src=".../widget.js" data-site=…> tag) and you create a new page, copy that same embed onto the new page so the bar appears there too — unless the site uses a shared layout/template that already includes it.`,
   );
@@ -234,6 +235,10 @@ function condenseToolUse(b: any): string {
       return "searching the web";
     case "TodoWrite":
       return "planning";
+    case "Task": {
+      const desc = String(inp.description ?? inp.subagent_type ?? "a subagent").replace(/\s+/g, " ").trim();
+      return "delegating: " + (desc.length > 60 ? desc.slice(0, 60) + "…" : desc);
+    }
     default:
       return name.toLowerCase();
   }
@@ -256,6 +261,7 @@ export type LowEvent =
   | { t: "thinking"; text: string }
   | { t: "snapshotText"; text: string }
   | { t: "tool"; detail: string }
+  | { t: "todos"; items: { content: string; status: string }[] }
   | { t: "usage"; contextTokens: number };
 
 /**
@@ -290,14 +296,29 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
   } else if (evt.type === "assistant" && Array.isArray(evt.message?.content)) {
     let msgText = "";
     const tools: string[] = [];
+    let todos: { content: string; status: string }[] | null = null;
     for (const b of evt.message.content) {
-      if (b?.type === "tool_use") tools.push(condenseToolUse(b));
-      else if (b?.type === "text") msgText += String(b.text ?? "");
+      if (b?.type === "tool_use") {
+        // TodoWrite carries the full task list on every call — surface it as a
+        // live checklist (a `todos` frame the widget replaces in place), on top
+        // of the one-line "planning" tool status.
+        if (b.name === "TodoWrite" && Array.isArray(b.input?.todos)) {
+          const items = b.input.todos
+            .map((td: any) => ({
+              content: String(td?.content ?? td?.activeForm ?? "").slice(0, 200),
+              status: String(td?.status ?? "pending"),
+            }))
+            .filter((td: { content: string }) => td.content);
+          if (items.length) todos = items;
+        }
+        tools.push(condenseToolUse(b));
+      } else if (b?.type === "text") msgText += String(b.text ?? "");
     }
     // Emit this message's text BEFORE its tool_use(s), so the spawn loop can
     // reset the live text on the tool (a tool call ends the message) without
     // dropping the text that preceded it.
     if (msgText) out.events.push({ t: "snapshotText", text: msgText });
+    if (todos) out.events.push({ t: "todos", items: todos });
     for (const d of tools) out.events.push({ t: "tool", detail: d });
     // Approximate context size = this request's full input + output. Some rows
     // carry placeholder input_tokens (a known stream-json quirk) — the caller
@@ -539,6 +560,8 @@ export async function* runMessageJob(
         (e) => {
           if (e.t === "usage") {
             maxContext = Math.max(maxContext, e.contextTokens);
+          } else if (e.t === "todos") {
+            queue.push(["todos", { items: e.items }]);
           } else if (e.t === "delta") {
             streamed += e.text;
             emitAssistant();

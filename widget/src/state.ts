@@ -7,6 +7,12 @@ export type AuthState = 'unknown' | 'anon' | 'authed'
 // syncing/queued/retrying phases; 'assistant' is the streamed reply tail.
 export type LineState = 'dim' | 'thinking' | 'tool' | 'assistant'
 
+// One row of the live task checklist, from the agent's TodoWrite calls.
+export interface TodoItem {
+  content: string
+  status: string // 'pending' | 'in_progress' | 'completed'
+}
+
 export type JobState =
   | { phase: 'idle' }
   | { phase: 'sending'; startedAt: number }
@@ -17,6 +23,7 @@ export type JobState =
       line: string
       lineState: LineState
       fullText: string
+      todos?: TodoItem[]
       disconnected?: boolean
     }
   | { phase: 'done'; jobId: string; summary: string; ok: boolean; cleared?: boolean }

@@ -9,7 +9,7 @@ import { api, HttpError, type ConversationMessage, type GitInfo } from './api'
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
-import { getState, patchUi, type LineState, setJob } from './state'
+import { getState, patchUi, type LineState, type TodoItem, setJob } from './state'
 
 const BACKOFF = [1000, 2000, 5000, 10000]
 const DONE_LINGER_MS = 8000
@@ -304,6 +304,7 @@ interface StreamPatch {
   line?: string
   lineState?: LineState
   fullText?: string
+  todos?: TodoItem[]
   disconnected?: boolean
 }
 
@@ -318,6 +319,7 @@ function setStreaming(patch: StreamPatch): void {
     line: patch.line ?? prev?.line ?? '',
     lineState: patch.lineState ?? prev?.lineState ?? 'dim',
     fullText: patch.fullText ?? prev?.fullText ?? '',
+    todos: patch.todos ?? prev?.todos,
     disconnected: patch.disconnected ?? false,
   })
 }
@@ -345,6 +347,10 @@ function onFrame(name: string, data: Record<string, unknown>): void {
     case 'assistant': {
       const full = String(data.text ?? '')
       setStreaming({ fullText: full, line: tail90(full), lineState: 'assistant' })
+      break
+    }
+    case 'todos': {
+      setStreaming({ todos: Array.isArray(data.items) ? (data.items as TodoItem[]) : [] })
       break
     }
     case 'result':

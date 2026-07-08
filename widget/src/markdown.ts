@@ -80,6 +80,7 @@ export function renderMarkdown(src: string): string {
     const fence = line.match(/^```(.*)$/)
     if (fence) {
       flushBlocks()
+      const info = fence[1].trim().toLowerCase()
       const body: string[] = []
       i++
       while (i < lines.length && !/^```/.test(lines[i])) {
@@ -87,6 +88,20 @@ export function renderMarkdown(src: string): string {
         i++
       }
       i++ // consume closing fence (or EOF)
+      // ```options → tappable buttons (chat.ts wires the click → send). Body
+      // lines are already HTML-escaped, so each is safe as both attribute and
+      // label; degrade to a plain code block if the block is empty.
+      if (info === 'options') {
+        const opts = body.map((l) => l.replace(/^\s*[-*]\s+/, '').trim()).filter(Boolean)
+        if (opts.length) {
+          out.push(
+            `<div class="ak-opts">${opts
+              .map((o) => `<button type="button" class="ak-opt" data-send="${o}">${o}</button>`)
+              .join('')}</div>`,
+          )
+          continue
+        }
+      }
       out.push(`<pre><code>${body.join('\n')}</code></pre>`)
       continue
     }
