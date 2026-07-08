@@ -49,28 +49,16 @@ button::-moz-focus-inner{ border:0; }
   display:flex; align-items:center; justify-content:center;
   margin-left:auto; margin-right:0; /* desktop: bottom-right within the padded zone */
   width:52px; height:52px; padding:0;
-  border-radius:50%; border:none; overflow:hidden; isolation:isolate;
-  background:
-    linear-gradient(145deg, rgba(22,21,20,.54), rgba(4,4,4,.76) 62%, rgba(0,0,0,.66));
-  box-shadow:
-    0 16px 40px rgba(0,0,0,.48),
-    0 4px 14px rgba(0,0,0,.34),
-    inset 0 1px 1px rgba(255,255,255,.08),
-    inset 0 -14px 22px rgba(0,0,0,.34);
-  backdrop-filter:blur(18px) saturate(160%);
-  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  border-radius:50%; border:none;
+  background:rgba(9,9,11,.8); /* Menu++ sticky nav: bg-zinc-950/80 */
+  box-shadow:none;
+  backdrop-filter:blur(24px); /* Menu++ sticky nav: backdrop-blur-xl */
+  -webkit-backdrop-filter:blur(24px);
   cursor:pointer;
   animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
-  transition:transform .16s ease, box-shadow .16s ease, background .16s ease;
+  transition:transform .16s ease;
 }
-.ak-mini:hover{
-  transform:scale(1.06);
-  box-shadow:
-    0 20px 46px rgba(0,0,0,.54),
-    0 6px 18px rgba(0,0,0,.38),
-    inset 0 1px 1px rgba(255,255,255,.1),
-    inset 0 -14px 22px rgba(0,0,0,.32);
-}
+.ak-mini:hover{ transform:scale(1.06); }
 .ak-mini:active{ transform:scale(.96); }
 .ak-mini-glyph{
   font-size:24px; line-height:1;
