@@ -60,6 +60,11 @@ const RUN_TIMEOUT_MS = envInt("CLAUDE_RUN_TIMEOUT_MS", 0);
 const COMPACT_TIMEOUT_MS = envInt("CLAUDE_COMPACT_TIMEOUT_MS", 300_000);
 const ASSISTANT_THROTTLE_MS = 180;
 const MAX_ATTEMPTS = 3;
+// Experimental streaming-input mode: deliver the turn on stdin (--input-format
+// stream-json) instead of one-shot -p, so a run can later stay open for follow-up
+// messages. Off by default; enable per deploy (AK_STREAMING_INPUT=1) while it's
+// being proven. Milestone 1 still closes stdin after one message (≡ -p behavior).
+const STREAMING_INPUT = process.env.AK_STREAMING_INPUT === "1";
 
 // HOME is where Claude Code keeps its session store; on Fly HOME=/data.
 export const CLAUDE_HOME = process.env.HOME ?? DATA_DIR;
@@ -167,6 +172,11 @@ function buildPrompt(site: Site, opts: { text: string; page: string; attachmentP
   return lines.join("\n");
 }
 
+/** A stream-json user turn (one JSON line) for --input-format stream-json. */
+function userMessageLine(text: string): string {
+  return JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } }) + "\n";
+}
+
 function streamArgs(
   prompt: string,
   sessionId: string,
@@ -175,11 +185,13 @@ function streamArgs(
   pushBranch: string,
   harness: ResolvedHarness,
   usage: TurnUsage | null,
+  streaming: boolean,
 ): string[] {
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
-    "-p",
-    prompt,
+    // Streaming-input: the turn arrives as a stream-json line on stdin (-p with no
+    // prompt). Classic one-shot: the prompt is passed inline via -p.
+    ...(streaming ? ["-p", "--input-format", "stream-json"] : ["-p", prompt]),
     // Model / effort / permission-mode come from the per-site harness settings
     // (harness.ts); with no settings file the defaults reproduce the historical
     // hardcoded values (--model $CLAUDE_MODEL, --permission-mode bypassPermissions).
@@ -348,7 +360,7 @@ function spawnClaude(
   args: string[],
   cwd: string,
   onEvent: (e: LowEvent) => void,
-  opts: { extraEnv?: Record<string, string>; timeoutMs?: number } = {},
+  opts: { extraEnv?: Record<string, string>; timeoutMs?: number; stdin?: string } = {},
 ): { child: ChildProcess; done: Promise<{ result?: ClaudeResult; stderr: string }> } {
   // CLAUDE_BIN override: npx/npm prepend every ancestor node_modules/.bin to
   // PATH, which can shadow the real CLI with a stale local install.
@@ -356,13 +368,18 @@ function spawnClaude(
   const child = spawn(process.env.CLAUDE_BIN ?? "claude", args, {
     cwd,
     env: opts.extraEnv ? { ...process.env, ...opts.extraEnv } : process.env,
-    // stdin = /dev/null → the CLI sees EOF immediately. Otherwise it waits ~3s
-    // for piped input that never comes (the prompt goes via -p), warns "no stdin
-    // data received in 3s" to stderr, and that benign line can surface as the
-    // job's error. Ignoring stdin drops the warning AND the 3s startup delay.
-    stdio: ["ignore", "pipe", "pipe"],
+    // Classic: stdin = ignore → the CLI sees EOF immediately (prompt goes via -p),
+    // dropping both the "no stdin data in 3s" warning and that 3s startup wait.
+    // Streaming-input: pipe stdin so we can write the turn as a stream-json line.
+    stdio: [opts.stdin != null ? "pipe" : "ignore", "pipe", "pipe"],
   });
   activeChildren.add(child);
+  if (opts.stdin != null) {
+    // Milestone 1: write the one turn, then EOF — the CLI processes it and exits,
+    // exactly like -p. (Later milestones keep this open for follow-up messages.)
+    child.stdin?.write(opts.stdin);
+    child.stdin?.end();
+  }
   const rl = createInterface({ input: child.stdout! });
   const done = new Promise<{ result?: ClaudeResult; stderr: string }>((resolve) => {
     let result: ClaudeResult | undefined;
@@ -563,7 +580,7 @@ export async function* runMessageJob(
       };
 
       const { child: c, done } = spawnClaude(
-        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage),
+        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT),
         dir,
         (e) => {
           if (e.t === "usage") {
@@ -594,7 +611,7 @@ export async function* runMessageJob(
             queue.push(["status", { phase: "tool", detail: e.detail }]);
           }
         },
-        { extraEnv: harness.env },
+        { extraEnv: harness.env, ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
       );
       child = c;
       const settled = done.finally(() => queue.close());
