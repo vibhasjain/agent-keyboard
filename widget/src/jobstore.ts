@@ -72,6 +72,13 @@ export function getClearEpoch(): number {
   return clearEpoch
 }
 
+// Bumped on every send from this device, so the expanded chat can force-scroll to
+// the just-sent message even if the user had scrolled up (e.g. a voice/external send).
+let sendEpoch = 0
+export function getSendEpoch(): number {
+  return sendEpoch
+}
+
 /**
  * Prune liveTurns already present in server history so a turn never renders
  * twice (history is fetched lazily — a turn that completed before the first
@@ -703,6 +710,7 @@ export function start(input: {
   files?: string[]
   idemKey?: string
 }): void {
+  sendEpoch++ // let the transcript force-scroll to this send
   if (isBusy()) {
     // Live streaming session → inject the follow-up into the running job rather
     // than queuing a fresh one. Text-only (the append endpoint takes no files).

@@ -15,7 +15,7 @@ import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
 import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
-import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor } from "./claude.js";
+import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
@@ -472,6 +472,24 @@ app.post("/sites/:siteId/restart", authed, async (req, res) => {
     res.status(500).json({ error: String((err as Error)?.message ?? err).slice(0, 300) });
   } finally {
     release?.();
+  }
+});
+
+/** On-demand compaction of the site's Claude session (the settings-menu "Compact"). */
+app.post("/sites/:siteId/compact", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  // Close any open session so the lock frees promptly; compaction summarizes the
+  // session's memory anyway, and the next message resumes it compacted.
+  for (const job of listActive(site.id).filter((j) => j.status === "running")) cancelJob(job.job_id);
+  try {
+    const compacted = await compactSession(site.id);
+    res.json({ compacted });
+  } catch (err) {
+    res.status(500).json({ error: String((err as Error)?.message ?? err).slice(0, 300) });
   }
 });
 

@@ -173,6 +173,10 @@ export const api = {
   restartSite: (siteId: string): Promise<{ ok: boolean; cleared?: boolean; reset?: unknown }> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/restart`, { method: 'POST' }),
 
+  /** On-demand compaction of the site's Claude session (settings-menu "Compact"). */
+  compact: (siteId: string): Promise<{ compacted: boolean }> =>
+    jsonFetch(`/sites/${encodeURIComponent(siteId)}/compact`, { method: 'POST' }),
+
   conversation: (siteId: string, opts: { limit?: number; before?: string } = {}): Promise<{ messages: ConversationMessage[]; cursor: string | null }> => {
     const q = new URLSearchParams()
     q.set('limit', String(opts.limit ?? 40))

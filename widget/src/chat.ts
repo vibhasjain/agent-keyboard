@@ -6,7 +6,7 @@ import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
+import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, getSendEpoch, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe, type Subagent, type TodoItem } from './state'
 
@@ -282,9 +282,10 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const identity = el('div', 'ak-menu-id') // "Signed in as X" — non-interactive header
   const stopItem = menuItem('stop', 'Stop', 'Cancel the current agent run.')
   const restartItem = menuItem('restart', 'Restart', 'Clear context, discard local checkout changes, and pull latest.')
+  const compactItem = menuItem('compact', 'Compact', 'Summarize the session to free up context.')
   const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
-  menu.append(identity, stopItem, restartItem, refreshItem, logoutItem)
+  menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -297,7 +298,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   // -- settings menu open/close + actions --
   let menuOpen = false
-  let busyAction: 'stop' | 'restart' | null = null
+  let busyAction: 'stop' | 'restart' | 'compact' | null = null
   const renderMenuItem = (btn: HTMLButtonElement, iconName: string, label: string, busy = false) => {
     clearNode(btn)
     btn.appendChild(busy ? el('div', 'ak-spin ak-menu-spin') : icon(iconName, 16))
@@ -306,8 +307,10 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const refreshBusyMenu = () => {
     renderMenuItem(stopItem as HTMLButtonElement, 'stop', busyAction === 'stop' ? 'Stopping…' : 'Stop', busyAction === 'stop')
     renderMenuItem(restartItem as HTMLButtonElement, 'restart', busyAction === 'restart' ? 'Restarting…' : 'Restart', busyAction === 'restart')
+    renderMenuItem(compactItem as HTMLButtonElement, 'compact', busyAction === 'compact' ? 'Compacting…' : 'Compact', busyAction === 'compact')
     ;(stopItem as HTMLButtonElement).disabled = busyAction !== null || !isBusy()
     ;(restartItem as HTMLButtonElement).disabled = busyAction !== null
+    ;(compactItem as HTMLButtonElement).disabled = busyAction !== null
     ;(refreshItem as HTMLButtonElement).disabled = busyAction !== null
     ;(logoutItem as HTMLButtonElement).disabled = busyAction !== null
   }
@@ -377,6 +380,24 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         if (busyAction === null) refreshBusyMenu()
       }, 1600)
     }
+  })
+  on(compactItem, 'click', async () => {
+    if (busyAction) return
+    busyAction = 'compact'
+    refreshBusyMenu()
+    let ok = false
+    try {
+      const r = await api.compact(CONFIG.site)
+      ok = !!r.compacted
+    } catch {
+      /* fall through to the label below */
+    }
+    busyAction = null
+    refreshBusyMenu()
+    renderMenuItem(compactItem as HTMLButtonElement, 'compact', ok ? 'Compacted' : 'Nothing to compact')
+    setTimeout(() => {
+      if (busyAction === null) refreshBusyMenu()
+    }, 1500)
   })
   on(refreshItem, 'click', () => {
     if (busyAction) return
@@ -625,6 +646,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // transition and force it.
   let wasExpanded = false
   let seenClearEpoch = getClearEpoch()
+  let seenSendEpoch = getSendEpoch()
   const render = () => {
     // A "clear context" wiped the session — drop cached history and refetch the
     // now-empty conversation (liveTurns were already cleared in the store).
@@ -666,7 +688,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       renderedKey = key
     }
     updateLive()
-    if (justOpened || pinned) toBottom()
+    // Force-scroll to a just-sent message even if the user had scrolled up
+    // (covers voice / externally-triggered sends that aren't a manual submit).
+    const justSent = getSendEpoch() !== seenSendEpoch
+    seenSendEpoch = getSendEpoch()
+    if (justOpened || pinned || justSent) toBottom()
   }
 
   // After login, drop any stale (anon/empty) history so it refetches with the

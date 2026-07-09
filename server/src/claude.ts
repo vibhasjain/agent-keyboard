@@ -622,6 +622,23 @@ async function runCompactTurn(sessionId: string, dir: string, harness: ResolvedH
   return (await countCompactBoundaries(sessionId, dir)) > before;
 }
 
+/** On-demand compaction of a site's Claude session (the settings-menu "Compact").
+ *  Acquires the site lock so it can't race a live turn, then runs a /compact turn
+ *  and reports whether a new compact boundary actually landed. Works regardless of
+ *  streaming mode (it's a standalone turn, not tied to the message flow). */
+export async function compactSession(siteId: string): Promise<boolean> {
+  const release = await acquireSiteLock(siteId);
+  try {
+    const conversationId = await conversationIdFor(siteId);
+    const sessionId = sessionIdFor(conversationId);
+    const dir = checkoutPath(siteId);
+    const harness = await loadHarness(siteId);
+    return await runCompactTurn(sessionId, dir, harness);
+  } finally {
+    release();
+  }
+}
+
 export type Frame = [string, unknown];
 
 /**
