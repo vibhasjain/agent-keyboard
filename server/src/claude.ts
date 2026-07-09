@@ -68,7 +68,7 @@ const STREAMING_INPUT = process.env.AK_STREAMING_INPUT === "1";
 // M2 (keep-alive multi-turn session) is behind its OWN flag, so deploying M2 code
 // leaves the verified M1 behaviour (AK_STREAMING_INPUT single-message) untouched
 // until this is deliberately flipped on (alongside the widget changes).
-const STREAMING_SESSION = process.env.AK_STREAMING_SESSION === "1";
+export const STREAMING_SESSION = process.env.AK_STREAMING_SESSION === "1";
 const SESSION_IDLE_MS = envInt("AK_SESSION_IDLE_MS", 180_000); // close stdin after 3 min idle
 const SESSION_MAX_MS = envInt("AK_SESSION_MAX_MS", 3_600_000); // absolute session lifetime cap (1h)
 
@@ -310,6 +310,7 @@ export type LowEvent =
   | { t: "snapshotText"; text: string }
   | { t: "tool"; detail: string }
   | { t: "todos"; items: { content: string; status: string }[] }
+  | { t: "result"; result: ClaudeResult }
   | { t: "usage"; contextTokens: number };
 
 /**
@@ -333,6 +334,9 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
   }
   if (evt.type === "result") {
     out.result = evt as ClaudeResult;
+    // Also surface as an event so a multi-turn streaming session can react to each
+    // turn boundary (the classic runner ignores it and reads out.result instead).
+    out.events.push({ t: "result", result: evt as ClaudeResult });
   } else if (evt.type === "stream_event") {
     const ev = evt.event ?? {};
     const d = ev.delta ?? {};
@@ -807,6 +811,202 @@ export async function* runMessageJob(
   } catch (err) {
     yield ["error", { kind: "server_error", detail: String((err as Error)?.message ?? err).slice(0, 500) }];
   } finally {
+    if (child && child.exitCode === null && child.signalCode === null) {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        /* already gone */
+      }
+    }
+    await cleanupUploads(site.id, opts.attachmentPaths).catch(() => {});
+    release?.();
+  }
+}
+
+/**
+ * M2 (behind AK_STREAMING_SESSION): a long-lived streaming session. Unlike
+ * runMessageJob (one prompt → one result → exit), the CLI process stays alive
+ * with stdin open — the initial turn is written on spawn, follow-ups arrive via
+ * the InputChannel (the append endpoint), and EACH turn ends with its own
+ * `result` frame while the job stays open. Closes on idle or a hard lifetime cap,
+ * then the process exits and the session ends. The checkout syncs ONCE up front,
+ * so turns in a session share the working tree (no per-message reset to origin).
+ */
+export async function* runStreamingSession(
+  site: Site,
+  opts: { text: string; page: string; attachmentPaths: string[] },
+  input: InputChannel,
+  signal?: AbortSignal,
+): AsyncGenerator<Frame, void, unknown> {
+  yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
+
+  let release: (() => void) | undefined;
+  let child: ChildProcess | null = null;
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+  let maxTimer: ReturnType<typeof setTimeout> | null = null;
+  let closeInput = () => {};
+  const onAbort = () => {
+    try {
+      child?.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    if (signal?.aborted) return;
+    release = await acquireSiteLock(site.id);
+    if (signal?.aborted) return;
+
+    yield ["status", { phase: "syncing", detail: `Syncing ${site.domain}` }];
+    let turnStartSha = await syncCheckout(site);
+    const dir = checkoutPath(site.id);
+    const pushBranch = resolvePushBranch(site);
+    const conversationId = await conversationIdFor(site.id);
+    const sessionId = sessionIdFor(conversationId);
+    const marker = markerPathFor(conversationId);
+    mkdirSync(CONVERSATIONS_DIR, { recursive: true });
+    const resume = existsSync(marker);
+    const prompt = buildPrompt(site, opts);
+    const [harness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
+    console.log(
+      `[harness] site=${site.id} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}`,
+    );
+    await resetOutputs(site.id).catch(() => {});
+
+    yield ["status", { phase: "starting", detail: "Thinking…" }];
+
+    const queue = new FrameQueue<Frame>();
+    let streamed = "";
+    let snapshot = "";
+    let lastAssistantEmit = 0;
+    let thinkingTail = "";
+    let lastThinkingEmit = 0;
+    let maxContext = 0;
+    const best = () => (streamed.length >= snapshot.length ? streamed : snapshot);
+    const emitAssistant = () => {
+      const now = Date.now();
+      if (now - lastAssistantEmit >= ASSISTANT_THROTTLE_MS) {
+        lastAssistantEmit = now;
+        const text = best();
+        if (text) queue.push(["assistant", { text }]);
+      }
+    };
+    const clearIdle = () => {
+      if (idleTimer) {
+        clearTimeout(idleTimer);
+        idleTimer = null;
+      }
+    };
+    const armIdle = () => {
+      clearIdle();
+      idleTimer = setTimeout(() => {
+        queue.push(["status", { phase: "starting", detail: "Session idle — closing" }]);
+        closeInput();
+      }, SESSION_IDLE_MS);
+    };
+
+    // A turn completed: summarize git for THIS turn, emit its result frame, then
+    // idle-wait for the next message. Async (git is I/O), but between turns the
+    // process stays alive (stdin open), so the queue is still open when it pushes.
+    const onResult = (r: ClaudeResult) => {
+      clearIdle();
+      void (async () => {
+        const git = await gitSummary(site, turnStartSha, pushBranch).catch(
+          () => ({}) as Awaited<ReturnType<typeof gitSummary>>,
+        );
+        if (git.headSha) turnStartSha = git.headSha;
+        const images = await collectOutputs(site.id).catch(() => []);
+        if (maxContext > 0) {
+          await writeLastUsage(site.id, {
+            contextTokens: maxContext,
+            contextPct: Math.min(100, Math.round((maxContext / CONTEXT_WINDOW_TOKENS) * 100)),
+            at: new Date().toISOString(),
+          }).catch(() => {});
+        }
+        queue.push([
+          "result",
+          {
+            reply: (r.result ?? "").toString().trim(),
+            git,
+            images,
+            usage: {
+              cost_usd: r.total_cost_usd ?? null,
+              duration_ms: r.duration_ms ?? null,
+              model: harness.settings.model ?? process.env.CLAUDE_MODEL ?? "opus",
+            },
+            conversation_id: conversationId,
+            open: true, // the session stays open for more turns
+          },
+        ]);
+        await writeFile(marker, sessionId).catch(() => {});
+        await resetOutputs(site.id).catch(() => {}); // fresh image slate for the next turn
+        streamed = "";
+        snapshot = "";
+        armIdle();
+      })();
+    };
+
+    const spawned = spawnClaude(
+      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true),
+      dir,
+      (e) => {
+        if (e.t === "usage") maxContext = Math.max(maxContext, e.contextTokens);
+        else if (e.t === "todos") queue.push(["todos", { items: e.items }]);
+        else if (e.t === "delta") {
+          streamed += e.text;
+          emitAssistant();
+        } else if (e.t === "snapshotText") {
+          snapshot += e.text;
+          emitAssistant();
+        } else if (e.t === "thinking") {
+          thinkingTail = (thinkingTail + e.text).slice(-160);
+          const now = Date.now();
+          if (now - lastThinkingEmit >= ASSISTANT_THROTTLE_MS) {
+            lastThinkingEmit = now;
+            queue.push(["status", { phase: "thinking", detail: thinkingTail.split(/\s+/).join(" ").trim().slice(-120) }]);
+          }
+        } else if (e.t === "tool") {
+          streamed = "";
+          snapshot = "";
+          queue.push(["status", { phase: "tool", detail: e.detail }]);
+        } else if (e.t === "result") {
+          onResult(e.result);
+        }
+      },
+      { extraEnv: harness.env, stdin: userMessageLine(prompt), keepStdinOpen: true },
+    );
+    child = spawned.child;
+    closeInput = spawned.closeInput;
+
+    // Follow-up turns injected by the append endpoint while the session is live.
+    input.attach((text) => {
+      clearIdle();
+      queue.push(["injected", { text }]);
+      void resetOutputs(site.id).catch(() => {});
+      spawned.writeInput(userMessageLine(text));
+    });
+
+    // Hard lifetime cap: even a continuously-busy session eventually closes so the
+    // site lock can never be held forever.
+    maxTimer = setTimeout(() => {
+      queue.push(["status", { phase: "starting", detail: "Session reached its limit — closing" }]);
+      closeInput();
+    }, SESSION_MAX_MS);
+
+    const settled = spawned.done.finally(() => queue.close());
+    for await (const frame of queue) yield frame;
+    const out = await settled;
+    if (signal?.aborted) return;
+    if (out.stderr && !out.result) {
+      yield ["error", { kind: isThrottle(out.stderr) ? "rate_limited" : "agent_failed", detail: out.stderr.slice(0, 500) }];
+    }
+  } catch (err) {
+    yield ["error", { kind: "server_error", detail: String((err as Error)?.message ?? err).slice(0, 500) }];
+  } finally {
+    if (idleTimer) clearTimeout(idleTimer);
+    if (maxTimer) clearTimeout(maxTimer);
+    input.close();
     if (child && child.exitCode === null && child.signalCode === null) {
       try {
         child.kill("SIGKILL");

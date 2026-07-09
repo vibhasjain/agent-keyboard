@@ -15,7 +15,7 @@ import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
 import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
-import { runMessageJob, killAllChildren, rotateConversation } from "./claude.js";
+import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
@@ -26,6 +26,7 @@ import {
   tail,
   getJob,
   cancelJob,
+  appendToJob,
   jobSnapshot,
   listActive,
   jobForIdem,
@@ -329,7 +330,12 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     ? await resolveAttachments(site.id, attachmentIds)
     : [];
   const ac = new AbortController();
-  const gen = runMessageJob(site, { text, page, attachmentPaths }, ac.signal);
+  // With the streaming-session flag on, a message opens a long-lived session that
+  // stays open for follow-ups; otherwise it's a classic one-shot job.
+  const input = STREAMING_SESSION ? new InputChannel() : null;
+  const gen = input
+    ? runStreamingSession(site, { text, page, attachmentPaths }, input, ac.signal)
+    : runMessageJob(site, { text, page, attachmentPaths }, ac.signal);
   const job = await startJob({
     siteId: site.id,
     prompt: text,
@@ -337,8 +343,31 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     gen,
     abort: () => ac.abort(),
     idemKey: idemKey || undefined,
+    streaming: !!input,
+    input,
   });
   await streamJobTail(req, res, job);
+});
+
+/** Inject a follow-up message into a running streaming session (M2). 404/409 if
+ *  the site is unknown or the job isn't an open streaming session. */
+app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  const text = typeof (req.body as { text?: unknown })?.text === "string" ? (req.body as { text: string }).text : "";
+  if (!text.trim()) {
+    res.status(400).json({ error: "text required" });
+    return;
+  }
+  const ok = appendToJob(req.params.jobId ?? "", text);
+  if (!ok) {
+    res.status(409).json({ error: "job not accepting messages" });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 /** Upload a single attachment (multipart field `photo` or `file`); returns {id, path} to attach. */

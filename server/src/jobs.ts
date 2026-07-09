@@ -5,7 +5,7 @@
 // the durable record a reloaded client re-attaches to.
 
 import { randomBytes } from "node:crypto";
-import type { Frame } from "./claude.js";
+import type { Frame, InputChannel } from "./claude.js";
 import { insertJob, updateJob, type JobStatus } from "./jobstore.js";
 
 const TERMINAL = new Set<JobStatus>(["done", "error", "interrupted"]);
@@ -41,6 +41,8 @@ interface Job {
   subscribers: Set<SubQueue>;
   lastDbWrite: number;
   abort: () => void; // signals runMessageJob to kill its CLI child (used by cancelJob)
+  streaming: boolean; // long-lived session: a `result` marks a turn boundary, not the end
+  input: InputChannel | null; // follow-up injection channel (streaming sessions only)
 }
 
 // ─── a subscriber's frame queue (null = closed) ───────────────────────────
@@ -149,9 +151,13 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
         break;
       } else if (event === "result") {
         job.result = payload as Record<string, unknown>;
-        job.status = "done";
         publish(job, event, payload);
-        break;
+        if (!job.streaming) {
+          job.status = "done";
+          break;
+        }
+        // Streaming session: a turn ended, but the session stays open for more.
+        await maybeFlush(job);
       } else {
         publish(job, event, payload);
       }
@@ -168,10 +174,15 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
       /* ignore */
     }
     if (job.status === "running") {
-      // Generator ended without a terminal frame — a job must never end silently.
-      job.error = { kind: "job_failed", detail: "The job ended without producing a result." };
-      job.status = "error";
-      publish(job, "error", job.error);
+      if (job.streaming && job.result) {
+        // A streaming session closed normally (idle / lifetime cap) after ≥1 turn.
+        job.status = "done";
+      } else {
+        // Generator ended without a terminal frame — a job must never end silently.
+        job.error = { kind: "job_failed", detail: "The job ended without producing a result." };
+        job.status = "error";
+        publish(job, "error", job.error);
+      }
     }
     closeSubscribers(job);
     job.updatedAt = Date.now();
@@ -194,6 +205,8 @@ export async function startJob(opts: {
   gen: AsyncGenerator<Frame>;
   abort?: () => void;
   idemKey?: string;
+  streaming?: boolean;
+  input?: InputChannel | null;
 }): Promise<Job> {
   const now = Date.now();
   const jobId = `job-${now}${randomBytes(2).toString("hex")}`;
@@ -212,6 +225,8 @@ export async function startJob(opts: {
     subscribers: new Set(),
     lastDbWrite: 0,
     abort: opts.abort ?? (() => {}),
+    streaming: opts.streaming ?? false,
+    input: opts.input ?? null,
   };
   registry.set(jobId, job);
   if (opts.idemKey) idem.set(opts.idemKey, { jobId, at: now });
@@ -265,6 +280,16 @@ export async function* tail(job: Job): AsyncGenerator<Frame> {
 
 export function getJob(jobId: string): Job | null {
   return registry.get(jobId) ?? null;
+}
+
+/** Inject a follow-up message into a running streaming session's CLI. Returns
+ *  false if the job is unknown, already terminal, or not a streaming session. */
+export function appendToJob(jobId: string, text: string): boolean {
+  const job = registry.get(jobId);
+  if (!job || TERMINAL.has(job.status) || !job.input) return false;
+  const ok = job.input.push(text);
+  if (ok) job.updatedAt = Date.now();
+  return ok;
 }
 
 /**
