@@ -637,16 +637,22 @@ function reattach(gen: number, isBoot: boolean): void {
     })
     .catch((e: unknown) => {
       if (gen !== generation) return
-      if (e instanceof HttpError && e.status === 404) {
+      if (e instanceof HttpError && e.status < 500) {
         clearPersist()
-        if (isBoot) {
+        if (isBoot && e.status === 404) {
           // Job long gone — the page just booted with a stale key. Clear silently.
           reset()
           setJob({ phase: 'idle' })
         } else {
-          // Mid-session re-attach 404 ⇒ genuine failure.
+          const message =
+            e.status === 401 || e.status === 403
+              ? 'Sign in again to reconnect.'
+              : e.status === 404
+                ? 'That job is no longer available.'
+                : `Could not reconnect (${e.status}).`
+          // Mid-session non-retryable response ⇒ genuine failure.
           reset()
-          setJob({ phase: 'error', message: 'That job is no longer available.' })
+          setJob({ phase: 'error', message })
         }
         // Sends queued behind the dead job (e.g. restored from the outbox at
         // boot) must not strand — drain like every other terminal path.
