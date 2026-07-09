@@ -318,6 +318,8 @@ export type LowEvent =
   | { t: "todos"; items: { content: string; status: string }[] }
   | { t: "taskCreate"; subject: string }
   | { t: "taskUpdate"; taskId: string; status: string }
+  | { t: "subagentStart"; id: string; desc: string }
+  | { t: "subagentEnd"; id: string }
   | { t: "result"; result: ClaudeResult }
   | { t: "usage"; contextTokens: number };
 
@@ -343,6 +345,27 @@ function makeTaskChecklist(): (e: LowEvent) => { content: string; status: string
       return null;
     }
     return [...tasks.values()];
+  };
+}
+
+/**
+ * Tracks running sub-agents (this CLI's `Agent` tool) so the widget can show a
+ * sticky "teammate running" line with a live timer: subagentStart adds one (keyed
+ * by tool_use id), subagentEnd — the matching tool_result — removes it. Returns
+ * the current active list after each change, or null if the event didn't touch a
+ * tracked sub-agent (e.g. a tool_result for an ordinary tool).
+ */
+function makeSubagentTracker(): (e: LowEvent) => { id: string; desc: string }[] | null {
+  const active = new Map<string, string>();
+  return (e) => {
+    if (e.t === "subagentStart") {
+      active.set(e.id, e.desc);
+    } else if (e.t === "subagentEnd") {
+      if (!active.delete(e.id)) return null;
+    } else {
+      return null;
+    }
+    return [...active].map(([id, desc]) => ({ id, desc }));
   };
 }
 
@@ -401,6 +424,10 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
           if (subject) taskOps.push({ t: "taskCreate", subject });
         } else if (b.name === "TaskUpdate" && b.input?.taskId != null) {
           taskOps.push({ t: "taskUpdate", taskId: String(b.input.taskId), status: String(b.input?.status ?? "") });
+        } else if ((b.name === "Agent" || b.name === "Task") && b.id) {
+          // Sub-agent spawn — track it live (ended by its matching tool_result).
+          const desc = String(b.input?.description ?? b.input?.subagent_type ?? "sub-agent").replace(/\s+/g, " ").trim().slice(0, 80);
+          taskOps.push({ t: "subagentStart", id: String(b.id), desc });
         }
         tools.push(condenseToolUse(b));
       } else if (b?.type === "text") msgText += String(b.text ?? "");
@@ -423,6 +450,14 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
         (Number(u.cache_creation_input_tokens) || 0) +
         (Number(u.output_tokens) || 0);
       if (total > 1_000) out.events.push({ t: "usage", contextTokens: total });
+    }
+  } else if (evt.type === "user" && Array.isArray(evt.message?.content)) {
+    // tool_result blocks arrive as `user` messages — a sub-agent's result ends it
+    // (the tracker ignores results for non-sub-agent tools).
+    for (const b of evt.message.content) {
+      if (b?.type === "tool_result" && b?.tool_use_id) {
+        out.events.push({ t: "subagentEnd", id: String(b.tool_use_id) });
+      }
     }
   }
   return out;
@@ -675,6 +710,7 @@ export async function* runMessageJob(
         }
       };
       const checklist = makeTaskChecklist();
+      const subagents = makeSubagentTracker();
 
       const { child: c, done } = spawnClaude(
         streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT),
@@ -687,6 +723,9 @@ export async function* runMessageJob(
           } else if (e.t === "taskCreate" || e.t === "taskUpdate") {
             const items = checklist(e);
             if (items) queue.push(["todos", { items }]);
+          } else if (e.t === "subagentStart" || e.t === "subagentEnd") {
+            const items = subagents(e);
+            if (items) queue.push(["subagents", { items }]);
           } else if (e.t === "delta") {
             streamed += e.text;
             emitAssistant();
@@ -992,6 +1031,7 @@ export async function* runStreamingSession(
     };
 
     const checklist = makeTaskChecklist();
+    const subagents = makeSubagentTracker();
     const spawned = spawnClaude(
       streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true),
       dir,
@@ -1001,6 +1041,9 @@ export async function* runStreamingSession(
         else if (e.t === "taskCreate" || e.t === "taskUpdate") {
           const items = checklist(e);
           if (items) queue.push(["todos", { items }]);
+        } else if (e.t === "subagentStart" || e.t === "subagentEnd") {
+          const items = subagents(e);
+          if (items) queue.push(["subagents", { items }]);
         } else if (e.t === "delta") {
           streamed += e.text;
           emitAssistant();

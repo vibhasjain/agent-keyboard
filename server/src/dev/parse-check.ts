@@ -143,4 +143,26 @@ assert.equal(parseStreamLine("{oops").result, undefined);
   );
 }
 
+// Sub-agent tracking: an Agent tool_use (with id) → subagentStart; the matching
+// tool_result (which arrives as a `user` message) → subagentEnd.
+{
+  const start = parseStreamLine(
+    JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", id: "tu_1", name: "Agent", input: { description: "audit styles" } }] },
+    }),
+  );
+  assert.ok(
+    start.events.some((e) => e.t === "subagentStart" && e.id === "tu_1" && e.desc === "audit styles"),
+    "Agent tool_use → subagentStart with id+desc",
+  );
+  const end = parseStreamLine(
+    JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu_1", content: "done" }] } }),
+  );
+  assert.ok(
+    end.events.some((e) => e.t === "subagentEnd" && e.id === "tu_1"),
+    "tool_result → subagentEnd with matching id",
+  );
+}
+
 console.log("parse-check OK — accumulation, tool condensation, todos, subagent, thinking, and result parsing all pass.");

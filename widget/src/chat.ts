@@ -8,7 +8,7 @@ import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
-import { getState, patchUi, subscribe, type TodoItem } from './state'
+import { getState, patchUi, subscribe, type Subagent, type TodoItem } from './state'
 
 export interface Chat {
   footerEl: HTMLElement
@@ -188,6 +188,24 @@ function renderTodos(host: HTMLElement, todos: TodoItem[] | undefined): void {
     const row = el('div', 'ak-todo ' + state)
     row.appendChild(el('span', 'ak-todo-box', (n) => (n.textContent = box)))
     row.appendChild(el('span', 'ak-todo-txt', (n) => (n.textContent = t.content)))
+    host.appendChild(row)
+  }
+}
+
+// Running sub-agents (the `Agent` tool): a sticky "▸ <what> · running m:ss" line
+// with a live elapsed timer, so you know a teammate is alive, not crashed.
+function renderSubagents(host: HTMLElement, subagents: Subagent[] | undefined): void {
+  clearNode(host)
+  if (!subagents?.length) {
+    show(host, false)
+    return
+  }
+  show(host, true)
+  for (const s of subagents) {
+    const row = el('div', 'ak-agent')
+    row.appendChild(el('span', 'ak-agent-mark', (n) => (n.textContent = '▸')))
+    row.appendChild(el('span', 'ak-agent-desc', (n) => (n.textContent = s.desc)))
+    row.appendChild(el('span', 'ak-agent-time', (n) => (n.textContent = 'running ' + mmss(Date.now() - s.startedAt))))
     host.appendChild(row)
   }
 }
@@ -435,6 +453,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   let liveAsst: HTMLElement | null = null
   let liveTimer: HTMLElement | null = null
   let liveTodos: HTMLElement | null = null
+  let liveSubagents: HTMLElement | null = null
   let liveBody: HTMLElement | null = null
   const queuedBox = el('div')
 
@@ -443,7 +462,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const rebuildStatic = () => {
     clearNode(listEl)
-    liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
+    liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
     for (const m of history) listEl.appendChild(nodeForMessage(m))
     for (const t of getLiveTurns()) {
       listEl.appendChild(
@@ -484,12 +503,14 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         h.appendChild(el('span', 'ak-t-mark ak-t-star', (n) => (n.textContent = '✻')))
         liveTimer = el('div', 'ak-t-body')
         h.appendChild(liveTimer)
+        liveSubagents = el('div', 'ak-agents')
         liveTodos = el('div', 'ak-todos')
         liveBody = el('div')
-        liveAsst.append(h, liveTodos, lineEl('asst', '●', liveBody))
+        liveAsst.append(h, liveSubagents, liveTodos, lineEl('asst', '●', liveBody))
         listEl.appendChild(liveAsst)
       }
       const streaming = job.phase === 'streaming' ? job : null
+      if (liveSubagents) renderSubagents(liveSubagents, streaming?.subagents)
       if (liveTodos) renderTodos(liveTodos, streaming?.todos)
       if (liveTimer) {
         const detail = ((streaming ? streaming.line : '') || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
@@ -502,7 +523,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     } else if (liveUser || liveAsst) {
       liveUser?.remove()
       liveAsst?.remove()
-      liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
+      liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
     }
     // queued sends + pending session follow-ups render dim after the live block
     const q = getQueued()
@@ -532,7 +553,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // rebuildStatic() when the fetch resolves.
   const renderSkeleton = () => {
     clearNode(listEl)
-    liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
+    liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
     for (const w of ['58%', '82%', '40%', '70%']) {
       const row = el('div', 'ak-skel-row', (n) => (n.style.width = w))
       row.appendChild(el('div', 'ak-shimmer'))

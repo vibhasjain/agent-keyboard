@@ -411,6 +411,13 @@ button::-moz-focus-inner{ border:0; }
 .ak-todo.done{ color:var(--ak-ink2); }
 .ak-todo.done .ak-todo-box{ color:var(--ak-ok); }
 
+/* ---- running sub-agents (Agent tool): sticky "teammate alive" lines ---- */
+.ak-agents{ display:flex; flex-direction:column; gap:3px; margin:0 0 8px 22px; }
+.ak-agent{ display:flex; align-items:baseline; gap:8px; font-size:12.5px; line-height:1.5; }
+.ak-agent-mark{ flex:none; width:12px; text-align:center; color:var(--ak-violet); animation:ak-star 1.2s ease-in-out infinite; }
+.ak-agent-desc{ flex:1; min-width:0; color:var(--ak-ink); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ak-agent-time{ flex:none; font-size:10.5px; color:var(--ak-ink3); font-variant-numeric:tabular-nums; }
+
 /* ---- tappable option buttons (\`\`\`options block in a reply) ---- */
 .ak-opts{ display:flex; flex-wrap:wrap; gap:7px; margin:4px 0 8px; }
 .ak-opt{

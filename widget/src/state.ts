@@ -13,6 +13,14 @@ export interface TodoItem {
   status: string // 'pending' | 'in_progress' | 'completed'
 }
 
+// A sub-agent (`Agent` tool) currently running; startedAt is stamped client-side
+// when it first appears, for the live elapsed timer.
+export interface Subagent {
+  id: string
+  desc: string
+  startedAt: number
+}
+
 export type JobState =
   | { phase: 'idle' }
   | { phase: 'sending'; startedAt: number }
@@ -24,6 +32,7 @@ export type JobState =
       lineState: LineState
       fullText: string
       todos?: TodoItem[]
+      subagents?: Subagent[]
       disconnected?: boolean
     }
   | { phase: 'done'; jobId: string; summary: string; ok: boolean; cleared?: boolean }

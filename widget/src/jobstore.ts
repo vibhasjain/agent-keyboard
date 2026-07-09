@@ -9,7 +9,7 @@ import { api, HttpError, type ConversationMessage, type GitInfo } from './api'
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
-import { getState, patchUi, type LineState, type TodoItem, setJob } from './state'
+import { getState, patchUi, type LineState, type Subagent, type TodoItem, setJob } from './state'
 
 const BACKOFF = [1000, 2000, 5000, 10000]
 const DONE_LINGER_MS = 8000
@@ -320,6 +320,7 @@ interface StreamPatch {
   lineState?: LineState
   fullText?: string
   todos?: TodoItem[]
+  subagents?: Subagent[]
   disconnected?: boolean
 }
 
@@ -335,7 +336,24 @@ function setStreaming(patch: StreamPatch): void {
     lineState: patch.lineState ?? prev?.lineState ?? 'dim',
     fullText: patch.fullText ?? prev?.fullText ?? '',
     todos: patch.todos ?? prev?.todos,
+    subagents: patch.subagents ?? prev?.subagents,
     disconnected: patch.disconnected ?? false,
+  })
+}
+
+// Stamp each running sub-agent with a client-side start time (for the live timer),
+// preserving it across `subagents` frames and dropping ones that finished.
+const subagentStartedAt = new Map<string, number>()
+function reconcileSubagents(items: { id: string; desc: string }[]): Subagent[] {
+  const ids = new Set(items.map((s) => s.id))
+  for (const id of [...subagentStartedAt.keys()]) if (!ids.has(id)) subagentStartedAt.delete(id)
+  return items.map((s) => {
+    let at = subagentStartedAt.get(s.id)
+    if (at == null) {
+      at = Date.now()
+      subagentStartedAt.set(s.id, at)
+    }
+    return { id: s.id, desc: s.desc, startedAt: at }
   })
 }
 
@@ -367,6 +385,11 @@ function onFrame(name: string, data: Record<string, unknown>): void {
     }
     case 'todos': {
       setStreaming({ todos: Array.isArray(data.items) ? (data.items as TodoItem[]) : [] })
+      break
+    }
+    case 'subagents': {
+      const items = Array.isArray(data.items) ? (data.items as { id: string; desc: string }[]) : []
+      setStreaming({ subagents: reconcileSubagents(items) })
       break
     }
     case 'result':
@@ -530,6 +553,7 @@ function reset(): void {
   attempt = 0
   sessionStreaming = false
   pendingUserTexts = []
+  subagentStartedAt.clear()
   clearTimers()
 }
 
