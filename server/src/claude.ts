@@ -281,9 +281,15 @@ function condenseToolUse(b: any): string {
       return "fetching " + base(inp.url);
     case "WebSearch":
       return "searching the web";
+    // This CLI's task-list tools (2.1.205). Legacy TodoWrite kept for older CLIs.
     case "TodoWrite":
+    case "TaskCreate":
+    case "TaskUpdate":
+    case "TaskList":
       return "planning";
-    case "Task": {
+    // Sub-agents spawn via `Agent` on this CLI (`Task` on older ones).
+    case "Task":
+    case "Agent": {
       const desc = String(inp.description ?? inp.subagent_type ?? "a subagent").replace(/\s+/g, " ").trim();
       return "delegating: " + (desc.length > 60 ? desc.slice(0, 60) + "…" : desc);
     }
@@ -310,8 +316,35 @@ export type LowEvent =
   | { t: "snapshotText"; text: string }
   | { t: "tool"; detail: string }
   | { t: "todos"; items: { content: string; status: string }[] }
+  | { t: "taskCreate"; subject: string }
+  | { t: "taskUpdate"; taskId: string; status: string }
   | { t: "result"; result: ClaudeResult }
   | { t: "usage"; contextTokens: number };
+
+/**
+ * Reconstructs the live checklist from this CLI's stateful task ops (TaskCreate
+ * adds a task, TaskUpdate changes its status) — unlike the old TodoWrite which
+ * resent the whole list each call. Ids are assigned in creation order ("1","2",…)
+ * to match the CLI's own ids that TaskUpdate references. Returns the full current
+ * list after each op (the shape the widget's `todos` frame already renders).
+ */
+function makeTaskChecklist(): (e: LowEvent) => { content: string; status: string }[] | null {
+  const tasks = new Map<string, { content: string; status: string }>();
+  let counter = 0;
+  return (e) => {
+    if (e.t === "taskCreate") {
+      counter++;
+      tasks.set(String(counter), { content: e.subject, status: "pending" });
+    } else if (e.t === "taskUpdate") {
+      const t = tasks.get(e.taskId);
+      if (!t) return null;
+      if (e.status) t.status = e.status;
+    } else {
+      return null;
+    }
+    return [...tasks.values()];
+  };
+}
 
 /**
  * Parse one stream-json line into low-level events (+ a terminal result if this
@@ -349,11 +382,12 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
     let msgText = "";
     const tools: string[] = [];
     let todos: { content: string; status: string }[] | null = null;
+    const taskOps: LowEvent[] = [];
     for (const b of evt.message.content) {
       if (b?.type === "tool_use") {
-        // TodoWrite carries the full task list on every call — surface it as a
-        // live checklist (a `todos` frame the widget replaces in place), on top
-        // of the one-line "planning" tool status.
+        // Live checklist. This CLI (2.1.205) uses stateful TaskCreate/TaskUpdate
+        // ops (accumulated by makeTaskChecklist in the spawn loop); legacy
+        // TodoWrite carried the whole list per call — both surface as `todos`.
         if (b.name === "TodoWrite" && Array.isArray(b.input?.todos)) {
           const items = b.input.todos
             .map((td: any) => ({
@@ -362,6 +396,11 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
             }))
             .filter((td: { content: string }) => td.content);
           if (items.length) todos = items;
+        } else if (b.name === "TaskCreate") {
+          const subject = String(b.input?.subject ?? b.input?.activeForm ?? "").slice(0, 200);
+          if (subject) taskOps.push({ t: "taskCreate", subject });
+        } else if (b.name === "TaskUpdate" && b.input?.taskId != null) {
+          taskOps.push({ t: "taskUpdate", taskId: String(b.input.taskId), status: String(b.input?.status ?? "") });
         }
         tools.push(condenseToolUse(b));
       } else if (b?.type === "text") msgText += String(b.text ?? "");
@@ -371,6 +410,7 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
     // dropping the text that preceded it.
     if (msgText) out.events.push({ t: "snapshotText", text: msgText });
     if (todos) out.events.push({ t: "todos", items: todos });
+    for (const op of taskOps) out.events.push(op);
     for (const d of tools) out.events.push({ t: "tool", detail: d });
     // Approximate context size = this request's full input + output. Some rows
     // carry placeholder input_tokens (a known stream-json quirk) — the caller
@@ -634,6 +674,7 @@ export async function* runMessageJob(
           if (text) queue.push(["assistant", { text }]);
         }
       };
+      const checklist = makeTaskChecklist();
 
       const { child: c, done } = spawnClaude(
         streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT),
@@ -643,6 +684,9 @@ export async function* runMessageJob(
             maxContext = Math.max(maxContext, e.contextTokens);
           } else if (e.t === "todos") {
             queue.push(["todos", { items: e.items }]);
+          } else if (e.t === "taskCreate" || e.t === "taskUpdate") {
+            const items = checklist(e);
+            if (items) queue.push(["todos", { items }]);
           } else if (e.t === "delta") {
             streamed += e.text;
             emitAssistant();
@@ -947,13 +991,17 @@ export async function* runStreamingSession(
       })();
     };
 
+    const checklist = makeTaskChecklist();
     const spawned = spawnClaude(
       streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true),
       dir,
       (e) => {
         if (e.t === "usage") maxContext = Math.max(maxContext, e.contextTokens);
         else if (e.t === "todos") queue.push(["todos", { items: e.items }]);
-        else if (e.t === "delta") {
+        else if (e.t === "taskCreate" || e.t === "taskUpdate") {
+          const items = checklist(e);
+          if (items) queue.push(["todos", { items }]);
+        } else if (e.t === "delta") {
           streamed += e.text;
           emitAssistant();
         } else if (e.t === "snapshotText") {

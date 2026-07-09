@@ -118,4 +118,29 @@ assert.equal(parseStreamLine("{oops").result, undefined);
   );
 }
 
+// This CLI (2.1.205) uses TaskCreate/TaskUpdate (stateful) and Agent — the names
+// the parser must actually match (TodoWrite/Task never fire here).
+{
+  const created = parseStreamLine(
+    assistantTool("TaskCreate", { subject: "Do the thing", description: "…", activeForm: "Doing the thing" }),
+  );
+  assert.ok(
+    created.events.some((e) => e.t === "taskCreate" && e.subject === "Do the thing"),
+    "TaskCreate → taskCreate event",
+  );
+  assert.ok(created.events.some((e) => e.t === "tool" && e.detail === "planning"), "TaskCreate → planning status");
+
+  const updated = parseStreamLine(assistantTool("TaskUpdate", { taskId: "1", status: "in_progress" }));
+  assert.ok(
+    updated.events.some((e) => e.t === "taskUpdate" && e.taskId === "1" && e.status === "in_progress"),
+    "TaskUpdate → taskUpdate event",
+  );
+
+  const agent = parseStreamLine(assistantTool("Agent", { description: "audit the styles", subagent_type: "general-purpose" }));
+  assert.ok(
+    agent.events.some((e) => e.t === "tool" && e.detail === "delegating: audit the styles"),
+    "Agent → delegating line",
+  );
+}
+
 console.log("parse-check OK — accumulation, tool condensation, todos, subagent, thinking, and result parsing all pass.");

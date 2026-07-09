@@ -415,7 +415,14 @@ function imageUrls(data: Record<string, unknown>): string[] | undefined {
 // A streaming turn finished: move the completed [user, assistant] pair to the
 // static transcript and reset the live block for the next turn. The job stays
 // streaming/open.
+// Strip trailing transient error rows — a later successful turn/result proves any
+// preceding error (a reconnect blip, a server-restart 'interrupted') was recoverable.
+function dropTrailingErrors(): void {
+  while (liveTurns.length && liveTurns[liveTurns.length - 1].role === 'error') liveTurns.pop()
+}
+
 function onTurnComplete(data: Record<string, unknown>): void {
+  dropTrailingErrors()
   sessionStreaming = true
   const reply = String(data.reply ?? '') || currentFullText()
   const userText = pendingUserTexts.shift() ?? prompt
@@ -452,6 +459,7 @@ function finishSession(): void {
 }
 
 function finishDone(data: Record<string, unknown>): void {
+  dropTrailingErrors()
   const git = (data.git ?? {}) as GitInfo
   const reply = String(data.reply ?? '') || currentFullText()
   // A job attached without its prompt (cross-device discovery) pushes no live
@@ -494,12 +502,16 @@ function finishDone(data: Record<string, unknown>): void {
 
 function finishError(data: Record<string, unknown>): void {
   const detail = String(data.detail ?? data.kind ?? '') || 'Something went wrong'
+  const kind = String(data.kind ?? '')
+  // Infrastructural terminals (server restart mid-session, evicted job) aren't the
+  // agent's fault and self-recover — keep them pill-only, never a persistent row.
+  const transient = kind === 'interrupted' || kind === 'not_found'
   const partial = currentFullText()
   if (prompt || activeThumbs?.length || activeFiles?.length) {
     liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs, files: activeFiles })
   }
   if (partial) liveTurns.push({ role: 'assistant', text: partial })
-  if (!partial || !sameTerminalText(partial, detail)) liveTurns.push({ role: 'error', text: detail })
+  if (!transient && (!partial || !sameTerminalText(partial, detail))) liveTurns.push({ role: 'error', text: detail })
   markHandled(jobId ?? '')
   clearPersist()
   clearActivityFlag()

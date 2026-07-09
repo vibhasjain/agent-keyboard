@@ -274,7 +274,12 @@ export async function* tail(job: Job): AsyncGenerator<Frame> {
         return;
       }
       yield item;
-      if (item[0] === "result" || item[0] === "error") return;
+      // A streaming session emits a `result` per turn but stays open — only end
+      // the tail on a real terminal (error, or the synthesized `closed` via null).
+      // Ending on every `result` made the stream close + reconnect each turn,
+      // which is what surfaced spurious transient errors mid-session.
+      if (item[0] === "error") return;
+      if (item[0] === "result" && !job.streaming) return;
     }
   } finally {
     job.subscribers.delete(q);
