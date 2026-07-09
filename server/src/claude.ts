@@ -65,6 +65,12 @@ const MAX_ATTEMPTS = 3;
 // messages. Off by default; enable per deploy (AK_STREAMING_INPUT=1) while it's
 // being proven. Milestone 1 still closes stdin after one message (≡ -p behavior).
 const STREAMING_INPUT = process.env.AK_STREAMING_INPUT === "1";
+// M2 (keep-alive multi-turn session) is behind its OWN flag, so deploying M2 code
+// leaves the verified M1 behaviour (AK_STREAMING_INPUT single-message) untouched
+// until this is deliberately flipped on (alongside the widget changes).
+const STREAMING_SESSION = process.env.AK_STREAMING_SESSION === "1";
+const SESSION_IDLE_MS = envInt("AK_SESSION_IDLE_MS", 180_000); // close stdin after 3 min idle
+const SESSION_MAX_MS = envInt("AK_SESSION_MAX_MS", 3_600_000); // absolute session lifetime cap (1h)
 
 // HOME is where Claude Code keeps its session store; on Fly HOME=/data.
 export const CLAUDE_HOME = process.env.HOME ?? DATA_DIR;
@@ -175,6 +181,33 @@ function buildPrompt(site: Site, opts: { text: string; page: string; attachmentP
 /** A stream-json user turn (one JSON line) for --input-format stream-json. */
 function userMessageLine(text: string): string {
   return JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text }] } }) + "\n";
+}
+
+/**
+ * Injects follow-up user turns into a running streaming session. The append
+ * endpoint calls push(); the session runner attach()es a sink that writes each to
+ * the CLI's stdin. Buffers until a sink attaches; after close() nothing more is
+ * accepted (returns false so the caller can fall back to starting a fresh job).
+ */
+export class InputChannel {
+  private sink: ((text: string) => void) | null = null;
+  private buffered: string[] = [];
+  private closed = false;
+  push(text: string): boolean {
+    if (this.closed) return false;
+    if (this.sink) this.sink(text);
+    else this.buffered.push(text);
+    return true;
+  }
+  attach(sink: (text: string) => void): void {
+    this.sink = sink;
+    for (const t of this.buffered) sink(t);
+    this.buffered = [];
+  }
+  close(): void {
+    this.closed = true;
+    this.sink = null;
+  }
 }
 
 function streamArgs(
@@ -360,8 +393,13 @@ function spawnClaude(
   args: string[],
   cwd: string,
   onEvent: (e: LowEvent) => void,
-  opts: { extraEnv?: Record<string, string>; timeoutMs?: number; stdin?: string } = {},
-): { child: ChildProcess; done: Promise<{ result?: ClaudeResult; stderr: string }> } {
+  opts: { extraEnv?: Record<string, string>; timeoutMs?: number; stdin?: string; keepStdinOpen?: boolean } = {},
+): {
+  child: ChildProcess;
+  done: Promise<{ result?: ClaudeResult; stderr: string }>;
+  writeInput: (line: string) => void;
+  closeInput: () => void;
+} {
   // CLAUDE_BIN override: npx/npm prepend every ancestor node_modules/.bin to
   // PATH, which can shadow the real CLI with a stale local install.
   const timeoutMs = opts.timeoutMs ?? RUN_TIMEOUT_MS;
@@ -371,14 +409,28 @@ function spawnClaude(
     // Classic: stdin = ignore → the CLI sees EOF immediately (prompt goes via -p),
     // dropping both the "no stdin data in 3s" warning and that 3s startup wait.
     // Streaming-input: pipe stdin so we can write the turn as a stream-json line.
-    stdio: [opts.stdin != null ? "pipe" : "ignore", "pipe", "pipe"],
+    stdio: [opts.stdin != null || opts.keepStdinOpen ? "pipe" : "ignore", "pipe", "pipe"],
   });
   activeChildren.add(child);
+  const writeInput = (line: string) => {
+    try {
+      child.stdin?.write(line);
+    } catch {
+      /* stdin closed / child gone */
+    }
+  };
+  const closeInput = () => {
+    try {
+      child.stdin?.end();
+    } catch {
+      /* already closed */
+    }
+  };
   if (opts.stdin != null) {
-    // Milestone 1: write the one turn, then EOF — the CLI processes it and exits,
-    // exactly like -p. (Later milestones keep this open for follow-up messages.)
-    child.stdin?.write(opts.stdin);
-    child.stdin?.end();
+    // Deliver the initial turn. Single-message mode (M1) then EOFs so the CLI
+    // exits like -p; keepStdinOpen (M2 session) leaves stdin open for follow-ups.
+    writeInput(opts.stdin);
+    if (!opts.keepStdinOpen) closeInput();
   }
   const rl = createInterface({ input: child.stdout! });
   const done = new Promise<{ result?: ClaudeResult; stderr: string }>((resolve) => {
@@ -414,7 +466,7 @@ function spawnClaude(
       resolve({ result, stderr: `${stderr} ${String((e as Error)?.message ?? e)}`.trim() });
     });
   });
-  return { child, done };
+  return { child, done, writeInput, closeInput };
 }
 
 // A tiny push→pull bridge: spawnClaude pushes frames from an event handler; the
