@@ -53,7 +53,10 @@ function envInt(name: string, fallback: number): number {
   const n = Number(process.env[name]);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
-const RUN_TIMEOUT_MS = envInt("CLAUDE_RUN_TIMEOUT_MS", 900_000);
+// 0 = no timeout. Agent Keyboard runs are meant to be long (big multi-file
+// changes, browser verification, image gen), so a run is unbounded by default.
+// Set CLAUDE_RUN_TIMEOUT_MS to a positive value to re-arm a hard ceiling.
+const RUN_TIMEOUT_MS = envInt("CLAUDE_RUN_TIMEOUT_MS", 0);
 const COMPACT_TIMEOUT_MS = envInt("CLAUDE_COMPACT_TIMEOUT_MS", 300_000);
 const ASSISTANT_THROTTLE_MS = 180;
 const MAX_ATTEMPTS = 3;
@@ -365,10 +368,15 @@ function spawnClaude(
     let result: ClaudeResult | undefined;
     let stderr = "";
     let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill("SIGKILL");
-    }, timeoutMs);
+    // Only arm a kill-timer when a positive ceiling is set (the compact turn
+    // passes one; the main run defaults to 0 = unbounded).
+    const timer =
+      timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true;
+            child.kill("SIGKILL");
+          }, timeoutMs)
+        : null;
     child.stderr?.on("data", (d) => {
       stderr += d.toString();
     });
@@ -378,13 +386,13 @@ function spawnClaude(
       for (const e of events) onEvent(e);
     });
     child.on("close", () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       activeChildren.delete(child);
       if (timedOut && !stderr) stderr = `agent run timed out after ${timeoutMs}ms`;
       resolve({ result, stderr });
     });
     child.on("error", (e) => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       activeChildren.delete(child);
       resolve({ result, stderr: `${stderr} ${String((e as Error)?.message ?? e)}`.trim() });
     });

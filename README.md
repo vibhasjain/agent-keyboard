@@ -131,7 +131,7 @@ listing any missing *required* var.
 | `EXTRA_ORIGINS` | Comma-separated extra CORS origins (deploy previews, staging). |
 | `CLAUDE_MODEL` | Default model for the CLI. Default `opus`. Per-site overrides via [harness controls](#talking-to-the-harness). |
 | `CONTEXT_WINDOW_TOKENS` | Window size for the approximate context gauge. Default `200000`. |
-| `CLAUDE_RUN_TIMEOUT_MS` | Per-run timeout. Default `900000`. |
+| `CLAUDE_RUN_TIMEOUT_MS` | Per-run timeout in ms. Default `0` (no timeout — runs are unbounded). Set a positive value to re-arm a ceiling. |
 | `CLAUDE_COMPACT_TIMEOUT_MS` | Timeout for an on-demand compact turn. Default `300000`. |
 | `CLAUDE_BIN` | Path to the `claude` binary. Default `claude`. |
 | `AGENT_DATA_DIR` | Checkout + session root. Default `/data`. |
