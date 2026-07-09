@@ -35,6 +35,14 @@ let doneTimer: ReturnType<typeof setTimeout> | null = null
 let generation = 0
 let restartInFlight = false
 
+// Streaming session (M2/M3): when the active job is a long-lived session, a
+// `result` frame is a TURN boundary (not the end), and follow-ups are injected
+// into it via the append endpoint instead of queuing a fresh job. A `closed`
+// frame ends the session. pendingUserTexts pairs each turn's reply with the user
+// text that produced it (FIFO): head = the turn being processed now.
+let sessionStreaming = false
+let pendingUserTexts: string[] = []
+
 // Turns completed during this page load (rendered under any server-fetched history).
 // `thumbs` = the user's attached photos; `files` = non-image attachments;
 // `images` = images the agent chose to show.
@@ -118,7 +126,14 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
 
 export function getActivePrompt(): string | null {
   const p = getState().job.phase
-  return p === 'sending' || p === 'streaming' ? prompt : null
+  if (p !== 'sending' && p !== 'streaming') return null
+  return (sessionStreaming ? (pendingUserTexts[0] ?? prompt) : prompt) || null
+}
+
+/** Follow-ups injected into the live session that haven't started their turn yet
+ *  (rendered dim, like the client-side queue). */
+export function getPendingFollowups(): readonly string[] {
+  return sessionStreaming ? pendingUserTexts.slice(1) : []
 }
 
 export function isBusy(): boolean {
@@ -329,6 +344,7 @@ function onFrame(name: string, data: Record<string, unknown>): void {
   if (name === 'job') {
     if (typeof data.job_id === 'string') {
       jobId = data.job_id
+      sessionStreaming = data.streaming === true
       if (!startedAt) startedAt = Date.now()
       persist() // fire-and-forget guarantee: persist BEFORE we show streaming
       outboxRemove(activeIdemKey) // the durable active-job key owns recovery now
@@ -354,8 +370,18 @@ function onFrame(name: string, data: Record<string, unknown>): void {
       break
     }
     case 'result':
+      // A streaming session's `result` is a TURN boundary (session stays open);
+      // a classic result ends the job.
+      if (data.open === true) {
+        onTurnComplete(data)
+      } else {
+        terminal = true
+        finishDone(data)
+      }
+      break
+    case 'closed':
       terminal = true
-      finishDone(data)
+      finishSession()
       break
     case 'error':
       terminal = true
@@ -384,6 +410,45 @@ function imageUrls(data: Record<string, unknown>): string[] | undefined {
     .filter((n) => /^[a-f0-9-]{36}\.(png|jpe?g|gif|webp)$/i.test(n))
     .map((n) => `${CONFIG.api}/sites/${encodeURIComponent(CONFIG.site)}/assets/${n}`)
   return urls.length ? urls : undefined
+}
+
+// A streaming turn finished: move the completed [user, assistant] pair to the
+// static transcript and reset the live block for the next turn. The job stays
+// streaming/open.
+function onTurnComplete(data: Record<string, unknown>): void {
+  sessionStreaming = true
+  const reply = String(data.reply ?? '') || currentFullText()
+  const userText = pendingUserTexts.shift() ?? prompt
+  if (userText || activeThumbs?.length || activeFiles?.length) {
+    liveTurns.push({ role: 'user', text: userText, thumbs: activeThumbs, files: activeFiles })
+  }
+  liveTurns.push({ role: 'assistant', text: reply, images: imageUrls(data) })
+  activeThumbs = undefined // attachments belong to the opening turn only
+  activeFiles = undefined
+  prompt = pendingUserTexts[0] ?? ''
+  setStreaming({
+    fullText: '',
+    line: pendingUserTexts.length ? 'Working…' : 'Ready for your next message',
+    lineState: 'dim',
+  })
+}
+
+// The streaming session closed (idle / lifetime cap / stop). Turns already landed
+// per-turn, so just finalize — no extra bubble.
+function finishSession(): void {
+  const finishedId = jobId ?? `sess-${Date.now()}`
+  markHandled(jobId ?? '')
+  clearPersist()
+  clearActivityFlag()
+  outboxRemove(activeIdemKey)
+  reset()
+  setJob({ phase: 'done', jobId: finishedId, summary: 'Session closed', ok: true })
+  if (doneTimer != null) clearTimeout(doneTimer)
+  doneTimer = setTimeout(() => {
+    const j = getState().job
+    if (j.phase === 'done' && j.jobId === finishedId) setJob({ phase: 'idle' })
+  }, DONE_LINGER_MS)
+  dispatchQueue()
 }
 
 function finishDone(data: Record<string, unknown>): void {
@@ -451,6 +516,8 @@ function reset(): void {
   jobId = null
   startedAt = 0
   attempt = 0
+  sessionStreaming = false
+  pendingUserTexts = []
   clearTimers()
 }
 
@@ -476,6 +543,8 @@ export function clearAfterRestart(): void {
   writeOutbox([])
   queue.length = 0
   liveTurns.length = 0
+  sessionStreaming = false
+  pendingUserTexts = []
   prompt = ''
   activeIdemKey = ''
   lastPage = ''
@@ -593,6 +662,24 @@ export function start(input: {
   idemKey?: string
 }): void {
   if (isBusy()) {
+    // Live streaming session → inject the follow-up into the running job rather
+    // than queuing a fresh one. Text-only (the append endpoint takes no files).
+    if (sessionStreaming && jobId && input.text.trim() && !input.attachmentIds?.length) {
+      const t = input.text
+      pendingUserTexts.push(t)
+      const js = getState().job
+      if (js.phase === 'streaming' || js.phase === 'sending') setJob({ ...js }) // render it dim now
+      api.appendMessage(CONFIG.site, jobId, t).catch(() => {
+        // Append failed → fall back to the client-side queue.
+        const i = pendingUserTexts.lastIndexOf(t)
+        if (i >= 0) pendingUserTexts.splice(i, 1)
+        const fq: QueuedInput = { ...input, idemKey: input.idemKey || uuid() }
+        queue.push(fq)
+        outboxUpsert({ idemKey: fq.idemKey!, text: fq.text, page: fq.page, attachmentIds: fq.attachmentIds, ts: Date.now() })
+        setJob({ ...getState().job })
+      })
+      return
+    }
     // One active job per site — later sends queue and auto-dispatch on finish.
     const queued: QueuedInput = { ...input, idemKey: input.idemKey || uuid() }
     queue.push(queued)
@@ -622,6 +709,7 @@ export function start(input: {
   lastAttachmentIds = input.attachmentIds ?? []
   terminal = false
   attempt = 0
+  pendingUserTexts = [input.text] // first turn; shifted off when its result lands (streaming only)
   setJob({ phase: 'sending', startedAt })
 
   // Persist the in-flight send BEFORE the POST: a reload in the POST→job-frame

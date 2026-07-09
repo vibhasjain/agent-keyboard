@@ -100,6 +100,9 @@ function snapshot(job: Job): JobSnapshot {
 }
 
 function terminalFrame(job: Job): Frame {
+  // A streaming session that ended emits `closed` (its turns already streamed as
+  // per-turn `result` frames); a classic job emits its single terminal result.
+  if (job.streaming && job.status === "done") return ["closed", {}];
   if (job.status === "done") return ["result", job.result ?? {}];
   return ["error", job.error ?? { kind: "job_failed", detail: "The job failed." }];
 }
@@ -250,7 +253,7 @@ export async function startJob(opts: {
  * terminal publish can slip past a live tail.
  */
 export async function* tail(job: Job): AsyncGenerator<Frame> {
-  yield ["job", { job_id: job.jobId, target: job.siteId, status: job.status }];
+  yield ["job", { job_id: job.jobId, target: job.siteId, status: job.status, streaming: job.streaming }];
   if (TERMINAL.has(job.status)) {
     if (Object.keys(job.statusLine).length) yield ["status", job.statusLine];
     if (job.lastAssistant) yield ["assistant", job.lastAssistant];

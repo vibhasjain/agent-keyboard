@@ -6,7 +6,7 @@ import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
-import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getQueued, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
+import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe, type TodoItem } from './state'
 
@@ -504,15 +504,21 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       liveAsst?.remove()
       liveUser = liveAsst = liveTimer = liveBody = liveTodos = null
     }
-    // queued sends render dim after the live block, and always last
+    // queued sends + pending session follow-ups render dim after the live block
     const q = getQueued()
+    const followups = getPendingFollowups()
     clearNode(queuedBox)
+    for (const text of followups) {
+      const line = msgEl('user', text)
+      line.classList.add('queued')
+      queuedBox.appendChild(line)
+    }
     for (const m of q) {
       const line = msgEl('user', m.text, { thumbs: m.thumbs, files: m.files })
       line.classList.add('queued')
       queuedBox.appendChild(line)
     }
-    if (q.length) listEl.appendChild(queuedBox) // appendChild also moves it to the end
+    if (q.length || followups.length) listEl.appendChild(queuedBox) // appendChild moves it to the end
     else queuedBox.remove()
   }
 
