@@ -169,6 +169,7 @@ export async function resumeAfterRedeploy(): Promise<void> {
         sessionId: marker.sessionId ?? null,
         resumeCount: (marker.resumeCount ?? 0) + 1,
       });
+      console.log(`[resume] auto-resumed ${s.id} after redeploy (chain ${(marker.resumeCount ?? 0) + 1})`);
     } catch (e) {
       console.error("[boot] auto-resume launch failed", e);
     }
