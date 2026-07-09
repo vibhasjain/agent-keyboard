@@ -43,6 +43,10 @@ interface Job {
   abort: () => void; // signals runMessageJob to kill its CLI child (used by cancelJob)
   streaming: boolean; // long-lived session: a `result` marks a turn boundary, not the end
   input: InputChannel | null; // follow-up injection channel (streaming sessions only)
+  conversationId: string | null; // for auto-resume after a self-triggered redeploy
+  sessionId: string | null; //     "
+  prompt: string; //               the user intent (short-form persisted for resume)
+  resumeCount: number; //          how many times this lineage has auto-resumed (loop cap)
 }
 
 // ─── a subscriber's frame queue (null = closed) ───────────────────────────
@@ -210,6 +214,9 @@ export async function startJob(opts: {
   idemKey?: string;
   streaming?: boolean;
   input?: InputChannel | null;
+  conversationId?: string | null;
+  sessionId?: string | null;
+  resumeCount?: number;
 }): Promise<Job> {
   const now = Date.now();
   const jobId = `job-${now}${randomBytes(2).toString("hex")}`;
@@ -230,6 +237,10 @@ export async function startJob(opts: {
     abort: opts.abort ?? (() => {}),
     streaming: opts.streaming ?? false,
     input: opts.input ?? null,
+    conversationId: opts.conversationId ?? null,
+    sessionId: opts.sessionId ?? null,
+    prompt: opts.prompt,
+    resumeCount: opts.resumeCount ?? 0,
   };
   registry.set(jobId, job);
   if (opts.idemKey) idem.set(opts.idemKey, { jobId, at: now });
@@ -331,6 +342,44 @@ export function listActive(siteId?: string): JobSnapshot[] {
   const out: JobSnapshot[] = [];
   for (const job of registry.values()) {
     if (!siteId || job.siteId === siteId) out.push(snapshot(job));
+  }
+  return out;
+}
+
+/**
+ * For every still-running job, the minimal shape the auto-resume marker needs so
+ * that after a self-triggered redeploy the turn can be picked up where it left
+ * off (see resume.ts). Live-registry only — nothing durable.
+ */
+export function runningResumeInputs(): {
+  jobId: string;
+  siteId: string;
+  conversationId: string | null;
+  sessionId: string | null;
+  streaming: boolean;
+  prompt: string;
+  resumeCount: number;
+}[] {
+  const out: {
+    jobId: string;
+    siteId: string;
+    conversationId: string | null;
+    sessionId: string | null;
+    streaming: boolean;
+    prompt: string;
+    resumeCount: number;
+  }[] = [];
+  for (const job of registry.values()) {
+    if (job.status !== "running") continue;
+    out.push({
+      jobId: job.jobId,
+      siteId: job.siteId,
+      conversationId: job.conversationId,
+      sessionId: job.sessionId,
+      streaming: job.streaming,
+      prompt: job.prompt,
+      resumeCount: job.resumeCount,
+    });
   }
   return out;
 }

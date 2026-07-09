@@ -15,7 +15,7 @@ import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
 import { requireOwner } from "./auth.js";
 import { getSite, listSitesPublic, SITES } from "./sites.js";
-import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation } from "./claude.js";
+import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
@@ -30,8 +30,10 @@ import {
   jobSnapshot,
   listActive,
   jobForIdem,
+  runningResumeInputs,
   type JobSnapshot,
 } from "./jobs.js";
+import { writePendingResume, resumeAfterRedeploy } from "./resume.js";
 import {
   getJob as dbGetJob,
   listJobs as dbListJobs,
@@ -336,6 +338,10 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const gen = input
     ? runStreamingSession(site, { text, page, attachmentPaths }, input, ac.signal)
     : runMessageJob(site, { text, page, attachmentPaths }, ac.signal);
+  // Record which Claude session this job drives, so an auto-resume after a
+  // self-triggered redeploy can pick the turn back up with --resume.
+  const conversationId = await conversationIdFor(site.id);
+  const sessionId = sessionIdFor(conversationId);
   const job = await startJob({
     siteId: site.id,
     prompt: text,
@@ -345,6 +351,9 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     idemKey: idemKey || undefined,
     streaming: !!input,
     input,
+    conversationId,
+    sessionId,
+    resumeCount: 0,
   });
   await streamJobTail(req, res, job);
 });
@@ -573,6 +582,7 @@ app.listen(port, () => {
     console.error("[boot] purge uploads failed", e),
   );
   void interruptRunningJobs().catch((e) => console.error("[boot] job sweep failed", e));
+  void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
 });
 
@@ -581,6 +591,11 @@ async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   console.log(`[shutdown] ${signal} — marking running jobs interrupted, killing children`);
+  try {
+    writePendingResume(runningResumeInputs());
+  } catch {
+    /* auto-resume is best-effort; never block shutdown */
+  }
   killAllChildren();
   await interruptRunningJobs().catch(() => {});
   process.exit(0);

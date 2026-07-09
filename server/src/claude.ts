@@ -108,7 +108,7 @@ export async function rotateConversation(siteId: string): Promise<string> {
   return next;
 }
 
-function markerPathFor(conversationId: string): string {
+export function markerPathFor(conversationId: string): string {
   const safe = conversationId.replace(/[^a-zA-Z0-9._-]/g, "_");
   return join(CONVERSATIONS_DIR, safe);
 }
