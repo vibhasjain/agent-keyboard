@@ -337,6 +337,7 @@ interface StreamPatch {
   fullText?: string
   todos?: TodoItem[]
   subagents?: Subagent[]
+  idle?: boolean
   disconnected?: boolean
 }
 
@@ -353,6 +354,9 @@ function setStreaming(patch: StreamPatch): void {
     fullText: patch.fullText ?? prev?.fullText ?? '',
     todos: patch.todos ?? prev?.todos,
     subagents: patch.subagents ?? prev?.subagents,
+    // Any streaming frame that isn't a turn-complete means work is happening, so
+    // idle defaults false — only onTurnComplete (nothing queued) sets it true.
+    idle: patch.idle ?? false,
     disconnected: patch.disconnected ?? false,
   })
 }
@@ -475,8 +479,11 @@ function onTurnComplete(data: Record<string, unknown>): void {
   prompt = pendingUserTexts[0] ?? ''
   setStreaming({
     fullText: '',
-    line: pendingUserTexts.length ? 'Working…' : 'Ready for your next message',
+    line: pendingUserTexts.length ? 'Working…' : '',
     lineState: 'dim',
+    // No queued follow-up → the session is just resting (open for injection). Mark
+    // it idle so the bar shows the plain composer, not a spinner+timer "working" pill.
+    idle: pendingUserTexts.length === 0,
   })
 }
 
@@ -760,7 +767,8 @@ export function start(input: {
       const t = input.text
       pendingUserTexts.push(t)
       const js = getState().job
-      if (js.phase === 'streaming' || js.phase === 'sending') setJob({ ...js }) // render it dim now
+      if (js.phase === 'streaming') setJob({ ...js, idle: false }) // resting → working immediately
+      else if (js.phase === 'sending') setJob({ ...js })
       api.appendMessage(CONFIG.site, jobId, t).catch(() => {
         // Append failed → fall back to the client-side queue.
         const i = pendingUserTexts.lastIndexOf(t)

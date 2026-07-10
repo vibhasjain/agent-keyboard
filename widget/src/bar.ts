@@ -36,7 +36,9 @@ function computeView(): View {
   // prompt, so the composer stays up (and the mic keeps recording) even while a
   // job runs. It falls back to the pill once dictation ends.
   if (ui.voice === 'live' || ui.voice === 'connecting') return 'composing'
-  if (job.phase === 'streaming' || job.phase === 'sending') return 'stream'
+  // An idle streaming session (open between turns, awaiting a follow-up) rests as
+  // the plain composer — no spinner/timer pill. Active work still shows the pill.
+  if ((job.phase === 'streaming' && !job.idle) || job.phase === 'sending') return 'stream'
   // composing/login win over the resting done/error row so tapping it to reply works
   if (ui.mode === 'login') return 'login'
   if (ui.mode === 'composing') return 'composing'

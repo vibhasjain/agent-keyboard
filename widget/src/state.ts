@@ -33,6 +33,7 @@ export type JobState =
       fullText: string
       todos?: TodoItem[]
       subagents?: Subagent[]
+      idle?: boolean // session open but between turns — render as resting, not "working"
       disconnected?: boolean
     }
   | { phase: 'done'; jobId: string; summary: string; ok: boolean; cleared?: boolean }

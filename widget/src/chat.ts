@@ -497,7 +497,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const updateLive = () => {
     const job = getState().job
-    if (job.phase === 'streaming' || job.phase === 'sending') {
+    // Idle streaming (between turns) renders as resting — drop the live working
+    // block; completed turns already live in the static transcript.
+    if ((job.phase === 'streaming' && !job.idle) || job.phase === 'sending') {
       const prompt = getActivePrompt()
       // The server persists the user turn as the job starts, so after a mid-turn
       // history fetch (a refresh / re-attach) the same prompt is already in
