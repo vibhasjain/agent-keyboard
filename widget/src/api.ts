@@ -118,6 +118,11 @@ export interface ConversationMessage {
   tools?: unknown
   attachments?: number
   photos?: number
+  // Client-only demo messages may carry visible attachment previews. The real
+  // conversation API does not need to return these fields.
+  thumbs?: string[]
+  files?: string[]
+  images?: string[]
   ts?: number | string
 }
 

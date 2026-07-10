@@ -1,0 +1,187 @@
+{
+  "intro": "You are inside the real Agent Keyboard on agentkeyboard.com.\n\nOn a connected app, a prompt here opens a real coding session against that app's repo. It can edit, test, commit, and push while you watch. **This tour is prewritten:** no AI, owner credentials, or repo changes are used.\n\nPick a prompt and watch the real interface respond.",
+  "startOptions": [
+    "Ship a UI change",
+    "Talk, photos + files",
+    "Steer the coding session",
+    "Ask how it works"
+  ],
+  "turns": {
+    "Ship a UI change": {
+      "prompt": "Make the hero headline bigger on phones, then verify it on mobile and desktop.",
+      "reply": "Done - increased the phone headline size, checked it at 390px and 1440px, committed as **Agent Keyboard**, and pushed `main`.\n\nYour existing host sees the push and redeploys. That is the loop: ask from the app, change its repo, see the result in the same place.",
+      "options": ["Show the live work", "Survive a restart", "Undo the change", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Syncing latest main", "state": "dim", "todo": 0 },
+        { "at": 720, "line": "Reading the current app", "state": "thinking", "todo": 0 },
+        { "at": 1350, "line": "Editing the responsive hero", "state": "tool", "todo": 1 },
+        { "at": 2050, "line": "Checking mobile and desktop", "state": "tool", "todo": 2 },
+        { "at": 2650, "line": "Committing and pushing main", "state": "tool", "todo": 3 }
+      ]
+    },
+    "Show the live work": {
+      "prompt": "Show me what you are doing while you work.",
+      "reply": "The collapsed bar keeps a live ticker and timer. Expanded mode shows the prompt immediately, streamed assistant text, tool activity, a task checklist, and running sub-agents. You can collapse it or close the tab; the server keeps going.",
+      "options": ["Survive a restart", "Talk, photos + files", "Steer the coding session", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Planning the work", "state": "thinking", "todo": 0 },
+        { "at": 850, "line": "Checking the responsive layout", "state": "tool", "todo": 1, "subagent": "Reviewing the mobile layout" },
+        { "at": 1750, "line": "Running browser checks", "state": "tool", "todo": 2 }
+      ]
+    },
+    "Survive a restart": {
+      "prompt": "Keep this running if I close the tab or the Fly server restarts.",
+      "reply": "That is the fire-and-forget part. The job lives on the server, its id is saved before the browser can leave, and the bar re-attaches when you return. A self-triggered deploy can resume the same session after the machine comes back.",
+      "options": ["Show the live work", "Restart clean", "Ship a UI change", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Working on the server", "state": "thinking" },
+        { "at": 900, "line": "Connection dropped", "state": "dim", "disconnected": true },
+        { "at": 1750, "line": "Re-attached to the same job", "state": "tool" },
+        { "at": 2450, "line": "Continuing where it left off", "state": "thinking" }
+      ]
+    },
+    "Undo the change": {
+      "prompt": "Roll back the last Agent Keyboard commit.",
+      "reply": "Done - found the last Agent Keyboard commit, reverted it cleanly, and pushed the revert. Because every automated commit is attributed, the change is easy to identify in normal Git history.",
+      "options": ["Ship a UI change", "Is it safe?", "Restart clean", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Finding the last Agent Keyboard commit", "state": "thinking", "todo": 0 },
+        { "at": 950, "line": "Reverting the change", "state": "tool", "todo": 1 },
+        { "at": 1750, "line": "Verifying and pushing the revert", "state": "tool", "todo": 2 }
+      ]
+    },
+    "Talk, photos + files": {
+      "prompt": "Match the mobile spacing to this screenshot, use notes.pdf for the copy, and send - over and out.",
+      "reply": "Voice is transcribed live with `gpt-4o-transcribe`. Saying **over and out** removes the stop phrase, ends dictation, and sends. Photos, pasted images, and arbitrary files travel inline with the prompt; the agent can also return images in the transcript.",
+      "options": ["Try over and out", "Send while recording", "Show an inline image", "Back to the start"],
+      "attachments": 2,
+      "thumbs": ["/sculpting-david.webp"],
+      "files": ["notes.pdf"],
+      "images": ["/shots/poster-photo.png"],
+      "stages": [
+        { "at": 180, "line": "Transcribing voice", "state": "dim" },
+        { "at": 720, "line": "Reading the screenshot and notes.pdf", "state": "thinking" },
+        { "at": 1450, "line": "Updating the mobile layout", "state": "tool" },
+        { "at": 2200, "line": "Verifying the result", "state": "tool" }
+      ]
+    },
+    "Try over and out": {
+      "prompt": "Make the cards easier to scan on mobile... over and out.",
+      "reply": "The stop phrase is stripped before sending, so the agent receives: `Make the cards easier to scan on mobile.` No extra tap on the mic or send button.",
+      "options": ["Send while recording", "Show an inline image", "Ship a UI change", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Listening", "state": "dim" },
+        { "at": 850, "line": "Over and out heard - sending", "state": "tool" },
+        { "at": 1500, "line": "Reading the mobile cards", "state": "thinking" }
+      ]
+    },
+    "Send while recording": {
+      "prompt": "I pressed Enter before stopping the recording.",
+      "reply": "That works too. Enter flushes whatever has been transcribed so far, stops the recording behind the scenes, and sends it. Escape only stops dictation and leaves the prompt intact.",
+      "options": ["Try over and out", "Talk, photos + files", "Show an inline image", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Flushing the live transcript", "state": "dim" },
+        { "at": 950, "line": "Prompt sent", "state": "tool" }
+      ]
+    },
+    "Show an inline image": {
+      "prompt": "Show me the reference image you used.",
+      "reply": "Images can appear in either direction. Tap a thumbnail to inspect it full-screen; the same transcript also keeps file markers and the prompt that went with them.",
+      "options": ["Talk, photos + files", "Show the live work", "Ship a UI change", "Back to the start"],
+      "images": ["/shots/poster-expand.png"],
+      "stages": [
+        { "at": 180, "line": "Finding the referenced image", "state": "thinking" },
+        { "at": 950, "line": "Adding it to the transcript", "state": "tool" }
+      ]
+    },
+    "Steer the coding session": {
+      "prompt": "Switch to Sonnet, use high effort, enter plan mode, and set a goal for the pricing launch.",
+      "reply": "Session controls updated.\n\n- Model: **Sonnet**\n- Effort: **high**\n- Permission mode: **plan**\n- Goal: **launch the pricing page**\n\nThese are plain-English controls persisted per site, so there is no separate dashboard to babysit.",
+      "options": ["Compact the context", "Restart clean", "Install a skill", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Reading the current session settings", "state": "thinking" },
+        { "at": 850, "line": "Changing model and effort", "state": "tool" },
+        { "at": 1450, "line": "Entering plan mode", "state": "tool" },
+        { "at": 2050, "line": "Saving the goal", "state": "tool" }
+      ]
+    },
+    "Compact the context": {
+      "prompt": "Compact the session so we have more context room.",
+      "reply": "Compacted. The durable coding session keeps a concise summary of earlier work and frees room for the next turn. The transcript marks the compaction point instead of pretending the old context never existed.",
+      "options": ["Restart clean", "Install a skill", "Steer the coding session", "Back to the start"],
+      "divider": "session compacted",
+      "stages": [
+        { "at": 180, "line": "Summarizing the durable session", "state": "thinking" },
+        { "at": 1200, "line": "Writing the compacted context", "state": "tool" }
+      ]
+    },
+    "Restart clean": {
+      "prompt": "Restart from a clean slate.",
+      "reply": "Restart stops active work, clears the coding context, discards uncommitted checkout changes, fetches origin, hard-resets to the latest configured branch, and removes untracked files. It only reports success when that real server action finishes.",
+      "options": ["Compact the context", "Survive a restart", "Ship a UI change", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Stopping active work", "state": "dim" },
+        { "at": 850, "line": "Fetching origin/main", "state": "tool" },
+        { "at": 1450, "line": "Resetting the checkout", "state": "tool" },
+        { "at": 2100, "line": "Starting a fresh session", "state": "thinking" }
+      ]
+    },
+    "Install a skill": {
+      "prompt": "Install image generation and use it to make a new hero asset.",
+      "reply": "The server ships with useful skills already, and the agent can install more into its durable volume. A skill can add a specialized workflow such as image generation or browser verification, then use it in the same coding turn.",
+      "options": ["Steer the coding session", "Show an inline image", "Compact the context", "Back to the start"],
+      "images": ["/sculpting-david.webp"],
+      "stages": [
+        { "at": 180, "line": "Checking installed skills", "state": "thinking" },
+        { "at": 950, "line": "Installing image generation", "state": "tool" },
+        { "at": 1700, "line": "Creating the hero asset", "state": "tool" }
+      ]
+    },
+    "Ask how it works": {
+      "prompt": "What actually happens after I press send?",
+      "reply": "The widget sends your prompt to your small self-hosted server. That server syncs an allow-listed repo, resumes a durable Claude Code session in a fixed checkout, edits and verifies the app, commits as **Agent Keyboard**, and pushes. Your existing host deploys the push.",
+      "options": ["What can it edit?", "Is it safe?", "What does it cost?", "How do I install it?"],
+      "stages": [
+        { "at": 180, "line": "Prompt reaches your Fly server", "state": "dim" },
+        { "at": 750, "line": "Claude Code edits the allow-listed repo", "state": "thinking" },
+        { "at": 1500, "line": "Git commit and push", "state": "tool" },
+        { "at": 2200, "line": "Your existing host deploys", "state": "tool" }
+      ]
+    },
+    "What can it edit?": {
+      "prompt": "Is this only for static sites?",
+      "reply": "No. It edits the **codebase behind the app it sits on**. Static pages are an easy example, but the agent can work across frontend, backend, tests, configuration, and normal app architecture - whatever exists in the connected repo and can be shipped through Git.",
+      "options": ["Is it safe?", "How do I install it?", "Ship a UI change", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Reading the connected codebase", "state": "thinking" },
+        { "at": 1050, "line": "Tracing the app architecture", "state": "tool" }
+      ]
+    },
+    "Is it safe?": {
+      "prompt": "What is the security boundary?",
+      "reply": "Only sites in the server allow-list can be opened. The recommended GitHub token is fine-grained, limited to selected repos, and has no workflow permission; commits are attributed to **Agent Keyboard**. Invited editors share that server's repo access and the per-site coding session, so only invite trusted collaborators.",
+      "options": ["What can it edit?", "What does it cost?", "How do I install it?", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Checking the allow-list boundary", "state": "thinking" },
+        { "at": 1050, "line": "Reviewing Git token scope", "state": "tool" }
+      ]
+    },
+    "What does it cost?": {
+      "prompt": "What does this cost to run?",
+      "reply": "Mostly services you may already have: a Claude Code subscription does the editing, Supabase can handle auth on its free tier, and a small Fly machine hosts the durable server. An OpenAI key is optional and only used for voice transcription.",
+      "options": ["How do I install it?", "Is it safe?", "What can it edit?", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Adding up the moving parts", "state": "thinking" }
+      ]
+    },
+    "How do I install it?": {
+      "prompt": "How do I put this on my own apps?",
+      "reply": "Fork the MIT repo, configure your Supabase project, Fly app, Claude token, fine-grained GitHub token, and `SITES` allow-list, then add one script tag to each app. The self-hosting guide is written for a working setup in under an hour.",
+      "options": ["What can it edit?", "Is it safe?", "What does it cost?", "Back to the start"],
+      "stages": [
+        { "at": 180, "line": "Opening the self-hosting path", "state": "thinking" },
+        { "at": 950, "line": "Connecting the first allow-listed repo", "state": "tool" }
+      ]
+    }
+  }
+}

@@ -36,6 +36,10 @@ The widget reads its own `<script>` tag and needs no config from the embedder:
   `data-hide-paths="/admin/,/checkout"` to skip those (a trailing `/` means the whole subtree, `*`
   matches within a path segment, `**` across segments), or `data-only-paths="/blog/**"` to restrict
   it to just those. Handy when the embed lives in a shared template.
+- **`data-guest-demo`** (optional) — turns the signed-out bar into a scripted, client-only onboarding
+  tour loaded from `/agent-keyboard-demo.json` on the host site (or from the URL supplied as the
+  attribute value). It never starts an agent job or uses owner credentials. Omit it for the normal
+  sign-in gate; customer and fork embeds do not inherit AgentKeyboard.com's tour by default.
 - **Supabase URL + anon key** — *not* set by the embedder. The bundle ships with the placeholders
   `__AK_SUPABASE_URL__` / `__AK_SUPABASE_ANON_KEY__`, which the server replaces from its
   `SUPABASE_URL` / `SUPABASE_ANON_KEY` env at serve time. If they're still placeholders (server didn't

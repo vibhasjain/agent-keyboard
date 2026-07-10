@@ -6,6 +6,7 @@ import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
+import { chooseGuestDemo, getGuestDemoMessages, getGuestDemoRevision, isGuestDemo, resetGuestDemo, subscribeGuestDemo } from './guest-demo'
 import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, getSendEpoch, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
 import { renderMarkdown } from './markdown'
 import { getState, patchUi, subscribe, type Subagent, type TodoItem } from './state'
@@ -152,8 +153,8 @@ function msgEl(
     const body = el('div')
     if (extras?.thumbs?.length) body.appendChild(thumbRow(extras.thumbs))
     if (extras?.files?.length) body.appendChild(attachmentMarker(extras.files.length, 'file'))
-    if (extras?.attachments) body.appendChild(attachmentMarker(extras.attachments))
-    else if (extras?.photos) body.appendChild(photoMarker(extras.photos))
+    if (extras?.attachments && !extras?.thumbs?.length && !extras?.files?.length) body.appendChild(attachmentMarker(extras.attachments))
+    else if (extras?.photos && !extras?.thumbs?.length) body.appendChild(photoMarker(extras.photos))
     body.appendChild(el('div', undefined, (n) => (n.textContent = text)))
     return lineEl('user', '>', body)
   }
@@ -248,7 +249,13 @@ function nodeForMessage(m: ConversationMessage): HTMLElement {
     if (m.text) wrap.appendChild(msgEl('assistant', m.text))
     return wrap
   }
-  return msgEl(m.role, m.text, { attachments: m.attachments, photos: m.photos })
+  return msgEl(m.role, m.text, {
+    attachments: m.attachments,
+    photos: m.photos,
+    thumbs: m.thumbs,
+    files: m.files,
+    images: m.images,
+  })
 }
 
 export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
@@ -285,7 +292,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const compactItem = menuItem('compact', 'Compact', 'Summarize the session to free up context.')
   const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
-  menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem)
+  const demoResetItem = menuItem('restart', 'Start tour over')
+  const loginItem = menuItem('login', 'Owner log in')
+  menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem, loginItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -320,9 +329,13 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     show(menu, open)
     settings.classList.toggle('on', open)
     if (open) {
+      const guest = isGuestDemo()
       const email = getSessionEmail() // refresh on open so it's current
-      identity.textContent = email ?? ''
-      show(identity, !!email)
+      identity.textContent = guest ? 'Scripted tour · no AI used' : email ?? ''
+      show(identity, guest || !!email)
+      for (const item of [stopItem, restartItem, compactItem, refreshItem, logoutItem]) show(item, !guest)
+      show(demoResetItem, guest)
+      show(loginItem, guest)
       refreshBusyMenu()
     }
   }
@@ -418,6 +431,17 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     setTimeout(() => patchUi({ signingOut: 'Logged out' }), 750)
     setTimeout(() => location.reload(), 1200) // reload to a fresh, guaranteed logged-out state
   })
+  on(demoResetItem, 'click', () => {
+    if (!isGuestDemo()) return
+    resetGuestDemo()
+    setMenu(false)
+    setTimeout(() => toBottom(), 0)
+  })
+  on(loginItem, 'click', () => {
+    if (!isGuestDemo()) return
+    setMenu(false)
+    patchUi({ mode: 'login' })
+  })
 
   // No zoom inside the chat, ever: touch-action CSS covers modern engines;
   // iOS Safari's proprietary gesture events need explicit preventDefault.
@@ -468,6 +492,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // turn completed since, so the tail is refetched and absorbed into canonical,
   // correctly-ordered history (idle re-opens stay fetch-free).
   let lastLoadTurnCount = -1
+  let seenGuestRevision = -1
 
   // live bubble nodes (kept alive between tokens so scrolling stays smooth)
   let liveUser: HTMLElement | null = null
@@ -479,7 +504,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const queuedBox = el('div')
 
   const staticKey = () =>
-    `${history.length}|${history[0]?.id ?? ''}|${history[history.length - 1]?.id ?? ''}|${getLiveTurns().length}`
+    `${history.length}|${history[0]?.id ?? ''}|${history[history.length - 1]?.id ?? ''}|${getLiveTurns().length}|${seenGuestRevision}`
 
   const rebuildStatic = () => {
     clearNode(listEl)
@@ -500,25 +525,26 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     // Idle streaming (between turns) renders as resting — drop the live working
     // block; completed turns already live in the static transcript.
     if ((job.phase === 'streaming' && !job.idle) || job.phase === 'sending') {
-      const prompt = getActivePrompt()
+      const guest = isGuestDemo()
+      const prompt = guest ? null : getActivePrompt()
       // The server persists the user turn as the job starts, so after a mid-turn
       // history fetch (a refresh / re-attach) the same prompt is already in
       // `history`. Don't also render the live bubble, or the prompt shows twice.
       const norm = (s: unknown) => String(s ?? '').replace(/\s+/g, ' ').trim()
       const lastUser = [...history].reverse().find((m) => m.role === 'user')
-      const activeFiles = getActiveFiles()
-      const activeThumbs = getActiveThumbs()
+      const activeFiles = guest ? undefined : getActiveFiles()
+      const activeThumbs = guest ? undefined : getActiveThumbs()
       const activeAttachmentOnly = !prompt && (!!activeThumbs?.length || !!activeFiles?.length)
       const dupOfHistory =
         !!lastUser &&
         ((!!prompt && norm(lastUser.text) === norm(prompt)) ||
           (activeAttachmentOnly && !norm(lastUser.text) && (lastUser.attachments ?? lastUser.photos ?? 0) > 0))
-      if (!liveUser && !dupOfHistory) {
+      if (!guest && !liveUser && !dupOfHistory) {
         // Prompt and attachment previews are fixed for the lifetime of a job — build once.
         liveUser = msgEl('user', prompt || '', { thumbs: activeThumbs, files: activeFiles })
         listEl.appendChild(liveUser)
       }
-      if (liveUser) show(liveUser, (!!prompt || activeAttachmentOnly) && !dupOfHistory)
+      if (liveUser) show(liveUser, !guest && (!!prompt || activeAttachmentOnly) && !dupOfHistory)
       if (!liveAsst) {
         // Claude Code's working line: "✻ Doing the thing… (0:24)"
         liveAsst = el('div')
@@ -585,6 +611,17 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   }
 
   const loadHistory = async () => {
+    if (isGuestDemo()) {
+      history = [...getGuestDemoMessages()]
+      cursor = null
+      loaded = true
+      loading = false
+      seenGuestRevision = getGuestDemoRevision()
+      renderedKey = ''
+      render()
+      toBottom()
+      return
+    }
     loading = true
     // Cross-device: attach to a job another device started. First open only —
     // tail refreshes after local turns don't need a jobs probe.
@@ -607,7 +644,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   }
 
   const loadOlder = async () => {
-    if (!cursor || loadingOlder || !loaded) return
+    if (isGuestDemo() || !cursor || loadingOlder || !loaded) return
     loadingOlder = true
     const prevH = scroll.scrollHeight
     try {
@@ -640,7 +677,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const btn = (e.target as HTMLElement)?.closest?.('.ak-opt') as HTMLElement | null
     if (!btn) return
     const text = (btn.dataset.send || btn.textContent || '').trim()
-    if (text) start({ text, page: location.pathname })
+    if (!text) return
+    if (isGuestDemo()) chooseGuestDemo(text)
+    else start({ text, page: location.pathname })
   })
 
   // Re-opening the chat always lands at the bottom (latest messages), even if
@@ -650,6 +689,14 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   let seenClearEpoch = getClearEpoch()
   let seenSendEpoch = getSendEpoch()
   const render = () => {
+    if (isGuestDemo() && getGuestDemoRevision() !== seenGuestRevision) {
+      history = [...getGuestDemoMessages()]
+      cursor = null
+      loaded = true
+      loading = false
+      seenGuestRevision = getGuestDemoRevision()
+      renderedKey = ''
+    }
     // A "clear context" wiped the session — drop cached history and refetch the
     // now-empty conversation (liveTurns were already cleared in the store).
     if (getClearEpoch() !== seenClearEpoch) {
@@ -662,7 +709,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     // Never leave a signed-out visitor staring at the expanded transcript with no
     // way to log in — every path that opens it (or an auth drop mid-session)
     // lands here, so redirecting once, before computing `expanded`, is enough.
-    if (getState().ui.mode === 'expanded' && getState().auth !== 'authed') {
+    if (getState().ui.mode === 'expanded' && getState().auth !== 'authed' && !isGuestDemo()) {
       patchUi({ mode: 'login' })
       return
     }
@@ -718,6 +765,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   }
 
   subscribe(render)
+  subscribeGuestDemo(render)
   render()
 
   // The working-line timer must tick even when no tokens arrive, so drive it off

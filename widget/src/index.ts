@@ -7,6 +7,7 @@ import { consumeInviteToken, getPendingInvite, initAuth } from './auth'
 import { mountBar } from './bar'
 import { initConfig, shouldMountHere } from './config'
 import { injectFonts } from './fonts'
+import { isGuestDemo, loadGuestDemo } from './guest-demo'
 import { bootRehydrate } from './jobstore'
 import { patchUi } from './state'
 import { STYLES } from './styles'
@@ -55,9 +56,11 @@ function mount(): void {
 
   initViewport(host)
   initAuth() // synchronous: sets auth slice from localStorage, no network
+  if (isGuestDemo()) void loadGuestDemo()
   mountBar(shadow)
   // If we arrived from an invite/recovery link, open the bar to set a password.
   if (getPendingInvite()) patchUi({ mode: 'setpw' })
+  else if (isGuestDemo()) patchUi({ mode: 'collapsed' })
   bootRehydrate() // re-attach only if active-job key + stored session exist
 }
 

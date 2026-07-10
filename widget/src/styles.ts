@@ -208,6 +208,31 @@ button::-moz-focus-inner{ border:0; }
 .ak-send:hover{ background:rgba(255,184,107,.1); }
 .ak-send:disabled{ background:transparent; color:var(--ak-ink3); }
 
+/* Signed-out AgentKeyboard.com tour: the bar becomes one clear invitation.
+   It is only reachable when the embed opts into data-guest-demo. */
+.ak-composer.guest-demo{
+  min-height:48px; padding:3px 7px;
+}
+.ak-composer.guest-expanded{ display:none; }
+.ak-guest-cta{
+  width:100%; min-height:40px; padding:2px 5px; border:0; border-radius:6px;
+  background:transparent; color:var(--ak-ink); cursor:pointer;
+  display:flex; align-items:center; gap:10px; text-align:left;
+}
+.ak-guest-cta:hover{ background:rgba(255,184,107,.07); }
+.ak-guest-cta:active{ background:rgba(255,184,107,.11); }
+.ak-guest-cta:focus-visible, .ak-opt:focus-visible, .ak-menu-item:focus-visible{
+  outline:1px solid rgba(255,184,107,.72); outline-offset:2px;
+}
+.ak-guest-star{
+  flex:none; width:20px; text-align:center; color:var(--ak-amber); font-size:18px;
+  animation:ak-star 1.2s ease-in-out infinite;
+}
+.ak-guest-copy{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.ak-guest-copy strong{ font-size:13px; line-height:1.3; font-weight:500; color:var(--ak-warm); }
+.ak-guest-copy small{ font-size:10.5px; line-height:1.3; color:var(--ak-ink3); }
+.ak-guest-cta svg{ flex:none; color:var(--ak-amber); }
+
 /* mic states */
 .ak-mic.connecting{ color:var(--ak-amber); }
 .ak-mic.live{ color:var(--ak-amber); }
@@ -429,9 +454,15 @@ button::-moz-focus-inner{ border:0; }
 .ak-opt:hover{ color:var(--ak-amber); border-color:var(--ak-amber); background:rgba(255,184,107,.12); }
 .ak-opt:active{ transform:translateY(1px); }
 
+@media (pointer:coarse){
+  .ak-opt{ min-height:44px; padding:10px 12px; }
+  .ak-menu-item{ min-height:44px; }
+  .ak-guest-cta{ min-height:44px; }
+}
+
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
-  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph{ animation:none !important; }
+  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph, .ak-guest-star{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
   .ak-zone{ transition:none !important; }
 }

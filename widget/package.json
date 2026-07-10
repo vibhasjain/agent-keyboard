@@ -8,6 +8,7 @@
     "build": "node build.mjs",
     "dev": "node build.mjs --dev",
     "check": "tsc --noEmit",
+    "check:guest-demo": "node dev/check-guest-demo.mjs",
     "mock": "node dev/mock-server.mjs"
   },
   "devDependencies": {

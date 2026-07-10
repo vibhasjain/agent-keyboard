@@ -6,6 +6,7 @@ import { getPendingInvite, login, setPasswordWithToken } from './auth'
 import { lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
+import { isGuestDemo } from './guest-demo'
 import { makePhotos, type Photos } from './photos'
 import { getState, patchUi, subscribe, type UiMode } from './state'
 import * as stopPhrase from './stopphrase'
@@ -58,12 +59,28 @@ interface Composer {
   flashConfirm: (text: string) => void
   reset: () => void
   teardownVoice: () => void
+  setGuestDemo: (on: boolean, expanded: boolean) => void
 }
 
 function makeComposer(): Composer {
   const root = el('div', 'ak-composer')
   const photos: Photos = makePhotos(() => syncSend())
   const note = el('div', 'ak-note')
+
+  const guestCta = el('button', 'ak-guest-cta', (n) => {
+    n.type = 'button'
+    n.setAttribute('aria-label', 'Try the scripted Agent Keyboard demo')
+    n.append(
+      el('span', 'ak-guest-star', (s) => (s.textContent = '✻')),
+      el('span', 'ak-guest-copy', (copy) => {
+        copy.append(
+          el('strong', undefined, (s) => (s.textContent = 'Try me')),
+          el('small', undefined, (s) => (s.textContent = 'See Agent Keyboard work')),
+        )
+      }),
+      icon('arrow-right', 16),
+    )
+  })
 
   const row = el('div', 'ak-input-row')
   const cam = el('button', 'ak-icon-btn', (n) => {
@@ -95,8 +112,9 @@ function makeComposer(): Composer {
   })
   taWrap.append(ta)
   row.append(taWrap, cam, attach, mic, sendBtn)
-  root.append(photos.el, row, note)
+  root.append(photos.el, row, note, guestCta)
   show(note, false)
+  show(guestCta, false)
 
   // -- voice / dictation --
   let baseText = ''
@@ -266,6 +284,7 @@ function makeComposer(): Composer {
     blurButton(sendBtn)
     doSend()
   })
+  on(guestCta, 'click', () => patchUi({ mode: 'expanded' }))
   on(root, 'keydown', (e) => {
     const ke = e as KeyboardEvent
     if (ke.key !== 'Enter' || ke.shiftKey || ke.metaKey || ke.ctrlKey || ke.altKey || ke.isComposing) return
@@ -392,6 +411,14 @@ function makeComposer(): Composer {
     },
     reset,
     teardownVoice: () => voice.teardown(),
+    setGuestDemo: (on, expanded) => {
+      show(photos.el, !on)
+      show(row, !on)
+      if (on) show(note, false)
+      show(guestCta, on && !expanded)
+      root.classList.toggle('guest-demo', on)
+      root.classList.toggle('guest-expanded', on && expanded)
+    },
   }
 }
 
@@ -525,6 +552,7 @@ export function mountBar(shadow: ShadowRoot): void {
   // dismiss doesn't immediately bounce back into login.
   let lastLoginDismiss = 0
   on(composer.el, 'focusin', () => {
+    if (isGuestDemo()) return
     if (Date.now() - lastLoginDismiss < 600) return
     if (getState().auth !== 'authed' && getState().ui.mode !== 'login') {
       patchUi({ mode: 'login' })
@@ -791,6 +819,7 @@ export function mountBar(shadow: ShadowRoot): void {
   const canIdle = () => {
     const s = getState()
     return (
+      !isGuestDemo() &&
       s.ui.mode !== 'mini' &&
       s.job.phase !== 'streaming' &&
       s.job.phase !== 'sending' &&
@@ -879,6 +908,7 @@ export function mountBar(shadow: ShadowRoot): void {
 
     // composer state — typing is allowed while a job runs (sends queue up)
     show(composerExpand, view !== 'expanded')
+    composer.setGuestDemo(isGuestDemo(), view === 'expanded')
     placeComposer(view)
     // Tear the mic down only when actually leaving the composer surfaces (never on
     // the initial render, and never every frame — that recurses through onState).
