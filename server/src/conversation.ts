@@ -135,6 +135,13 @@ export async function readConversation(
     }
     const ts = o.timestamp ?? null;
     if (o.type === "user") {
+      // isMeta turns are injected, not typed: skill-launch docs ("Base directory
+      // for this skill: ...") and poller nudges ("Continue from where you left
+      // off."). Never genuine dialogue — skip the whole turn.
+      if (o.isMeta) {
+        idx++;
+        continue;
+      }
       const text = userText(o.message?.content);
       if (text) {
         const clean = cleanUserText(text);
