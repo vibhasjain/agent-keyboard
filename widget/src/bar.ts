@@ -8,6 +8,7 @@ import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
 import { makePhotos, type Photos } from './photos'
 import { getState, patchUi, subscribe, type UiMode } from './state'
+import * as stopPhrase from './stopphrase'
 import { makeTicker, type Ticker } from './ticker'
 import { makeVoice, type VoiceController } from './voice'
 import { trackKeyboard } from './viewport'
@@ -101,6 +102,20 @@ function makeComposer(): Composer {
   let baseText = ''
   let partial = ''
   const joinText = (a: string, b: string) => (a.trim() ? a.trim() + ' ' + b.trim() : b.trim())
+  // "…over and out" ends dictation and auto-sends, mirroring the iOS app's
+  // SpeechStopPhrase. One-shot per recording — reset when a new one starts.
+  let hasTriggeredStopPhrase = false
+  const maybeTriggerStopPhrase = (combined: string): boolean => {
+    if (hasTriggeredStopPhrase || !stopPhrase.contains(combined)) return false
+    hasTriggeredStopPhrase = true
+    baseText = stopPhrase.cleaned(combined)
+    partial = ''
+    ta.value = baseText
+    autogrow()
+    voice.teardown() // hard stop: we already have the text we need, no transcript wait
+    void doSend()
+    return true
+  }
   const voice: VoiceController = makeVoice({
     getState: () => getState().ui.voice,
     onState: (s, err) => {
@@ -108,6 +123,7 @@ function makeComposer(): Composer {
       // unconditional patchUi here would re-emit → re-render → re-teardown → loop.
       const cur = getState().ui
       if (cur.voice !== s || cur.voiceError !== err) patchUi({ voice: s, voiceError: err })
+      if (s === 'connecting') hasTriggeredStopPhrase = false // new recording session
       renderMic()
       // No "Listening…" note — the mic button's live state already says it.
       if (s === 'error' && err) setNote(err, true)
@@ -115,12 +131,16 @@ function makeComposer(): Composer {
     },
     onPartial: (delta) => {
       partial = joinText(partial, delta)
-      ta.value = joinText(baseText, partial)
+      const combined = joinText(baseText, partial)
+      if (maybeTriggerStopPhrase(combined)) return
+      ta.value = combined
       autogrow()
       pinToEnd() // dictation past the height cap: keep the last spoken word in view
     },
     onFinal: (transcript) => {
-      baseText = joinText(baseText, transcript)
+      const combined = joinText(baseText, transcript)
+      if (maybeTriggerStopPhrase(combined)) return
+      baseText = combined
       partial = ''
       ta.value = baseText
       autogrow()
