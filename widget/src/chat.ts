@@ -293,7 +293,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
   const demoResetItem = menuItem('restart', 'Start tour over')
-  const loginItem = menuItem('login', 'Owner log in')
+  const loginItem = menuItem('login', 'Login')
   menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem, loginItem)
   show(menu, false)
 
