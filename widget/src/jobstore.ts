@@ -13,6 +13,15 @@ import { getState, patchUi, type LineState, type Subagent, type TodoItem, setJob
 
 const BACKOFF = [1000, 2000, 5000, 10000]
 const DONE_LINGER_MS = 8000
+// Reconnect can never spin forever. A "running" job older than the server's max
+// session life is a ghost (the server killed it long ago), and even a live job
+// gives up after enough consecutive failed reattaches — this is what un-wedges the
+// iOS-app "stuck reconnecting…" case (dead session + expired token, timers frozen
+// by backgrounding). `attempt` resets on wake; this fail counter survives it and
+// only resets when a frame actually flows.
+const MAX_SESSION_MS = 70 * 60_000 // server session cap (1h) + buffer
+const MAX_REATTACH_FAILS = 12
+let totalReattachFails = 0
 
 interface Persisted {
   jobId: string
@@ -366,6 +375,7 @@ function reconcileSubagents(items: { id: string; desc: string }[]): Subagent[] {
 
 // -- frame handling -----------------------------------------------------------
 function onFrame(name: string, data: Record<string, unknown>): void {
+  totalReattachFails = 0 // a frame flowed → the connection is healthy again
   if (name === 'job') {
     if (typeof data.job_id === 'string') {
       jobId = data.job_id
@@ -558,6 +568,7 @@ function reset(): void {
   jobId = null
   startedAt = 0
   attempt = 0
+  totalReattachFails = 0
   sessionStreaming = false
   pendingUserTexts = []
   subagentStartedAt.clear()
@@ -631,11 +642,34 @@ function scheduleReattach(gen: number): void {
   clearTimers()
   const delay = BACKOFF[Math.min(attempt, BACKOFF.length - 1)]
   attempt++
+  totalReattachFails++
   reconnectTimer = setTimeout(() => reattach(gen, false), delay)
 }
 
 function reattach(gen: number, isBoot: boolean): void {
   if (gen !== generation || !jobId) return
+  // Ghost streaming session: the server caps a session at ~1h, so a much-older
+  // "running" streaming job is dead — stop trying and clear it silently (the
+  // composer returns; a new message starts fresh). This is the main fix for the
+  // iOS-app "stuck reconnecting…" wedge. Gated to streaming so a long-running
+  // classic job (now uncapped) is never killed just for a disconnect.
+  if (sessionStreaming && startedAt && Date.now() - startedAt > MAX_SESSION_MS) {
+    clearPersist()
+    clearActivityFlag()
+    reset()
+    setJob({ phase: 'idle' })
+    dispatchQueue()
+    return
+  }
+  // Belt-and-suspenders: give up after too many consecutive failed reattaches with
+  // nothing flowing (survives wake resets), so reconnect can never spin forever.
+  if (totalReattachFails > MAX_REATTACH_FAILS) {
+    clearPersist()
+    reset()
+    setJob({ phase: 'error', message: "Couldn't reconnect — send a message to retry." })
+    dispatchQueue()
+    return
+  }
   const myJob = jobId
   api
     .jobStream(myJob, frameHandler(gen))
@@ -645,6 +679,14 @@ function reattach(gen: number, isBoot: boolean): void {
     .catch((e: unknown) => {
       if (gen !== generation) return
       if (e instanceof HttpError && e.status < 500) {
+        // Auth blip: the token refresh transiently failed (e.g. server mid-redeploy)
+        // but the session is still stored — retry instead of forcing a re-login.
+        // doRefresh only wipes on a real auth rejection, so a wiped session (no
+        // stored session) falls through to the terminal "sign in again" below.
+        if ((e.status === 401 || e.status === 403) && hasStoredSession()) {
+          if (!terminal) onDisconnect(gen)
+          return
+        }
         clearPersist()
         if (isBoot && e.status === 404) {
           // Job long gone — the page just booted with a stale key. Clear silently.

@@ -159,7 +159,9 @@ async function grant(grantType: 'password' | 'refresh_token', body: Record<strin
   })
   const data = (await res.json().catch(() => ({}))) as GrantResponse & { error_description?: string; msg?: string }
   if (!res.ok || !data.access_token) {
-    throw new Error(data.error_description || data.msg || `auth failed (${res.status})`)
+    const err = new Error(data.error_description || data.msg || `auth failed (${res.status})`) as Error & { status?: number }
+    err.status = res.status
+    throw err
   }
   return data
 }
@@ -186,9 +188,16 @@ async function doRefresh(s: Session): Promise<string | null> {
     const next = toSession(r, s.email)
     writeSession(next)
     return next.access_token
-  } catch {
-    wipeSession()
-    setAuth('anon')
+  } catch (e) {
+    // Only wipe on a DEFINITIVE auth rejection (the refresh token is actually dead —
+    // 4xx invalid_grant). A transient network/5xx failure (common while the server
+    // is mid-redeploy) must NOT nuke the session — keep it so the next getToken can
+    // retry, instead of forcing a needless re-login.
+    const status = (e as { status?: number })?.status
+    if (status != null && status >= 400 && status < 500) {
+      wipeSession()
+      setAuth('anon')
+    }
     return null
   }
 }
