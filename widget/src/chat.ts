@@ -659,6 +659,13 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       loaded = false
       renderedKey = ''
     }
+    // Never leave a signed-out visitor staring at the expanded transcript with no
+    // way to log in — every path that opens it (or an auth drop mid-session)
+    // lands here, so redirecting once, before computing `expanded`, is enough.
+    if (getState().ui.mode === 'expanded' && getState().auth !== 'authed') {
+      patchUi({ mode: 'login' })
+      return
+    }
     const expanded = getState().ui.mode === 'expanded'
     show(overlay, expanded)
     if (!expanded) {
