@@ -232,6 +232,10 @@ button::-moz-focus-inner{ border:0; }
 .ak-guest-copy strong{ font-size:13px; line-height:1.3; font-weight:500; color:var(--ak-warm); }
 .ak-guest-copy small{ font-size:10.5px; line-height:1.3; color:var(--ak-ink3); }
 .ak-guest-cta svg{ flex:none; color:var(--ak-amber); }
+@keyframes ak-guest-nudge{
+  0%,70%,100%{ transform:translateX(0); }
+  35%{ transform:translateX(4px); }
+}
 
 /* mic states */
 .ak-mic.connecting{ color:var(--ak-amber); }
@@ -458,11 +462,12 @@ button::-moz-focus-inner{ border:0; }
   .ak-opt{ min-height:44px; padding:10px 12px; }
   .ak-menu-item{ min-height:44px; }
   .ak-guest-cta{ min-height:44px; }
+  .ak-guest-cta svg{ animation:ak-guest-nudge 1.35s cubic-bezier(.25,1,.5,1) infinite; }
 }
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
-  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph, .ak-guest-star{ animation:none !important; }
+  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph, .ak-guest-star, .ak-guest-cta svg{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
   .ak-zone{ transition:none !important; }
 }

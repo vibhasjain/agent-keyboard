@@ -784,6 +784,10 @@ export function mountBar(shadow: ShadowRoot): void {
 
   on(miniBtn, 'click', openBar)
 
+  // Host pages can open the full experience without reaching into the Shadow
+  // DOM. AgentKeyboard.com's hero uses this for its Interactive demo CTA.
+  on(document, 'agent-keyboard:open', () => patchUi({ mode: 'expanded' }))
+
   // -- swipe the bar right to minimize (touch) --
   // A clear rightward swipe on the bar folds it back to the corner. Only from a
   // middle state (not mini/expanded), and only when the drag is decisively

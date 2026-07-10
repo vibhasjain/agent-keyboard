@@ -4,6 +4,7 @@ const root = new URL('../../', import.meta.url)
 const tour = JSON.parse(readFileSync(new URL('site/agent-keyboard-demo.json', root), 'utf8'))
 const site = readFileSync(new URL('site/index.html', root), 'utf8')
 const runner = readFileSync(new URL('widget/src/guest-demo.ts', root), 'utf8')
+const bar = readFileSync(new URL('widget/src/bar.ts', root), 'utf8')
 
 const fail = (message) => {
   throw new Error(`[guest-demo] ${message}`)
@@ -37,6 +38,10 @@ for (const [label, turn] of Object.entries(tour.turns)) {
 
 const liveEmbed = site.match(/<script[^>]+src="https:\/\/agent-keyboard\.fly\.dev\/widget\.js"[^>]*><\/script>/)?.[0] || ''
 if (!liveEmbed.includes('data-guest-demo')) fail('AgentKeyboard.com live embed is not opted into the guest demo')
+if (!site.includes('class="btn primary demo-cta"') || !site.includes("new CustomEvent('agent-keyboard:open')")) {
+  fail('Interactive demo CTA must dispatch the widget open event')
+}
+if (!bar.includes("agent-keyboard:open")) fail('widget must listen for the host open event')
 for (const copySurface of site.match(/data-copy="[^"]+"/g) || []) {
   if (copySurface.includes('guest-demo')) fail('public install snippet must not opt customer embeds into the tour')
 }
