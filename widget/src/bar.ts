@@ -525,6 +525,22 @@ export function mountBar(shadow: ShadowRoot): void {
   on(loginRow, 'input', () => loginRow.classList.remove('error'))
   let loggingIn = false
 
+  // Keyboard avoidance for the login fields — same trackKeyboard() the composer
+  // uses (viewport.ts lifts the whole .ak-zone via --ak-kb), delegated on the
+  // form so tabbing between email/password doesn't detach/reattach.
+  let detachLoginKb: (() => void) | null = null
+  on(loginRow, 'focusin', () => {
+    if (!detachLoginKb) detachLoginKb = trackKeyboard()
+  })
+  on(loginRow, 'focusout', () => {
+    setTimeout(() => {
+      if (!loginRow.contains(shadow.activeElement)) {
+        detachLoginKb?.()
+        detachLoginKb = null
+      }
+    }, 0)
+  })
+
   // An untouched login form folds back into the plain bar after a while —
   // opening it was often an accidental focus, and the fields keep their values
   // for next time either way. Any interaction restarts the clock.
