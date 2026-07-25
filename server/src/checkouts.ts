@@ -12,7 +12,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, appendFile, readFile, writeFile, rename } from "node:fs/promises";
+import { mkdir, appendFile, readFile, writeFile, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Site } from "./sites.js";
 
@@ -36,13 +36,30 @@ function tokenizedRemote(repo: string): string {
   return repo.replace(/^https:\/\//, `https://x-access-token:${GH_TOKEN}@`);
 }
 
+// execFile puts the whole command line in its error message, and two of ours carry
+// the tokenized remote (clone, and remote set-url). That message rides the SSE
+// error frame straight to the browser, so redact in place — keeping the original
+// error object, since callers read its other fields.
+function scrubToken(e: unknown): unknown {
+  if (!GH_TOKEN || !e || typeof e !== "object") return e;
+  const err = e as { message?: string; stdout?: string; stderr?: string };
+  for (const key of ["message", "stdout", "stderr"] as const) {
+    if (typeof err[key] === "string") err[key] = err[key]!.split(GH_TOKEN).join("***");
+  }
+  return e;
+}
+
 async function git(cwd: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileP("git", args, {
-    cwd,
-    env: process.env,
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  return stdout;
+  try {
+    const { stdout } = await execFileP("git", args, {
+      cwd,
+      env: process.env,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    return stdout;
+  } catch (e) {
+    throw scrubToken(e);
+  }
 }
 
 // One in-process FIFO mutex per site: two jobs for the same checkout must never
@@ -88,11 +105,18 @@ async function doEnsureCheckout(site: Site): Promise<string> {
   if (existsSync(join(dir, ".git"))) return dir;
 
   await mkdir(CHECKOUTS_DIR, { recursive: true });
-  await execFileP(
-    "git",
-    ["clone", "--branch", site.branch, tokenizedRemote(site.repo), dir],
-    { env: process.env, maxBuffer: 16 * 1024 * 1024 },
-  );
+  try {
+    await execFileP(
+      "git",
+      ["clone", "--branch", site.branch, tokenizedRemote(site.repo), dir],
+      { env: process.env, maxBuffer: 16 * 1024 * 1024 },
+    );
+  } catch (e) {
+    // A half-written clone can still have a .git, which the existsSync check above
+    // would then take for a good checkout. Clear it so the retry actually retries.
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    throw scrubToken(e);
+  }
   await git(dir, ["config", "user.name", GIT_USER_NAME]);
   await git(dir, ["config", "user.email", GIT_USER_EMAIL]);
   // Keep our photo-staging dir out of every diff/status the agent might commit.

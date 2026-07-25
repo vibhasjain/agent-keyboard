@@ -240,22 +240,56 @@ function emptyStateEl(): HTMLElement {
   return wrap
 }
 
-function nodeForMessage(m: ConversationMessage): HTMLElement {
+// The answer to an assistant turn's options is simply the next user turn — true of
+// the scripted tour (which pushes the chosen label as a user message) and of a real
+// chat alike, so neither needs to record what was picked. Skips system dividers and
+// error rows, which sit between the two without answering anything.
+// Pure, and exported for dev/answered-options.check.mjs.
+export function answerFor(turns: ReadonlyArray<{ role: string; text?: string }>, index: number): string | undefined {
+  if (turns[index]?.role !== 'assistant') return undefined
+  for (let i = index + 1; i < turns.length; i++) {
+    const role = turns[i].role
+    if (role === 'system' || role === 'error') continue
+    return role === 'user' ? turns[i].text ?? '' : undefined
+  }
+  return undefined
+}
+
+const normOpt = (s: string): string => s.replace(/\s+/g, ' ').trim()
+
+// Once a turn has been answered its options are spent: disable every one of them
+// and light the one that was taken. Without this, tapping an old option in
+// scrollback silently re-sends it — days later, in a different context.
+function markAnsweredOptions(node: HTMLElement, answer: string | undefined): void {
+  const picked = normOpt(answer ?? '')
+  if (!picked) return
+  for (const button of node.querySelectorAll<HTMLButtonElement>('.ak-opt')) {
+    const selected = normOpt(button.dataset.send || button.textContent || '') === picked
+    button.disabled = true
+    button.classList.toggle('selected', selected)
+    button.setAttribute('aria-pressed', selected ? 'true' : 'false')
+  }
+}
+
+function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
   if (m.role === 'system') return dividerEl(m.text)
   const tools = Array.isArray(m.tools) ? (m.tools as unknown[]).map(String).filter(Boolean) : []
   if (m.role === 'assistant' && tools.length) {
     const wrap = el('div')
     for (const t of tools) wrap.appendChild(lineEl('tool', '●', el('div', undefined, (n) => (n.textContent = t))))
     if (m.text) wrap.appendChild(msgEl('assistant', m.text))
+    markAnsweredOptions(wrap, m.chosenOption ?? answer)
     return wrap
   }
-  return msgEl(m.role, m.text, {
+  const node = msgEl(m.role, m.text, {
     attachments: m.attachments,
     photos: m.photos,
     thumbs: m.thumbs,
     files: m.files,
     images: m.images,
   })
+  if (m.role === 'assistant') markAnsweredOptions(node, m.chosenOption ?? answer)
+  return node
 }
 
 export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
@@ -293,8 +327,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
   const demoResetItem = menuItem('restart', 'Start tour over')
-  const loginItem = menuItem('login', 'Login')
-  menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem, loginItem)
+  menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -334,8 +367,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       identity.textContent = guest ? 'Scripted tour · no AI used' : email ?? ''
       show(identity, guest || !!email)
       for (const item of [stopItem, restartItem, compactItem, refreshItem, logoutItem]) show(item, !guest)
-      show(demoResetItem, guest)
-      show(loginItem, guest)
+      show(demoResetItem, guest) // no Login item: the form is already in the footer
       refreshBusyMenu()
     }
   }
@@ -425,9 +457,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   on(logoutItem, 'click', () => {
     if (busyAction) return
     setMenu(false)
-    deps.collapse() // minimize to the bottom bar
+    deps.collapse() // back to the corner, where the status line is visible
     logout() // wipe the session immediately — logged out even if a job is mid-think
-    patchUi({ signingOut: 'Logging out…' }) // spinner pill, overrides the thinking view
+    patchUi({ signingOut: 'Logging out…' }) // takes over the corner line
     setTimeout(() => patchUi({ signingOut: 'Logged out' }), 750)
     setTimeout(() => location.reload(), 1200) // reload to a fresh, guaranteed logged-out state
   })
@@ -437,12 +469,6 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     setMenu(false)
     setTimeout(() => toBottom(), 0)
   })
-  on(loginItem, 'click', () => {
-    if (!isGuestDemo()) return
-    setMenu(false)
-    patchUi({ mode: 'login' })
-  })
-
   // No zoom inside the chat, ever: touch-action CSS covers modern engines;
   // iOS Safari's proprietary gesture events need explicit preventDefault.
   for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) {
@@ -463,22 +489,111 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   shadow.appendChild(overlay)
   show(overlay, false)
 
+  // -- open / close motion --
+  // The panel slides and unblurs into place rather than cutting. display:none has
+  // to wait for the close transition to actually end, so the duration is read back
+  // off the stylesheet instead of being duplicated here — reduced motion sets both
+  // durations to 0 and this collapses to the old instant behaviour on its own.
+  let panelOpen = false
+  let hideTimer: ReturnType<typeof setTimeout> | null = null
+  const setPanelOpen = (open: boolean) => {
+    if (open === panelOpen) return
+    panelOpen = open
+    if (hideTimer != null) {
+      clearTimeout(hideTimer)
+      hideTimer = null
+    }
+    if (open) {
+      show(overlay, true)
+      void overlay.offsetHeight // flush, so the transition starts from the closed state
+      overlay.dataset.open = 'true'
+      return
+    }
+    overlay.dataset.open = 'false'
+    const ms = parseFloat(getComputedStyle(overlay).getPropertyValue('--panel-close-dur')) || 0
+    if (!ms) {
+      show(overlay, false)
+      return
+    }
+    hideTimer = setTimeout(() => {
+      hideTimer = null
+      if (!panelOpen) show(overlay, false)
+    }, ms)
+  }
+
+  // -- pull down to dismiss (touch) --
+  // Only from the very top of the transcript (a drag mid-scroll belongs to the
+  // list), never starting on a control, and only once the gesture is decisively
+  // downward. The pull is resisted so it reads as weight, not a free drag.
+  const DISMISS_COMMIT_PX = 82
+  const DISMISS_MAX_PX = 54
+  let dragX = 0
+  let dragY = 0
+  let dragArmed = false
+  let dragging = false
+  const endDrag = () => {
+    dragArmed = dragging = false
+    overlay.classList.remove('ak-dragging')
+    overlay.style.removeProperty('--ak-dismiss-y')
+    overlay.style.removeProperty('--ak-dismiss-opacity')
+  }
+  on(
+    overlay,
+    'touchstart',
+    (e) => {
+      const t = (e as TouchEvent).touches[0]
+      const from = e.target as HTMLElement | null
+      dragArmed =
+        !!t &&
+        scroll.scrollTop <= 1 &&
+        !isLightboxOpen() &&
+        !menuOpen &&
+        !from?.closest('button, input, textarea, a, .ak-menu, .ak-lightbox')
+      dragging = false
+      if (t) {
+        dragX = t.clientX
+        dragY = t.clientY
+      }
+    },
+    { passive: true },
+  )
+  on(
+    overlay,
+    'touchmove',
+    (e) => {
+      if (!dragArmed) return
+      const t = (e as TouchEvent).touches[0]
+      if (!t) return
+      const dy = t.clientY - dragY
+      const dx = t.clientX - dragX
+      if (!dragging) {
+        if (dy < -8 || Math.abs(dx) > 14) return endDrag() // scrolling or swiping sideways
+        if (dy < 10 || Math.abs(dy) < Math.abs(dx) * 1.5) return
+        dragging = true
+        overlay.classList.add('ak-dragging')
+      }
+      if (dy >= DISMISS_COMMIT_PX) {
+        endDrag()
+        ;(shadow.activeElement as HTMLElement | null)?.blur?.()
+        deps.collapse()
+        return
+      }
+      overlay.style.setProperty('--ak-dismiss-y', `${Math.min(DISMISS_MAX_PX, dy * 0.5)}px`)
+      overlay.style.setProperty('--ak-dismiss-opacity', String(Math.max(0.6, 1 - dy / 320)))
+    },
+    { passive: true },
+  )
+  on(overlay, 'touchend', endDrag, { passive: true })
+  on(overlay, 'touchcancel', endDrag, { passive: true })
+
   lbHost = shadow
   on(close, 'click', () => deps.collapse())
-  // Escape steps down one size each press: lightbox → chat → bar → mini corner.
+  // Escape peels one layer each press: menu → lightbox → transcript → corner.
   on(window, 'keydown', (e) => {
     if ((e as KeyboardEvent).key !== 'Escape') return
     if (menuOpen) return setMenu(false) // Esc closes the settings menu first…
     if (isLightboxOpen()) return closeLightbox() // …then peels the lightbox…
-    const mode = getState().ui.mode
-    if (mode === 'expanded') return deps.collapse() // …then the chat → bar…
-    if (mode === 'mini') return // already the smallest
-    // …then the bar → minimized corner, unless a host-page field owns the Escape.
-    const da = document.activeElement as HTMLElement | null
-    const hostField =
-      da && (da.tagName === 'INPUT' || da.tagName === 'TEXTAREA' || da.isContentEditable) && !da.closest?.('#agent-keyboard-host')
-    if (hostField) return
-    patchUi({ mode: 'mini' })
+    if (getState().ui.mode === 'expanded') deps.collapse() // …then the transcript itself.
   })
 
   // -- history state --
@@ -509,13 +624,19 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const rebuildStatic = () => {
     clearNode(listEl)
     liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
-    for (const m of history) listEl.appendChild(nodeForMessage(m))
-    for (const t of getLiveTurns()) {
-      listEl.appendChild(
-        t.role === 'error' ? errorEl(t.text) : msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images }),
-      )
+    const live = getLiveTurns()
+    // One sequence for the look-ahead: a chip tapped in the last history message is
+    // answered by a user turn that lands in `live`, so it has to cross the boundary.
+    const turns = [...history, ...live]
+    for (let i = 0; i < history.length; i++) listEl.appendChild(nodeForMessage(history[i], answerFor(turns, i)))
+    for (let i = 0; i < live.length; i++) {
+      const t = live[i]
+      const node =
+        t.role === 'error' ? errorEl(t.text) : msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images })
+      if (t.role === 'assistant') markAnsweredOptions(node, answerFor(turns, history.length + i))
+      listEl.appendChild(node)
     }
-    if (!history.length && !getLiveTurns().length) {
+    if (!history.length && !live.length) {
       listEl.appendChild(emptyStateEl())
     }
   }
@@ -671,11 +792,12 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   // Tappable option buttons from a ```options block in a reply (see markdown.ts).
   // One delegated listener covers live, history, and every re-render. A tap sends
-  // the option's text as the next message — start() queues it behind a running
-  // job; tapping an already-answered option in scrollback simply re-sends it.
+  // the option's text as the next message — start() queues it behind a running job.
+  // Answered options are rebuilt disabled by rebuildStatic() and cannot re-send;
+  // the guard here covers the window between the tap and that rebuild.
   on(listEl, 'click', (e) => {
-    const btn = (e.target as HTMLElement)?.closest?.('.ak-opt') as HTMLElement | null
-    if (!btn) return
+    const btn = (e.target as HTMLElement)?.closest?.('.ak-opt') as HTMLButtonElement | null
+    if (!btn || btn.disabled) return
     const text = (btn.dataset.send || btn.textContent || '').trim()
     if (!text) return
     if (isGuestDemo()) chooseGuestDemo(text)
@@ -706,15 +828,10 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       loaded = false
       renderedKey = ''
     }
-    // Never leave a signed-out visitor staring at the expanded transcript with no
-    // way to log in — every path that opens it (or an auth drop mid-session)
-    // lands here, so redirecting once, before computing `expanded`, is enough.
-    if (getState().ui.mode === 'expanded' && getState().auth !== 'authed' && !isGuestDemo()) {
-      patchUi({ mode: 'login' })
-      return
-    }
+    // A signed-out visitor belongs here now: the tour (or an empty transcript)
+    // reads above, and bar.ts keeps the login form in the footer the whole time.
     const expanded = getState().ui.mode === 'expanded'
-    show(overlay, expanded)
+    setPanelOpen(expanded)
     if (!expanded) {
       unlockBody()
       if (menuOpen) setMenu(false)
@@ -722,7 +839,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       return
     }
     lockBody()
-    if (footer.firstChild !== deps.composerEl) footer.appendChild(deps.composerEl)
+    // The footer's occupant is bar.ts's call (placeFooter): composer when signed
+    // in, the login or invite form when not. Don't fight it for the slot.
     if (!loaded && !loading) {
       void loadHistory()
       if (!getLiveTurns().length) {

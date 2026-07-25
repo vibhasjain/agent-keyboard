@@ -1,8 +1,9 @@
-// The login scene: the composer flips to the Claude Code-style prompt sequence,
-// the "> " mark tracks focus down from email to password (real chars, masked by
-// the field), then resolves into the composer as a signed-in session would.
+// The login scene: the corner rectangle opens into the transcript, whose footer
+// holds the Claude Code-style prompt sequence. The "> " mark tracks focus down from
+// email to password (real chars, masked by the field), then the footer resolves
+// into the composer as a signed-in session would.
 
-import { patchUi } from '../../state'
+import { patchUi, setAuth } from '../../state'
 import { q, typeInput } from '../actions'
 import type { Scene } from './scene'
 
@@ -21,20 +22,22 @@ export const login: Scene = {
         {
           at: 600,
           run: () => {
-            patchUi({ mode: 'login' })
+            setAuth('anon') // signed out, so the footer holds the login form
+            patchUi({ mode: 'expanded' })
             focusRow(0)
           },
         },
         { at: 1200, run: () => typeInput(email, 'you@example.com', 18) },
         { at: 3800, run: () => focusRow(1) },
         { at: 4200, run: () => typeInput(pw, 'clay-studio-42', 16) },
-        { at: 6800, run: () => patchUi({ mode: 'composing' }) },
+        { at: 6800, run: () => setAuth('authed') }, // the footer resolves into the composer
       ],
       onReset: () => {
         email.value = ''
         pw.value = ''
         focusRow(-1)
-        patchUi({ mode: 'collapsed' })
+        setAuth('authed') // demo default; the scene drops it to anon on its next pass
+        patchUi({ mode: 'mini' })
         minisite.reset()
       },
     }

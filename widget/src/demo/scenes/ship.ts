@@ -34,11 +34,11 @@ export const ship: Scene = {
       loopAt: 20200,
       posterAt: 17600,
       steps: [
-        // 0–0.9s: establish — you're on a website, the bar resting as the ⌨️ corner.
+        // 0–0.9s: establish — you're on a website, the bar resting as the corner rectangle.
         {
           at: 900,
           run: () => {
-            patchUi({ mode: 'composing' }) // the corner opens into the prompt bar, so the prompt is visible going in
+            patchUi({ mode: 'expanded' }) // the corner opens into the transcript, where the prompt is typed
             minisite.dim() // the page recedes; the bar becomes the subject
           },
         },
@@ -49,7 +49,8 @@ export const ship: Scene = {
           run: () => {
             start({ text: ta.value.trim() || PROMPT, page: '/' })
             clearTextarea(ta)
-            patchUi({ mode: 'collapsed' })
+            patchUi({ mode: 'collapsed' }) // back to the corner, now carrying the live ticker
+
           },
         },
         // job runs 5.6s → ~14.3s (queued → syncing → thinking → edit → commit → reply → pushed)
@@ -62,7 +63,7 @@ export const ship: Scene = {
       onReset: () => {
         clearTextarea(ta)
         setJob({ phase: 'idle' })
-        patchUi({ mode: 'mini' }) // back to the ⌨️ corner, so each loop opens the bar again
+        patchUi({ mode: 'mini' }) // back to the resting rectangle, so each loop opens it again
         minisite.reset()
       },
     }

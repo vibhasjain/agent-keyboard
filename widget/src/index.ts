@@ -58,9 +58,9 @@ function mount(): void {
   initAuth() // synchronous: sets auth slice from localStorage, no network
   if (isGuestDemo()) void loadGuestDemo()
   mountBar(shadow)
-  // If we arrived from an invite/recovery link, open the bar to set a password.
-  if (getPendingInvite()) patchUi({ mode: 'setpw' })
-  else if (isGuestDemo()) patchUi({ mode: 'collapsed' })
+  // If we arrived from an invite/recovery link, open the transcript — its footer
+  // holds the set-a-password form. Otherwise rest as the corner rectangle.
+  if (getPendingInvite()) patchUi({ mode: 'expanded' })
   bootRehydrate() // re-attach only if active-job key + stored session exist
 }
 

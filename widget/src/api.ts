@@ -28,14 +28,30 @@ async function authHeaders(extra?: Record<string, string>): Promise<Record<strin
   }
 }
 
+/** Pull the server's own explanation out of an error body, if it sent one. */
+function readError(body: string): string {
+  try {
+    const { error } = JSON.parse(body) as { error?: unknown }
+    return typeof error === 'string' ? error : ''
+  } catch {
+    return ''
+  }
+}
+
 /** The one canonical SSE-over-fetch reader (EventSource can't carry the auth header).
  *  Delivers every frame to onFrame; keepalive comment lines (":") are ignored.
  *  Resolves when the stream closes; an onFrame that throws cancels the reader. */
 export async function readSse(path: string, init: RequestInit, onFrame: SseFrameHandler): Promise<void> {
   const headers = await authHeaders(init.headers as Record<string, string> | undefined)
   const res = await fetch(url(path), { ...init, headers })
-  if (res.status === 404) throw new HttpError(404, `${path} -> 404`)
-  if (!res.ok || !res.body) throw new HttpError(res.status, `${path} -> ${res.status}`)
+  if (!res.ok || !res.body) {
+    // The server explains itself in {error} on every rejection, not just 404s —
+    // reading it only there turned "site not in the allow-list" into "/path -> 500".
+    // Body is JSON on a reject (the stream only starts on success), so this can't
+    // eat a live stream.
+    const detail = res.ok ? '' : await res.text().then(readError).catch(() => '')
+    throw new HttpError(res.status, detail || `${path} -> ${res.status}`)
+  }
 
   const reader = res.body.getReader()
   const decoder = new TextDecoder()
@@ -123,6 +139,9 @@ export interface ConversationMessage {
   thumbs?: string[]
   files?: string[]
   images?: string[]
+  // Which of this turn's options was tapped, when the answer that follows doesn't
+  // say so on its own (the scripted tour rewrites the label into a real prompt).
+  chosenOption?: string
   ts?: number | string
 }
 

@@ -9,6 +9,8 @@
     "dev": "node build.mjs --dev",
     "check": "tsc --noEmit",
     "check:guest-demo": "node dev/check-guest-demo.mjs",
+    "check:answered-options": "node dev/answered-options.check.mjs",
+    "test": "npm run check && npm run check:guest-demo && npm run check:answered-options",
     "mock": "node dev/mock-server.mjs"
   },
   "devDependencies": {

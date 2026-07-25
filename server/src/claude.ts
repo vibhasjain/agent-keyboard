@@ -58,6 +58,10 @@ function envInt(name: string, fallback: number): number {
 // Set CLAUDE_RUN_TIMEOUT_MS to a positive value to re-arm a hard ceiling.
 const RUN_TIMEOUT_MS = envInt("CLAUDE_RUN_TIMEOUT_MS", 0);
 const COMPACT_TIMEOUT_MS = envInt("CLAUDE_COMPACT_TIMEOUT_MS", 300_000);
+// How long to wait after the CLI exits for its stdio to actually close. See the
+// "exit" handler in spawnClaude: an orphaned grandchild can hold the pipes open
+// forever, and "close" would then never fire.
+const EXIT_GRACE_MS = envInt("CLAUDE_EXIT_GRACE_MS", 5_000);
 const ASSISTANT_THROTTLE_MS = 180;
 const MAX_ATTEMPTS = 3;
 // Experimental streaming-input mode: deliver the turn on stdin (--input-format
@@ -525,6 +529,20 @@ function spawnClaude(
             child.kill("SIGKILL");
           }, timeoutMs)
         : null;
+    // Settle exactly once, from whichever of close / error / exit-grace lands first.
+    let settled = false;
+    let graceTimer: ReturnType<typeof setTimeout> | null = null;
+    const finish = (extra?: string) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      if (graceTimer) clearTimeout(graceTimer);
+      graceTimer = null;
+      rl.close(); // no late frames for a run we've already reported as over
+      activeChildren.delete(child);
+      if (timedOut && !stderr) stderr = `agent run timed out after ${timeoutMs}ms`;
+      resolve({ result, stderr: extra ? `${stderr} ${extra}`.trim() : stderr });
+    };
     child.stderr?.on("data", (d) => {
       stderr += d.toString();
     });
@@ -533,16 +551,19 @@ function spawnClaude(
       if (r) result = r;
       for (const e of events) onEvent(e);
     });
-    child.on("close", () => {
-      if (timer) clearTimeout(timer);
-      activeChildren.delete(child);
-      if (timedOut && !stderr) stderr = `agent run timed out after ${timeoutMs}ms`;
-      resolve({ result, stderr });
-    });
-    child.on("error", (e) => {
-      if (timer) clearTimeout(timer);
-      activeChildren.delete(child);
-      resolve({ result, stderr: `${stderr} ${String((e as Error)?.message ?? e)}`.trim() });
+    child.on("close", () => finish());
+    child.on("error", (e) => finish(String((e as Error)?.message ?? e)));
+    // "close" waits for every stdio stream to end — but a shell tool call can
+    // inherit the CLI's stdout/stderr and outlive it, so a killed or crashed run
+    // can exit and never close. That hung this promise forever, and with it the
+    // job AND its concurrency slot. Settle on "exit" after a short grace period
+    // instead, and say plainly that something was left behind.
+    child.on("exit", () => {
+      if (settled || graceTimer) return;
+      graceTimer = setTimeout(
+        () => finish("agent process exited but a child of it still holds its output; continuing without it"),
+        EXIT_GRACE_MS,
+      );
     });
   });
   return { child, done, writeInput, closeInput };

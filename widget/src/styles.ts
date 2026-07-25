@@ -21,6 +21,9 @@ button::-moz-focus-inner{ border:0; }
   --ak-serif:'Instrument Serif',Georgia,'Times New Roman',serif;
   --ak-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,sans-serif;
   --ak-kb:0px;
+  --ak-fs-input:16px; /* anything smaller and iOS zooms the page on focus */
+  --panel-open-dur:400ms; --panel-close-dur:350ms; --panel-ease:cubic-bezier(.22,1,.36,1);
+  --panel-translate-y:100px; --panel-blur:2px;
 }
 
 /* ---- bottom zone (keyboard-avoiding) ---- */
@@ -29,61 +32,66 @@ button::-moz-focus-inner{ border:0; }
   width:100%;
   display:block;
   padding:0 14px calc(10px + env(safe-area-inset-bottom,0px)) 14px;
-  transform:none;
-  transition:transform .18s ease-out;
   font-family:var(--ak-mono);
   color:var(--ak-ink);
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
-/* Lift the bar above the keyboard ONLY while the composer is focused. Gating on
-   the class (not just --ak-kb) means a stale gap can never strand the collapsed
-   bar mid-screen — no focus, no lift. */
-:host(.ak-kbd) .ak-zone{ transform:translateY(calc(-1 * var(--ak-kb))); }
 .ak-zone{ pointer-events:none; }
 .ak-pill, .ak-composer, .ak-overlay, .ak-lightbox, .ak-mini{ pointer-events:auto; }
-.ak-bar{ position:relative; width:100%; min-height:48px; }
+/* The corner box: whichever of the rectangle / streaming pill is showing, parked
+   bottom-right. Nothing focusable lives down here any more — the composer and the
+   auth forms are both in the transcript footer — so the zone never needs lifting
+   above the keyboard; .ak-ov-foot does that with --ak-kb. */
+.ak-bar{ display:flex; justify-content:flex-end; }
 .ak-stash{ display:none; }
 
-/* ---- mini: the smallest resting state, a round ⌨️ parked bottom-right ---- */
+/* ---- the resting rectangle: ⌨️ + one line of status, parked bottom-right ---- */
 .ak-mini{
-  display:flex; align-items:center; justify-content:center;
-  margin-left:auto; margin-right:0; /* desktop: bottom-right within the padded zone */
-  width:52px; height:52px; padding:0;
-  border-radius:50%; border:none;
+  display:flex; align-items:center; gap:9px;
+  margin-left:auto; margin-right:0;
+  width:168px; height:44px; padding:0 11px;
+  border-radius:10px; border:1px solid rgba(245,241,234,.13);
   background:rgba(9,9,11,.8); /* Menu++ sticky nav: bg-zinc-950/80 */
-  box-shadow:none;
+  box-shadow:0 7px 24px rgba(0,0,0,.28);
   backdrop-filter:blur(24px); /* Menu++ sticky nav: backdrop-blur-xl */
   -webkit-backdrop-filter:blur(24px);
-  cursor:pointer;
+  color:var(--ak-warm); cursor:pointer;
   animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
-  transition:transform .16s ease;
+  transition:transform .16s ease, border-color .2s ease, color .2s ease;
 }
-.ak-mini:hover{ transform:scale(1.06); }
-.ak-mini:active{ transform:scale(.96); }
+.ak-mini.ak-mini-long{ width:206px; }
+.ak-mini:hover{ transform:scale(1.03); }
+.ak-mini:active{ transform:scale(.98); }
+.ak-mini.done{ color:var(--ak-ok); border-color:rgba(109,211,150,.4); }
+.ak-mini.error{ color:var(--ak-err); border-color:rgba(249,112,102,.4); }
 .ak-mini-glyph{
-  font-size:24px; line-height:1;
+  flex:none; font-size:15px; line-height:1;
   filter:drop-shadow(0 0 6px rgba(255,184,107,.5));
   animation:ak-breathe 3.4s ease-in-out infinite;
 }
 @keyframes ak-breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.09); } }
+.ak-mini-copy{
+  flex:1; min-width:0; text-align:left;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:var(--ak-mono); font-size:11.5px; line-height:1; letter-spacing:.015em;
+}
+.ak-mini-arrow{ flex:none; color:var(--ak-amber); opacity:.75; }
 
-/* ---- pill surface (streaming / done / error / login) ---- */
+/* ---- pill: the same corner box, swapped in while a job streams ---- */
 .ak-pill{
-  position:absolute; left:0; right:0; bottom:0; max-width:640px; margin-left:auto;
-  min-height:48px; border-radius:8px; padding:8px 12px;
+  width:206px; height:44px; padding:0 11px; margin:0;
+  border-radius:10px;
   display:flex; align-items:center;
   background:rgba(12,11,10,.96);
   border:1px solid #3d372e;
-  box-shadow:0 6px 22px rgba(0,0,0,.5);
+  box-shadow:0 7px 24px rgba(0,0,0,.36);
   backdrop-filter:blur(14px) saturate(140%);
   -webkit-backdrop-filter:blur(14px) saturate(140%);
-  overflow:hidden;
+  overflow:hidden; position:relative; cursor:pointer;
   animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
 }
 @keyframes ak-pop{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
 .ak-pill.thinking{ border-color:rgba(183,148,246,.5); box-shadow:0 8px 30px rgba(149,113,233,.18); }
-.ak-pill.done{ border-color:rgba(109,211,150,.5); background:linear-gradient(135deg, rgba(14,22,16,.96), rgba(18,30,22,.96)); }
-.ak-pill.error{ border-color:rgba(249,112,102,.5); background:linear-gradient(135deg, rgba(26,16,15,.96), rgba(34,18,16,.96)); }
 
 /* shimmer sweep on the streaming pill */
 .ak-shimmer{
@@ -95,7 +103,7 @@ button::-moz-focus-inner{ border:0; }
 @keyframes ak-shimmer{ 100%{ transform:translateX(100%); } }
 
 /* ---- streaming row ---- */
-.ak-stream{ display:flex; align-items:center; gap:10px; width:100%; min-width:0; }
+.ak-stream{ display:flex; align-items:center; gap:8px; width:100%; min-width:0; }
 .ak-spin{
   flex:none; width:16px; height:16px; border-radius:50%;
   border:2px solid var(--ak-ink3); border-top-color:var(--ak-amber);
@@ -104,12 +112,6 @@ button::-moz-focus-inner{ border:0; }
 @keyframes ak-spin{ to{ transform:rotate(360deg); } }
 .ak-timer{ flex:none; font-family:var(--ak-mono); font-size:10.5px; color:var(--ak-ink3); font-variant-numeric:tabular-nums; }
 .ak-qbadge{ flex:none; font-family:var(--ak-mono); font-size:10.5px; color:var(--ak-ink3); }
-.ak-expand{
-  flex:none; width:28px; height:28px; border-radius:8px; border:none; cursor:pointer;
-  background:transparent; color:var(--ak-ink2); font-size:14px;
-  display:flex; align-items:center; justify-content:center;
-}
-.ak-expand:hover{ color:var(--ak-amber); background:rgba(255,184,107,.08); }
 
 /* ---- ticker (ported) ---- */
 .ak-ticker{ position:relative; flex:1; min-width:0; height:16px; overflow:hidden; display:flex; align-items:center; }
@@ -129,15 +131,6 @@ button::-moz-focus-inner{ border:0; }
 .ak-line.tool{ color:var(--ak-amber); }
 .ak-line.assistant{ color:var(--ak-warm); }
 
-/* ---- done / error status ---- */
-.ak-status{ display:flex; align-items:center; gap:10px; width:100%; min-width:0; cursor:pointer; }
-.ak-status .msg{ flex:1; min-width:0; font-size:12.5px; line-height:1.35; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
-.ak-pill.done .msg{ color:var(--ak-ok); }
-.ak-pill.error .msg{ color:var(--ak-err); }
-.ak-status .dot{ flex:none; width:8px; height:8px; border-radius:50%; }
-.ak-pill.done .dot{ background:var(--ak-ok); }
-.ak-pill.error .dot{ background:var(--ak-err); }
-
 /* ---- login (Claude Code prompt sequence: "> email" / "> password") ---- */
 .ak-login{ display:flex; flex-direction:column; width:100%; }
 .ak-login.shake{ animation:ak-shake .4s; }
@@ -155,22 +148,25 @@ button::-moz-focus-inner{ border:0; }
 .ak-login.error .ak-setpw-label{ color:var(--ak-err); }
 .ak-login input{
   flex:1; min-width:0; border:none; outline:none; background:transparent;
-  color:var(--ak-ink); font-family:var(--ak-mono); font-size:16px; line-height:20px;
+  color:var(--ak-ink); font-family:var(--ak-mono); font-size:var(--ak-fs-input); line-height:20px;
   padding:8px 0; caret-color:var(--ak-amber);
 }
 .ak-login input::placeholder{ color:var(--ak-ink3); }
+.ak-login.error input::placeholder{ color:var(--ak-err); } /* the failure message sits here */
 .ak-login input:-webkit-autofill{
   -webkit-text-fill-color:var(--ak-ink);
   -webkit-box-shadow:0 0 0 1000px #0c0b0a inset;
   caret-color:var(--ak-amber);
 }
-.ak-lg-go{ width:32px; height:32px; }
-.ak-lg-back{
-  flex:none; border:none; background:transparent; cursor:pointer;
-  font-family:var(--ak-mono); font-size:11px; color:var(--ak-ink3);
-  padding:4px 2px; transition:color .2s ease;
+.ak-lg-go{ flex:none; width:36px; height:36px; }
+/* Signed out, this wrapper takes the composer's slot in the transcript footer, so
+   it wears the composer's card chrome. */
+.ak-auth-footer{
+  width:100%; box-sizing:border-box;
+  background:rgba(12,11,10,.96);
+  border:1px solid #3d372e; border-radius:8px; padding:4px 10px;
 }
-.ak-lg-back:hover{ color:var(--ak-amber); }
+.ak-ov-foot > .ak-auth-footer{ box-shadow:none; background:transparent; }
 
 /* ---- composer (Claude Code terminal input box) ---- */
 .ak-composer{
@@ -182,7 +178,6 @@ button::-moz-focus-inner{ border:0; }
   -webkit-backdrop-filter:blur(14px) saturate(140%);
   box-shadow:0 6px 22px rgba(0,0,0,.5);
 }
-.ak-bar > .ak-composer{ position:absolute; left:0; right:0; bottom:0; max-width:640px; margin-left:auto; animation:ak-pop .28s cubic-bezier(.2,.7,.2,1); }
 .ak-ov-foot > .ak-composer{ box-shadow:none; background:transparent; }
 .ak-input-row{ display:flex; align-items:flex-end; gap:2px; }
 .ak-ta-wrap{ position:relative; flex:1; min-width:0; display:flex; }
@@ -190,7 +185,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-ta{
   flex:1; min-width:0; border:none; outline:none; resize:none; background:transparent;
   display:block; box-sizing:border-box; height:36px; min-height:36px;
-  color:var(--ak-ink); font-family:var(--ak-mono); font-size:16px; line-height:20px;
+  color:var(--ak-ink); font-family:var(--ak-mono); font-size:var(--ak-fs-input); line-height:20px;
   max-height:88px; padding:8px 4px; overflow-y:auto;
 }
 .ak-ta::placeholder{ color:var(--ak-ink3); }
@@ -208,33 +203,8 @@ button::-moz-focus-inner{ border:0; }
 .ak-send:hover{ background:rgba(255,184,107,.1); }
 .ak-send:disabled{ background:transparent; color:var(--ak-ink3); }
 
-/* Signed-out AgentKeyboard.com tour: the bar becomes one clear invitation.
-   It is only reachable when the embed opts into data-guest-demo. */
-.ak-composer.guest-demo{
-  min-height:48px; padding:3px 7px;
-}
-.ak-composer.guest-expanded{ display:none; }
-.ak-guest-cta{
-  width:100%; min-height:40px; padding:2px 5px; border:0; border-radius:6px;
-  background:transparent; color:var(--ak-ink); cursor:pointer;
-  display:flex; align-items:center; gap:10px; text-align:left;
-}
-.ak-guest-cta:hover{ background:rgba(255,184,107,.07); }
-.ak-guest-cta:active{ background:rgba(255,184,107,.11); }
-.ak-guest-cta:focus-visible, .ak-opt:focus-visible, .ak-menu-item:focus-visible{
+.ak-opt:focus-visible, .ak-menu-item:focus-visible{
   outline:1px solid rgba(255,184,107,.72); outline-offset:2px;
-}
-.ak-guest-star{
-  flex:none; width:20px; text-align:center; color:var(--ak-amber); font-size:18px;
-  animation:ak-star 1.2s ease-in-out infinite;
-}
-.ak-guest-copy{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
-.ak-guest-copy strong{ font-size:13px; line-height:1.3; font-weight:500; color:var(--ak-warm); }
-.ak-guest-copy small{ font-size:10.5px; line-height:1.3; color:var(--ak-ink3); }
-.ak-guest-cta svg{ flex:none; color:var(--ak-amber); }
-@keyframes ak-guest-nudge{
-  0%,70%,100%{ transform:translateX(0); }
-  35%{ transform:translateX(4px); }
 }
 
 /* mic states */
@@ -282,12 +252,28 @@ button::-moz-focus-inner{ border:0; }
 }
 
 /* ---- chat overlay (Claude Code terminal transcript) ---- */
+/* Opening is now the only way in, so it gets a real transition: the panel slides
+   up, unblurs and settles. --ak-dismiss-* are written by the pull-down gesture and
+   ride the same two properties, so the drag and the animation never fight. */
 .ak-overlay{
   position:fixed; inset:0; z-index:1; background:var(--ak-bg); color:var(--ak-ink);
   display:flex; flex-direction:column; height:100vh; height:100dvh;
-  animation:ak-fade .2s ease;
+  transform:translateY(var(--panel-translate-y)); opacity:0; filter:blur(var(--panel-blur));
+  pointer-events:none; will-change:transform,opacity;
+  transition:
+    transform var(--panel-close-dur) var(--panel-ease),
+    opacity var(--panel-close-dur) ease,
+    filter var(--panel-close-dur) ease;
 }
-@keyframes ak-fade{ from{ opacity:0; } to{ opacity:1; } }
+.ak-overlay[data-open="true"]{
+  transform:translateY(var(--ak-dismiss-y,0px)); opacity:var(--ak-dismiss-opacity,1); filter:blur(0);
+  pointer-events:auto;
+  transition:
+    transform var(--panel-open-dur) var(--panel-ease),
+    opacity var(--panel-open-dur) ease,
+    filter var(--panel-open-dur) ease;
+}
+.ak-overlay.ak-dragging{ transition:none !important; } /* track the finger, don't chase it */
 .ak-ov-close, .ak-ov-settings{
   /* pinned to the VISIBLE top corners: --ak-vvt tracks how far iOS scrolled the
      visual viewport down when the keyboard opened. A semi-translucent dark disc
@@ -455,20 +441,27 @@ button::-moz-focus-inner{ border:0; }
   padding:7px 12px; cursor:pointer;
   transition:color .16s ease, background .16s ease, border-color .16s ease;
 }
-.ak-opt:hover{ color:var(--ak-amber); border-color:var(--ak-amber); background:rgba(255,184,107,.12); }
-.ak-opt:active{ transform:translateY(1px); }
+.ak-opt:hover:not(:disabled){ color:var(--ak-amber); border-color:var(--ak-amber); background:rgba(255,184,107,.12); }
+.ak-opt:active:not(:disabled){ transform:translateY(1px); }
+/* An answered turn's options are spent: the one you took stays lit, the rest fade.
+   Tapping any of them again in scrollback must not re-send. */
+.ak-opt:disabled{ cursor:default; opacity:.42; }
+.ak-opt.selected:disabled{
+  opacity:1; color:var(--ak-amber);
+  border-color:rgba(255,184,107,.68); background:rgba(255,184,107,.13);
+}
 
 @media (pointer:coarse){
   .ak-opt{ min-height:44px; padding:10px 12px; }
   .ak-menu-item{ min-height:44px; }
-  .ak-guest-cta{ min-height:44px; }
-  .ak-guest-cta svg{ animation:ak-guest-nudge 1.35s cubic-bezier(.25,1,.5,1) infinite; }
 }
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
-  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph, .ak-guest-star, .ak-guest-cta svg{ animation:none !important; }
+  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
-  .ak-zone{ transition:none !important; }
+  /* Zero durations make the panel cut instead of slide, and setPanelOpen reads
+     --panel-close-dur back, so it also stops deferring the display:none. */
+  :host{ --panel-open-dur:0ms; --panel-close-dur:0ms; --panel-translate-y:0px; --panel-blur:0px; }
 }
 `

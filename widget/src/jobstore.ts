@@ -841,8 +841,12 @@ export function start(input: {
       if (jobId) {
         onDisconnect(gen) // network blip after the job started → reconnect
       } else {
-        // POST may have reached the server, so the outbox entry stays and a
-        // reload recovers the send either way.
+        // A 4xx is the server's final answer — the send is never going to work, so
+        // drop it. Leaving it in the outbox meant a rejected message replayed (and
+        // re-failed) on every single reload, forever. A 5xx or a network drop is
+        // ambiguous: the POST may have landed, so that entry stays for recovery.
+        const status = (e as { status?: number } | null)?.status
+        if (typeof status === 'number' && status >= 400 && status < 500) outboxRemove(activeIdemKey)
         const message = errMsg(e)
         if (prompt || activeThumbs?.length || activeFiles?.length) {
           liveTurns.push({ role: 'user', text: prompt, thumbs: activeThumbs, files: activeFiles })
@@ -858,7 +862,10 @@ export function start(input: {
 
 function errMsg(e: unknown): string {
   const m = e instanceof Error ? e.message : String(e)
-  return m || 'Could not reach the server.'
+  // "/jobs/x/stream -> 502" is readSse's last-resort label when the server sent no
+  // {error} of its own. It's plumbing, not an explanation — don't show it to anyone.
+  if (!m || /^\/\S* -> \d+$/.test(m)) return 'Could not reach the server.'
+  return m
 }
 
 /** Re-send any persisted outbox entries, oldest first. The in-flight entry (if

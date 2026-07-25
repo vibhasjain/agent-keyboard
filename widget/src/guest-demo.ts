@@ -159,6 +159,11 @@ export function chooseGuestDemo(label: string): void {
   running = true
   const run = ++generation
   const startedAt = Date.now()
+  // The tour shows a natural prompt where a real user would have typed one, so the
+  // user turn does NOT carry the label that was tapped. Record it on the message
+  // that offered the choice, or the transcript can't tell which chip won.
+  const asked = [...messages].reverse().find((m) => m.role === 'assistant')
+  if (asked) asked.chosenOption = label
   messages.push({
     id: id(),
     role: 'user',

@@ -187,6 +187,8 @@ const server = createServer(async (req, res) => {
     try {
       let html = await readFile(join(ROOT, 'dev/index.html'), 'utf8')
       html = html.replace('data-api="http://localhost:8098"', `data-api="http://localhost:${PORT}"`)
+      // ?guest arms the signed-out scripted tour without a second host page.
+      if (u.searchParams.has('guest')) html = html.replace('data-site="halo"', 'data-site="halo" data-guest-demo')
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
       res.end(html)
     } catch {
@@ -200,6 +202,8 @@ const server = createServer(async (req, res) => {
     res.end()
     return
   }
+  // The tour script the widget fetches from its own origin (lives with the site).
+  if (p === '/agent-keyboard-demo.json') return serveStatic(res, '../site/agent-keyboard-demo.json', 'application/json')
   if (p === '/widget.js') return serveStatic(res, 'dist/widget.js', 'text/javascript; charset=utf-8')
   if (p === '/widget.js.map') return serveStatic(res, 'dist/widget.js.map', 'application/json')
   if (p === '/demo.js') return serveStatic(res, 'dist/demo.js', 'text/javascript; charset=utf-8')

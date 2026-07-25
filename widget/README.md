@@ -1,11 +1,18 @@
 # Agent Keyboard widget
 
 The embeddable prompt bar. A single self-contained IIFE that mounts a Shadow-DOM-isolated bar on any
-page: a slim composer that streams the agent's progress in a pill, expands into a full terminal-style
-transcript, and re-attaches to running jobs after a reload.
+page, with **two surfaces and no others**: a small status rectangle parked in the bottom-right corner,
+and the full terminal-style transcript you get by clicking it. It re-attaches to running jobs after a
+reload.
+
+The rectangle carries one line — `Log in` signed out, `Ask for a change` idle, and while a job runs it
+becomes the streaming pill (ticker + timer + `+N` queue badge), then the summary or the error. The
+transcript owns everything else: the scripted tour or the real conversation in the body, and in the
+footer exactly one of the composer (signed in), the login form (signed out), or the set-a-password
+form (arriving from an invite link).
 
 - **Zero runtime dependencies.** TypeScript → one `dist/widget.js` via esbuild.
-- **~21 KB gzip.** The whole bar — styles, auth, SSE reader, photo upload, voice — ships in that.
+- **~27 KB gzip.** The whole bar — styles, auth, SSE reader, photo upload, voice — ships in that.
 - **Shadow-DOM isolated.** Styles are scoped to a shadow root, so the host page can't leak in and the
   bar can't leak out.
 

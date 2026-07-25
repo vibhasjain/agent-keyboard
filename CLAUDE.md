@@ -112,7 +112,8 @@ done = green, error = `#f97066` (red, outside the palette, used sparingly).
 breathing animation — and favicon.svg). This is a deliberate exception to the no-emoji UI rule: it is
 the brand, chosen on purpose (owner decision 2026-07-02); the rule still bans emoji-set codepoints as
 functional UI glyphs. The retired amber orb should not come back. The widget's persistent surface is
-the slim **bar**, which streams in a pill with a live status **ticker**.
+the corner **rectangle**, which carries one line of status and becomes the streaming pill (with the
+live **ticker**) while a job runs.
 
 ### Typography
 - **Instrument Serif** — display / wordmark / italic accents.
@@ -127,7 +128,11 @@ the slim **bar**, which streams in a pill with a live status **ticker**.
 ---
 
 ## Terminology
-- **Bar** — the widget's persistent surface (slim composer); streams in a **pill**, expands to the full transcript. The brand mark is the ⌨️ keyboard emoji (the old amber orb is retired).
+- **Bar** — the widget as a whole. It has exactly **two surfaces**: the **rectangle** (the resting
+  bottom-right corner box carrying one status line; it becomes the streaming **pill** while a job
+  runs) and the **transcript** (the full-screen panel you get by clicking it — tour or conversation in
+  the body, composer or login form in the footer). Nothing else. The brand mark is the ⌨️ keyboard
+  emoji (the old amber orb is retired).
 - **Ticker** — single-line status text: syncing → thinking → editing → the streamed reply.
 - **Site** — an allow-listed repo/domain the bar can edit (an entry in the `SITES` env var).
 - **Fire-and-forget** — the job survives the browser closing; the bar re-attaches on return.

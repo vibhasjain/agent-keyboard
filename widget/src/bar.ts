@@ -1,16 +1,18 @@
-// The floating bar: appearance = f(ui, job). Owns the orb, the pill (streaming /
-// done / error / login), and the single reparentable composer node. Subscribes to
-// the store and reconciles the DOM on every change.
+// The floating bar: appearance = f(ui, job). TWO surfaces, ever — a small status
+// rectangle parked in the bottom-right corner, and the full-screen transcript you
+// get by clicking it. done / error / signing-out are lines of text inside the
+// rectangle; login and the invite form are footer swaps inside the transcript.
+// Owns the rectangle, the streaming pill that replaces it in place, and the single
+// reparentable composer / auth nodes. Reconciles the DOM on every store change.
 
 import { getPendingInvite, login, setPasswordWithToken } from './auth'
 import { lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
-import { isGuestDemo } from './guest-demo'
 import { makePhotos, type Photos } from './photos'
-import { getState, patchUi, subscribe, type UiMode } from './state'
+import { getState, patchUi, subscribe } from './state'
 import * as stopPhrase from './stopphrase'
-import { makeTicker, type Ticker } from './ticker'
+import { makeTicker, thinkingWord, type Ticker } from './ticker'
 import { makeVoice, type VoiceController } from './voice'
 import { trackKeyboard } from './viewport'
 import { mountChat, type Chat } from './chat'
@@ -22,31 +24,22 @@ function mmss(ms: number): string {
   return `${m}:${r < 10 ? '0' : ''}${r}`
 }
 
-type View = 'mini' | 'stream' | 'done' | 'error' | 'login' | 'setpw' | 'composing' | 'expanded' | 'signout'
+type View = 'mini' | 'stream' | 'expanded'
 
+// `stream` is not a third surface: it's the same corner box as `mini`, swapped for
+// the pill so the ticker, timer and +N badge get their own row. Everything else
+// that used to be a view is now text inside the rectangle.
 function computeView(): View {
   const { ui, job } = getState()
-  if (ui.signingOut) return 'signout' // logging out — overrides everything (incl. a running job)
-  if (ui.mode === 'setpw') return 'setpw' // invite landing wins over everything
   if (ui.mode === 'expanded') return 'expanded'
-  // An explicit minimize wins, even mid-job — so swiping the bar away while it's
-  // thinking actually collapses to the ⌨️ corner (the job keeps running). A
-  // re-attached job on reload surfaces the pill by setting mode=collapsed in
-  // bootRehydrate, not by overriding an explicit mini here.
-  if (ui.mode === 'mini') return 'mini' // smallest resting state: just the corner ⌨️
-  // Active dictation takes precedence over the thinking pill — you're crafting a
-  // prompt, so the composer stays up (and the mic keeps recording) even while a
-  // job runs. It falls back to the pill once dictation ends.
-  if (ui.voice === 'live' || ui.voice === 'connecting') return 'composing'
+  // An explicit minimize wins, even mid-job — the rectangle still carries the
+  // streamed line, and the job keeps running. A re-attached job on reload surfaces
+  // the pill by setting mode=collapsed in bootRehydrate, not by overriding mini.
+  if (ui.mode === 'mini') return 'mini'
   // An idle streaming session (open between turns, awaiting a follow-up) rests as
-  // the plain composer — no spinner/timer pill. Active work still shows the pill.
+  // the plain rectangle — no spinner/timer pill. Active work still shows the pill.
   if ((job.phase === 'streaming' && !job.idle) || job.phase === 'sending') return 'stream'
-  // composing/login win over the resting done/error row so tapping it to reply works
-  if (ui.mode === 'login') return 'login'
-  if (ui.mode === 'composing') return 'composing'
-  if (job.phase === 'done') return 'done'
-  if (job.phase === 'error') return 'error'
-  return 'composing' // no orb — the input bar is the resting state
+  return 'mini'
 }
 
 // -- composer ------------------------------------------------------------------
@@ -59,28 +52,12 @@ interface Composer {
   flashConfirm: (text: string) => void
   reset: () => void
   teardownVoice: () => void
-  setGuestDemo: (on: boolean, expanded: boolean) => void
 }
 
 function makeComposer(): Composer {
   const root = el('div', 'ak-composer')
   const photos: Photos = makePhotos(() => syncSend())
   const note = el('div', 'ak-note')
-
-  const guestCta = el('button', 'ak-guest-cta', (n) => {
-    n.type = 'button'
-    n.setAttribute('aria-label', 'Try the scripted Agent Keyboard demo')
-    n.append(
-      el('span', 'ak-guest-star', (s) => (s.textContent = '✻')),
-      el('span', 'ak-guest-copy', (copy) => {
-        copy.append(
-          el('strong', undefined, (s) => (s.textContent = 'Try me')),
-          el('small', undefined, (s) => (s.textContent = 'See Agent Keyboard work')),
-        )
-      }),
-      icon('arrow-right', 16),
-    )
-  })
 
   const row = el('div', 'ak-input-row')
   const cam = el('button', 'ak-icon-btn', (n) => {
@@ -112,9 +89,8 @@ function makeComposer(): Composer {
   })
   taWrap.append(ta)
   row.append(taWrap, cam, attach, mic, sendBtn)
-  root.append(photos.el, row, note, guestCta)
+  root.append(photos.el, row, note)
   show(note, false)
-  show(guestCta, false)
 
   // -- voice / dictation --
   let baseText = ''
@@ -284,7 +260,6 @@ function makeComposer(): Composer {
     blurButton(sendBtn)
     doSend()
   })
-  on(guestCta, 'click', () => patchUi({ mode: 'expanded' }))
   on(root, 'keydown', (e) => {
     const ke = e as KeyboardEvent
     if (ke.key !== 'Enter' || ke.shiftKey || ke.metaKey || ke.ctrlKey || ke.altKey || ke.isComposing) return
@@ -411,14 +386,6 @@ function makeComposer(): Composer {
     },
     reset,
     teardownVoice: () => voice.teardown(),
-    setGuestDemo: (on, expanded) => {
-      show(photos.el, !on)
-      show(row, !on)
-      if (on) show(note, false)
-      show(guestCta, on && !expanded)
-      root.classList.toggle('guest-demo', on)
-      root.classList.toggle('guest-expanded', on && expanded)
-    },
   }
 }
 
@@ -428,41 +395,37 @@ export function mountBar(shadow: ShadowRoot): void {
   const bar = el('div', 'ak-bar')
   const stash = el('div', 'ak-stash')
 
-  // Smallest resting state: a round ⌨️ button parked bottom-right. Click (or the
-  // tilde shortcut) opens the full bar. The ⌨️ is the brand mark (allowed exception).
+  // The resting surface: a small rectangle parked bottom-right carrying one line of
+  // status — "Log in" signed out, "Ask for a change" idle, the job's own summary or
+  // error once it finishes. Click (or the tilde shortcut) opens the transcript. The
+  // ⌨️ is the brand mark (the documented emoji exception).
   const miniBtn = el('button', 'ak-mini', (n) => {
     n.type = 'button'
     n.setAttribute('aria-label', 'Open Agent Keyboard')
-    n.appendChild(el('span', 'ak-mini-glyph', (g) => (g.textContent = '⌨️')))
   })
+  const miniGlyph = el('span', 'ak-mini-glyph', (n) => {
+    n.textContent = '⌨️'
+    n.setAttribute('aria-hidden', 'true')
+  })
+  const miniCopy = el('span', 'ak-mini-copy')
+  const miniArrow = icon('arrow-right', 15)
+  miniArrow.classList.add('ak-mini-arrow')
+  miniBtn.append(miniGlyph, miniCopy, miniArrow)
 
-
-  // pill + its persistent rows (kept alive so the ticker animation survives updates)
-  const pill = el('div', 'ak-pill')
+  // pill: the same corner box as the rectangle, swapped in while a job streams so
+  // the ticker/timer/+N badge get a row of their own. Rows are kept alive so the
+  // ticker animation survives updates. Clicking anywhere on it opens the transcript.
+  const pill = el('button', 'ak-pill', (n) => {
+    n.type = 'button'
+    n.setAttribute('aria-label', 'Open Agent Keyboard')
+  })
   const shimmer = el('div', 'ak-shimmer')
   const streamRow = el('div', 'ak-stream')
   const spin = el('div', 'ak-spin')
   const tickerBox = el('div', 'ak-ticker')
   const timer = el('div', 'ak-timer')
   const queueBadge = el('div', 'ak-qbadge') // "+N" queued sends
-  const expandBtn = el('button', 'ak-expand', (n) => {
-    n.type = 'button'
-    n.appendChild(icon('expand', 15))
-    n.setAttribute('aria-label', 'Expand chat')
-  })
-  streamRow.append(spin, tickerBox, timer, queueBadge, expandBtn)
-
-  const statusRow = el('div', 'ak-status')
-  const statusDot = el('div', 'dot')
-  const statusMsg = el('div', 'msg')
-  // Corner status action: success lets you talk some more; errors only expand
-  // to the transcript so the failure can be inspected in context.
-  const statusAction = el('button', 'ak-expand', (n) => {
-    n.type = 'button'
-    n.appendChild(icon('chat', 15))
-    n.setAttribute('aria-label', 'Reply')
-  })
-  statusRow.append(statusDot, statusMsg, statusAction)
+  streamRow.append(spin, tickerBox, timer, queueBadge)
 
   // Login styled as a Claude Code prompt sequence: "> email" / "> password",
   // chromeless mono inputs, dim marks that go amber on focus, hairline between.
@@ -484,16 +447,9 @@ export function mountBar(shadow: ShadowRoot): void {
     n.appendChild(icon('arrow-right', 15))
     n.setAttribute('aria-label', 'Sign in')
   })
-  // Dismiss the login form back to the empty composer — so a signed-out user is
-  // never trapped in the sign-in fields (the bar auto-focuses on open).
-  const loginBack = el('button', 'ak-lg-back', (n) => {
-    n.type = 'button'
-    n.textContent = '← back'
-    n.setAttribute('aria-label', 'Back')
-  })
   const lgMark = () => el('span', 'ak-lg-mark', (n) => (n.textContent = '>'))
   loginRow.append(
-    el('div', 'ak-lg-row', (n) => n.append(lgMark(), emailInput, loginBack)),
+    el('div', 'ak-lg-row', (n) => n.append(lgMark(), emailInput)),
     el('div', 'ak-lg-rule'),
     el('div', 'ak-lg-row', (n) => n.append(lgMark(), pwInput, goBtn)),
   )
@@ -520,46 +476,33 @@ export function mountBar(shadow: ShadowRoot): void {
     el('div', 'ak-lg-row', (n) => n.append(lgMark(), setpwInput, setpwGo)),
   )
 
-  pill.append(shimmer, streamRow, statusRow, loginRow, setpwRow)
+  // Signed-out auth lives in the transcript footer, not in the corner box — the
+  // scripted tour reads above it and the form stays put instead of being a surface
+  // you have to find. The wrappers give each form the same card chrome the composer
+  // has in that slot.
+  const loginFooter = el('div', 'ak-auth-footer', (n) => n.appendChild(loginRow))
+  const setpwFooter = el('div', 'ak-auth-footer', (n) => n.appendChild(setpwRow))
+
+  pill.append(shimmer, streamRow)
   bar.append(pill)
   zone.append(miniBtn, bar, stash)
   shadow.appendChild(zone)
 
   const composer = makeComposer()
-  stash.appendChild(composer.el)
+  stash.append(composer.el, loginFooter, setpwFooter)
 
-  // Expand is reachable while composing too (hidden once already expanded).
-  const composerExpand = el('button', 'ak-icon-btn', (n) => {
-    n.type = 'button'
-    n.appendChild(icon('expand', 15))
-    n.setAttribute('aria-label', 'Expand chat')
-  })
-  // Far LEFT, before the text — at the right edge it kept getting confused
-  // with the send arrow.
-  composer.el.querySelector('.ak-input-row')?.prepend(composerExpand)
+  // Back to the corner. A hidden-but-focused composer keeps :host(.ak-kbd) on after
+  // the transcript closes, which strands the rectangle mid-screen — release focus
+  // first. `collapsed` (rather than `mini`) lets a running job keep the pill.
+  const collapseToCorner = () => {
+    ;(shadow.activeElement as HTMLElement | null)?.blur?.()
+    const { phase } = getState().job
+    patchUi({ mode: phase === 'streaming' || phase === 'sending' ? 'collapsed' : 'mini' })
+  }
 
-  const chat: Chat = mountChat(shadow, {
-    composerEl: composer.el,
-    collapse: () => patchUi({ mode: composer.hasContent() ? 'composing' : 'collapsed' }),
-  })
+  const chat: Chat = mountChat(shadow, { composerEl: composer.el, collapse: collapseToCorner })
 
   const ticker: Ticker = makeTicker(tickerBox)
-
-  // -- auth gate --
-  // The input bar is always visible; the first focus while signed out swaps it
-  // for the login form instead of letting the user type into nothing. Pressing
-  // "back" dismisses it — a brief window then keeps the empty composer put so the
-  // dismiss doesn't immediately bounce back into login.
-  let lastLoginDismiss = 0
-  on(composer.el, 'focusin', () => {
-    if (isGuestDemo()) return
-    if (Date.now() - lastLoginDismiss < 600) return
-    if (getState().auth !== 'authed' && getState().ui.mode !== 'login') {
-      patchUi({ mode: 'login' })
-      setTimeout(() => emailInput.focus(), 60)
-      armLoginIdle()
-    }
-  })
 
   // -- login --
   // Enter on the email line advances to the password line (prompt-sequence feel)
@@ -570,7 +513,10 @@ export function mountBar(shadow: ShadowRoot): void {
       pwInput.focus()
     }
   })
-  on(loginRow, 'input', () => loginRow.classList.remove('error'))
+  on(loginRow, 'input', () => {
+    loginRow.classList.remove('error')
+    pwInput.placeholder = 'password' // clear a failure message left in its place
+  })
   let loggingIn = false
 
   // Keyboard avoidance for the login fields — same trackKeyboard() the composer
@@ -589,36 +535,10 @@ export function mountBar(shadow: ShadowRoot): void {
     }, 0)
   })
 
-  // An untouched login form folds back into the plain bar after a while —
-  // opening it was often an accidental focus, and the fields keep their values
-  // for next time either way. Any interaction restarts the clock.
-  const LOGIN_IDLE_MS = 12_000
-  let loginIdle: ReturnType<typeof setTimeout> | null = null
-  const disarmLoginIdle = () => {
-    if (loginIdle != null) {
-      clearTimeout(loginIdle)
-      loginIdle = null
-    }
-  }
-  const armLoginIdle = () => {
-    disarmLoginIdle()
-    loginIdle = setTimeout(() => {
-      loginIdle = null
-      if (getState().ui.mode === 'login' && !loggingIn) patchUi({ mode: 'collapsed' })
-    }, LOGIN_IDLE_MS)
-  }
-  for (const ev of ['input', 'keydown', 'pointerdown', 'focusin']) on(loginRow, ev, armLoginIdle)
-  on(loginBack, 'click', () => {
-    disarmLoginIdle()
-    lastLoginDismiss = Date.now()
-    ;(shadow.activeElement as HTMLElement | null)?.blur?.() // drop the keyboard, don't refocus into the gate
-    patchUi({ mode: 'composing' })
-  })
   on(loginRow, 'submit', async (e) => {
     e.preventDefault()
     if (loggingIn) return
     loggingIn = true
-    disarmLoginIdle()
     goBtn.disabled = true
     clearNode(goBtn)
     goBtn.appendChild(el('div', 'ak-spin')) // signing-in spinner (was just a silent disable)
@@ -626,14 +546,17 @@ export function mountBar(shadow: ShadowRoot): void {
       await login(emailInput.value.trim(), pwInput.value)
       pwInput.value = ''
       chat.resetConversation() // drop stale/empty history so it reloads authed — no manual refresh
-      patchUi({ mode: 'composing' }) // straight into the prompt box — no refresh needed
-      setTimeout(() => composer.focus(), 60)
+      // Still expanded: render() swaps the footer from this form to the composer.
       composer.flashConfirm('Logged in ✓') // brief amber confirmation in the prompt placeholder
-    } catch {
+    } catch (err) {
+      // Say what actually went wrong. "Invalid login credentials" and "Email not
+      // confirmed" are different problems and a bare shake told you neither — the
+      // password is cleared anyway on a failed attempt, so its placeholder is free.
+      pwInput.value = ''
+      pwInput.placeholder = err instanceof Error ? err.message : 'could not sign in'
       loginRow.classList.remove('shake')
       void loginRow.offsetWidth
       loginRow.classList.add('shake', 'error')
-      armLoginIdle()
     } finally {
       loggingIn = false
       goBtn.disabled = false
@@ -660,8 +583,7 @@ export function mountBar(shadow: ShadowRoot): void {
     try {
       await setPasswordWithToken(setpwInput.value)
       setpwInput.value = ''
-      patchUi({ mode: 'composing' })
-      setTimeout(() => composer.focus(), 60)
+      // Authed now — render() swaps the footer from this form to the composer.
     } catch (err) {
       setpwRow.classList.remove('shake')
       void setpwRow.offsetWidth
@@ -673,34 +595,10 @@ export function mountBar(shadow: ShadowRoot): void {
     }
   })
 
-  // -- expand / collapse (chat is reachable from every state) --
-  on(expandBtn, 'click', () => patchUi({ mode: 'expanded' }))
-  on(composerExpand, 'click', () => patchUi({ mode: 'expanded' }))
-  const setStatusAction = (kind: 'reply' | 'expand') => {
-    clearNode(statusAction)
-    statusAction.appendChild(icon(kind === 'expand' ? 'expand' : 'chat', 15))
-    statusAction.setAttribute('aria-label', kind === 'expand' ? 'Expand chat' : 'Reply')
-  }
-  on(statusAction, 'click', (e) => {
-    e.stopPropagation()
-    if (getState().job.phase === 'error') {
-      patchUi({ mode: 'expanded' })
-      return
-    }
-    patchUi({ mode: 'composing' })
-    setTimeout(() => composer.focus(), 60)
-  })
-  // Tapping a SUCCESS row opens the full chat (read the change in context);
-  // tapping an ERROR row does the same so you can inspect what happened.
-  on(statusRow, 'click', () => {
-    if (getState().ui.mode === 'expanded') return
-    if (getState().job.phase === 'done' || getState().job.phase === 'error') {
-      patchUi({ mode: 'expanded' })
-      return
-    }
-    patchUi({ mode: 'composing' })
-    setTimeout(() => composer.focus(), 60)
-  })
+  // -- expand / collapse --
+  // Both corner surfaces do the same single thing: open the transcript.
+  const enterExpanded = () => patchUi({ mode: 'expanded' })
+  on(pill, 'click', enterExpanded)
 
   // -- streaming timer --
   let timerId: ReturnType<typeof setInterval> | null = null
@@ -714,58 +612,35 @@ export function mountBar(shadow: ShadowRoot): void {
     const j = getState().job
     if (j.phase !== 'streaming' && j.phase !== 'sending') return
     timer.textContent = mmss(Date.now() - j.startedAt)
+    // Turn the filler word over on the same beat, while the agent has yet to say
+    // anything of its own. render() only runs on state changes, so it can't.
+    if (j.phase === 'streaming' && !j.line && !j.disconnected) ticker.set(thinkingWord(j.startedAt), 'thinking')
   }
 
-  // -- composer placement (single owner, focus-preserving) --
-  const placeComposer = (view: View) => {
-    const target = view === 'composing' ? bar : view === 'expanded' ? chat.footerEl : stash
-    if (composer.el.parentNode !== target) {
-      const wasFocused = shadow.activeElement && composer.el.contains(shadow.activeElement)
-      target.appendChild(composer.el)
-      if (wasFocused) composer.focus()
+  // -- footer placement (single owner, focus-preserving) --
+  // Exactly one control occupies the transcript footer; the other two stay alive in
+  // the hidden stash so autofill, a half-typed draft and iOS focus all survive the
+  // swap. Signed out you get the login form (or the invite form on an invite
+  // landing); signed in, the composer.
+  const footerControl = (): HTMLElement => {
+    if (getState().auth === 'authed') return composer.el
+    return getPendingInvite() ? setpwFooter : loginFooter
+  }
+  const placeFooter = (view: View) => {
+    const active = view === 'expanded' ? footerControl() : null
+    for (const node of [composer.el, loginFooter, setpwFooter]) {
+      const target = node === active ? chat.footerEl : stash
+      if (node.parentNode === target) continue
+      const wasFocused = !!shadow.activeElement && node.contains(shadow.activeElement)
+      target.appendChild(node)
+      if (wasFocused && node === composer.el) composer.focus()
     }
   }
 
-  // -- blur-to-collapse for composing --
-  // iOS Safari doesn't focus buttons on tap, so a tap on cam/mic/send blurs the
-  // textarea with focus going nowhere — guard against collapsing mid-interaction.
-  let lastComposerPointer = 0
-  on(composer.el, 'pointerdown', () => (lastComposerPointer = Date.now()), true)
-  on(bar, 'focusout', () => {
-    if (getState().ui.mode !== 'composing') return
-    setTimeout(() => {
-      if (getState().ui.mode !== 'composing') return
-      if (Date.now() - lastComposerPointer < 400) return
-      const active = shadow.activeElement
-      const inside = active && composer.el.contains(active)
-      if (!inside && !composer.hasContent() && getState().ui.voice === 'idle') patchUi({ mode: 'collapsed' })
-    }, 160)
-  })
-
-  // Touch devices pop an on-screen keyboard on focus, so we only auto-focus the
-  // prompter when opening the bar on a precise-pointer (desktop) device.
-  const isTouch = () => {
-    try {
-      return matchMedia('(pointer: coarse)').matches
-    } catch {
-      return false
-    }
-  }
-  // Open the bar from the minimized corner; on desktop, drop the cursor straight
-  // into the prompter so you can just start typing.
-  const openBar = () => {
-    patchUi({ mode: 'collapsed' })
-    if (!isTouch()) setTimeout(() => composer.focus(), 60)
-  }
-
-  // -- three-state cycle (mini → bar → expanded → mini) --
-  // Bound to the tilde key and reused by the mini button. Any non-mini/expanded
-  // mode counts as "the bar", so composing/login/done all advance to expanded.
+  // -- two-state toggle (rectangle ⇄ transcript) --
   const cycleState = () => {
-    const m = getState().ui.mode
-    if (m === 'mini') return openBar()
-    const next: UiMode = m === 'expanded' ? 'mini' : 'expanded'
-    patchUi({ mode: next })
+    if (getState().ui.mode === 'expanded') collapseToCorner()
+    else enterExpanded()
   }
 
   // Tilde toggles the states, Quake-console style. It's a typable character, so
@@ -782,106 +657,55 @@ export function mountBar(shadow: ShadowRoot): void {
     cycleState()
   })
 
-  on(miniBtn, 'click', openBar)
+  on(miniBtn, 'click', enterExpanded)
 
   // Host pages can open the full experience without reaching into the Shadow
   // DOM. AgentKeyboard.com's hero uses this for its Interactive demo CTA.
-  on(document, 'agent-keyboard:open', () => patchUi({ mode: 'expanded' }))
+  on(document, 'agent-keyboard:open', enterExpanded)
 
-  // -- swipe the bar right to minimize (touch) --
-  // A clear rightward swipe on the bar folds it back to the corner. Only from a
-  // middle state (not mini/expanded), and only when the drag is decisively
-  // horizontal, so it never fights vertical scrolling or a tap on a control.
-  let swX = 0, swY = 0, swiping = false
-  on(bar, 'touchstart', (e) => {
-    const t = (e as TouchEvent).touches[0]
-    const m = getState().ui.mode
-    if (!t || m === 'mini' || m === 'expanded') { swiping = false; return }
-    swX = t.clientX; swY = t.clientY; swiping = true
-  }, { passive: true })
-  on(bar, 'touchmove', (e) => {
-    if (!swiping) return
-    const t = (e as TouchEvent).touches[0]
-    if (!t) return
-    const dx = t.clientX - swX, dy = t.clientY - swY
-    if (dx >= 70 && Math.abs(dx) > Math.abs(dy) * 1.8) {
-      swiping = false
-      const ae = shadow.activeElement as HTMLElement | null
-      ae?.blur?.() // drop the keyboard as we collapse
-      patchUi({ mode: 'mini' })
-    }
-  }, { passive: true })
-  const endSwipe = () => { swiping = false }
-  on(bar, 'touchend', endSwipe, { passive: true })
-  on(bar, 'touchcancel', endSwipe, { passive: true })
-
-  // -- idle auto-collapse to the corner --
-  // If it's been open and untouched for a while, fold back to the smallest state.
-  // Never while working (a job is in flight), dictating, or with a draft in hand.
-  const IDLE_MS = 60_000
-  let idleTimer: ReturnType<typeof setTimeout> | null = null
-  const canIdle = () => {
-    const s = getState()
-    return (
-      !isGuestDemo() &&
-      s.ui.mode !== 'mini' &&
-      s.job.phase !== 'streaming' &&
-      s.job.phase !== 'sending' &&
-      s.ui.voice === 'idle' &&
-      !composer.hasContent()
-    )
-  }
-  const armIdle = () => {
-    if (idleTimer != null) clearTimeout(idleTimer)
-    idleTimer = null
-    if (!canIdle()) return
-    idleTimer = setTimeout(() => {
-      idleTimer = null
-      if (canIdle()) patchUi({ mode: 'mini' })
-    }, IDLE_MS)
-  }
-  // Any interaction inside the widget restarts the clock.
-  for (const ev of ['pointerdown', 'keydown', 'input', 'wheel', 'touchstart'])
-    shadow.addEventListener(ev, armIdle, { passive: true, capture: true })
+  // ponytail: no idle auto-collapse and no swipe-to-minimize any more. With no
+  // middle state left, the only thing either could fold away is a transcript you
+  // are reading. The transcript has its own collapse button and drag-to-dismiss.
 
   let lastView: View | null = null
+
+  // The one line of text the corner rectangle carries. Resting copy tells you what
+  // the bar is for; a job in flight, a finished job, an error or a sign-out all
+  // borrow the same line rather than earning a surface of their own.
+  const miniLine = (): string => {
+    const { ui, job } = getState()
+    if (ui.signingOut) return ui.signingOut
+    if (job.phase === 'sending') return 'Sending…'
+    if (job.phase === 'streaming') return job.disconnected ? 'reconnecting…' : job.line || thinkingWord(job.startedAt)
+    if (job.phase === 'done') return job.summary
+    if (job.phase === 'error') return job.message
+    return getState().auth === 'authed' ? 'Ask for a change' : 'Log in'
+  }
 
   const render = () => {
     const view = computeView()
     const { job } = getState()
 
-    // mini: hide the whole bar, show just the corner ⌨️
+    // Two surfaces: the corner box (rectangle, or the pill while streaming) and the
+    // transcript. `bar` holds the pill, so mini/stream is which of the two shows.
     show(miniBtn, view === 'mini')
-    show(bar, view !== 'mini')
+    show(bar, view === 'stream')
+    show(pill, view === 'stream')
 
-    const pillVisible =
-      view === 'stream' || view === 'done' || view === 'error' || view === 'login' || view === 'setpw' || view === 'signout'
-    show(pill, pillVisible)
+    const line = miniLine()
+    miniCopy.textContent = line.replace(/\s+/g, ' ').trim()
+    miniBtn.title = miniCopy.textContent
+    // The agent-state colours still carry meaning at a glance, per the design system.
+    miniBtn.classList.toggle('done', job.phase === 'done')
+    miniBtn.classList.toggle('error', job.phase === 'error')
+    // A long resting label needs a wider box than a status line; the copy ellipsizes.
+    miniBtn.classList.toggle('ak-mini-long', line.length > 14)
 
     // pill state class
     pill.className = 'ak-pill'
     if (view === 'stream' && job.phase === 'streaming' && job.lineState === 'thinking') pill.classList.add('thinking')
-    if (view === 'done') pill.classList.add('done')
-    if (view === 'error') pill.classList.add('error')
 
     show(shimmer, view === 'stream')
-    show(streamRow, view === 'stream' || view === 'signout') // signout reuses the spin + ticker row
-    show(expandBtn, view === 'stream') // no expand affordance while signing out
-    show(statusRow, view === 'done' || view === 'error')
-    show(loginRow, view === 'login')
-    show(setpwRow, view === 'setpw')
-    if (view === 'setpw' && lastView !== 'setpw') {
-      const inv = getPendingInvite()
-      setpwLabel.textContent = inv?.email ? `Welcome — set a password for ${inv.email}` : 'Welcome — set a password'
-      setTimeout(() => setpwInput.focus(), 60)
-    }
-
-    // signing-out: spinner + "Logging out…" / "Logged out", nothing else
-    if (view === 'signout') {
-      ticker.set(getState().ui.signingOut || 'Logging out…', 'dim')
-      timer.textContent = ''
-      show(queueBadge, false)
-    }
 
     // stream row content
     if (view === 'stream') {
@@ -890,7 +714,8 @@ export function mountBar(shadow: ShadowRoot): void {
         ticker.set('Sending…', 'dim')
         runTimer() // the timer counts from the send tap, not the first frame
       } else if (job.phase === 'streaming') {
-        ticker.set(job.disconnected ? 'reconnecting…' : job.line || 'Working', job.disconnected ? 'dim' : job.lineState)
+        const line = job.disconnected ? 'reconnecting…' : job.line || thinkingWord(job.startedAt)
+        ticker.set(line, job.disconnected ? 'dim' : job.line ? job.lineState : 'thinking')
         runTimer()
       }
       const q = getQueued().length
@@ -901,29 +726,18 @@ export function mountBar(shadow: ShadowRoot): void {
       stopTimer()
     }
 
-    // status row content
-    if (view === 'done' && job.phase === 'done') {
-      statusMsg.textContent = job.summary
-      setStatusAction('reply')
-    } else if (view === 'error' && job.phase === 'error') {
-      statusMsg.textContent = job.message
-      setStatusAction('expand')
+    if (view === 'expanded' && lastView !== 'expanded' && getPendingInvite()) {
+      const inv = getPendingInvite()
+      setpwLabel.textContent = inv?.email ? `Welcome — set a password for ${inv.email}` : 'Welcome — set a password'
     }
 
-    // composer state — typing is allowed while a job runs (sends queue up)
-    show(composerExpand, view !== 'expanded')
-    composer.setGuestDemo(isGuestDemo(), view === 'expanded')
-    placeComposer(view)
-    // Tear the mic down only when actually leaving the composer surfaces (never on
-    // the initial render, and never every frame — that recurses through onState).
-    const wasComposer = lastView === 'composing' || lastView === 'expanded'
-    const isComposer = view === 'composing' || view === 'expanded'
-    // Never cut the mic while it's live/connecting — minimizing the modal must not
-    // cancel a recording (the composing view above keeps it up regardless).
-    if (wasComposer && !isComposer && getState().ui.voice === 'idle') composer.teardownVoice()
+    placeFooter(view)
+    // Leaving the transcript stashes the composer, so dictation can no longer be
+    // seen — stop the mic rather than record invisibly. voice.teardown() leaves what
+    // it already transcribed in the textarea, so it survives as a draft.
+    if (lastView === 'expanded' && view !== 'expanded') composer.teardownVoice()
 
     lastView = view
-    armIdle() // re-arm (or cancel) the idle-collapse clock on every state change
   }
 
   const unsub = subscribe(render)

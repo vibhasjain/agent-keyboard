@@ -96,6 +96,16 @@ export interface Ticker {
   clear: () => void
 }
 
+// Filler for the gap before the agent's first real status line. A frozen "Working"
+// for twenty seconds reads as stalled; a word that turns over reads as alive. Only
+// ever used when there is nothing real to show — any detail from the server wins.
+const THINKING_WORDS = ['Thinking', 'Pondering', 'Working', 'Cooking', 'Crunching', 'Percolating', 'Noodling', 'Conjuring']
+
+export function thinkingWord(startedAt: number): string {
+  if (prefersReducedMotion()) return THINKING_WORDS[0]
+  return THINKING_WORDS[Math.floor(Math.max(0, Date.now() - startedAt) / 2000) % THINKING_WORDS.length]
+}
+
 const STATE_CLASSES: LineState[] = ['dim', 'thinking', 'tool', 'assistant']
 
 export function makeTicker(container: HTMLElement): Ticker {

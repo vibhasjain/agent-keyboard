@@ -39,16 +39,17 @@ export type JobState =
   | { phase: 'done'; jobId: string; summary: string; ok: boolean; cleared?: boolean }
   | { phase: 'error'; message: string }
 
-export type UiMode = 'mini' | 'collapsed' | 'login' | 'setpw' | 'composing' | 'expanded'
+// Two surfaces, three modes: the corner rectangle (`mini`), the corner rectangle
+// that a running job may still repaint as the streaming pill (`collapsed` — "a job
+// is live, don't force the transcript back open"), and the transcript (`expanded`).
+export type UiMode = 'mini' | 'collapsed' | 'expanded'
 export type VoiceState = 'idle' | 'connecting' | 'live' | 'error'
 
 export interface UiState {
   mode: UiMode
   voice: VoiceState
   voiceError?: string
-  loginError?: boolean
-  composerNote?: string // transient hint under the composer (e.g. "still working…")
-  signingOut?: string // set (to the pill message) during the log-out → reload sequence
+  signingOut?: string // set (to the status line) during the log-out → reload sequence
 }
 
 export interface State {
