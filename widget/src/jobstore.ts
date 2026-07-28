@@ -37,6 +37,10 @@ let activeIdemKey = ''
 let lastPage = ''
 let lastAttachmentIds: string[] = []
 let terminal = false
+// The attach's job frame said the job is ALREADY terminal (done/error/interrupted).
+// A replayed result must then finish the client — never re-open the session, even
+// if it carries a turn payload's open:true (the "stuck reconnecting…" wedge).
+let jobFinished = false
 let attempt = 0
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let doneTimer: ReturnType<typeof setTimeout> | null = null
@@ -384,6 +388,7 @@ function onFrame(name: string, data: Record<string, unknown>): void {
     if (typeof data.job_id === 'string') {
       jobId = data.job_id
       sessionStreaming = data.streaming === true
+      jobFinished = data.status === 'done' || data.status === 'error' || data.status === 'interrupted'
       if (!startedAt) startedAt = Date.now()
       persist() // fire-and-forget guarantee: persist BEFORE we show streaming
       outboxRemove(activeIdemKey) // the durable active-job key owns recovery now
@@ -416,7 +421,11 @@ function onFrame(name: string, data: Record<string, unknown>): void {
     case 'result':
       // A streaming session's `result` is a TURN boundary (session stays open);
       // a classic result ends the job.
-      if (data.open === true) {
+      if (data.open === true && jobFinished) {
+        // Replay of an already-closed session's last turn — the session is over.
+        terminal = true
+        finishSession()
+      } else if (data.open === true) {
         onTurnComplete(data)
       } else {
         terminal = true
@@ -808,6 +817,7 @@ export function start(input: {
   lastPage = input.page || location.pathname
   lastAttachmentIds = input.attachmentIds ?? []
   terminal = false
+  jobFinished = false
   attempt = 0
   pendingUserTexts = [input.text] // first turn; shifted off when its result lands (streaming only)
   setJob({ phase: 'sending', startedAt })
@@ -895,6 +905,7 @@ function attachToRunningJob(job: { jobId: string; startedAt: number; prompt: str
   lastPage = location.pathname
   lastAttachmentIds = []
   terminal = false
+  jobFinished = false
   attempt = 0
   setJob({ phase: 'streaming', jobId: job.jobId, startedAt, line: 'reconnecting…', lineState: 'dim', fullText: '', disconnected: true })
   // Surface the re-attached job's pill on reload — but never override an explicit

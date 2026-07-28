@@ -512,7 +512,11 @@ app.get("/jobs/:jobId/stream", authed, async (req, res) => {
   writeFrame(res, "job", { job_id: row.job_id, target: row.site_id, status: row.status });
   if (row.status_line) writeFrame(res, "status", row.status_line);
   if (row.status === "done") {
-    writeFrame(res, "result", row.result ?? {});
+    // A done streaming session's stored result is its last TURN payload
+    // (open: true). Replaying that verbatim makes the widget re-open the
+    // session and reconnect forever — the session is over, so say so.
+    if ((row.result as { open?: unknown } | null)?.open === true) writeFrame(res, "closed", {});
+    else writeFrame(res, "result", row.result ?? {});
   } else if (row.status === "running") {
     // In the DB but not the registry: the machine restarted mid-job (an orphan
     // the boot sweep hasn't reconciled). Report it honestly.
