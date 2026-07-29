@@ -4,11 +4,11 @@
 // (push-to-talk speech-to-text, no audio playback).
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? "";
-const TRANSCRIBE_MODEL = process.env.REALTIME_TRANSCRIBE_MODEL ?? "gpt-4o-transcribe";
+const TRANSCRIBE_MODEL = process.env.REALTIME_TRANSCRIBE_MODEL ?? "gpt-live-transcribe";
 const FALLBACK = process.env.REALTIME_FALLBACK === "1";
 
 function supportsTurnDetection(model: string): boolean {
-  return model !== "gpt-realtime-whisper";
+  return model !== "gpt-realtime-whisper" && model !== "gpt-live-transcribe";
 }
 
 export interface RealtimeToken {

@@ -23,10 +23,10 @@ function teardownLiveSession(): void {
   liveSession = null
 }
 
-const DEFAULT_TRANSCRIBE_MODEL = 'gpt-4o-transcribe'
+const DEFAULT_TRANSCRIBE_MODEL = 'gpt-live-transcribe'
 
 function supportsTurnDetection(model: string): boolean {
-  return model !== 'gpt-realtime-whisper'
+  return model !== 'gpt-realtime-whisper' && model !== 'gpt-live-transcribe'
 }
 
 function sessionUpdate(model: string): Record<string, unknown> {
