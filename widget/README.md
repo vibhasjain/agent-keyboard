@@ -5,7 +5,7 @@ page, with **two surfaces and no others**: a small status rectangle parked in th
 and the full terminal-style transcript you get by clicking it. It re-attaches to running jobs after a
 reload.
 
-The rectangle carries one line — `Log in` signed out, `Ask for a change` idle, and while a job runs it
+The rectangle carries one line — `Log in` signed out, `Whatsup?` idle, and while a job runs it
 becomes the streaming pill (ticker + timer + `+N` queue badge), then the summary or the error. The
 transcript owns everything else: the scripted tour or the real conversation in the body, and in the
 footer exactly one of the composer (signed in), the login form (signed out), or the set-a-password

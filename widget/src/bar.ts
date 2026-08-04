@@ -396,7 +396,7 @@ export function mountBar(shadow: ShadowRoot): void {
   const stash = el('div', 'ak-stash')
 
   // The resting surface: a small rectangle parked bottom-right carrying one line of
-  // status — "Log in" signed out, "Ask for a change" idle, the job's own summary or
+  // status — "Log in" signed out, "Whatsup?" idle, the job's own summary or
   // error once it finishes. Click (or the tilde shortcut) opens the transcript. The
   // ⌨️ is the brand mark (the documented emoji exception).
   const miniBtn = el('button', 'ak-mini', (n) => {
@@ -679,7 +679,7 @@ export function mountBar(shadow: ShadowRoot): void {
     if (job.phase === 'streaming') return job.disconnected ? 'reconnecting…' : job.line || thinkingWord(job.startedAt)
     if (job.phase === 'done') return job.summary
     if (job.phase === 'error') return job.message
-    return getState().auth === 'authed' ? 'Ask for a change' : 'Log in'
+    return getState().auth === 'authed' ? 'Whatsup?' : 'Log in'
   }
 
   const render = () => {
