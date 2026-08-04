@@ -698,8 +698,7 @@ export function mountBar(shadow: ShadowRoot): void {
     // The agent-state colours still carry meaning at a glance, per the design system.
     miniBtn.classList.toggle('done', job.phase === 'done')
     miniBtn.classList.toggle('error', job.phase === 'error')
-    // A long resting label needs a wider box than a status line; the copy ellipsizes.
-    miniBtn.classList.toggle('ak-mini-long', line.length > 14)
+    // The box hugs its label (capped by max-width, where the copy ellipsizes).
 
     // pill state class
     pill.className = 'ak-pill'

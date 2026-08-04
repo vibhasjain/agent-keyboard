@@ -49,7 +49,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-mini{
   display:flex; align-items:center; gap:9px;
   margin-left:auto; margin-right:0;
-  width:168px; height:44px; padding:0 11px;
+  width:auto; max-width:206px; height:44px; padding:0 11px;
   border-radius:10px; border:1px solid rgba(245,241,234,.13);
   background:rgba(9,9,11,.8); /* Menu++ sticky nav: bg-zinc-950/80 */
   box-shadow:0 7px 24px rgba(0,0,0,.28);
@@ -59,7 +59,6 @@ button::-moz-focus-inner{ border:0; }
   animation:ak-pop .3s cubic-bezier(.2,.7,.2,1);
   transition:transform .16s ease, border-color .2s ease, color .2s ease;
 }
-.ak-mini.ak-mini-long{ width:206px; }
 .ak-mini:hover{ transform:scale(1.03); }
 .ak-mini:active{ transform:scale(.98); }
 .ak-mini.done{ color:var(--ak-ok); border-color:rgba(109,211,150,.4); }
