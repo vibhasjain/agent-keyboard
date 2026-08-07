@@ -35,7 +35,7 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # The real Claude Code CLI (pinned).
-RUN npm install -g @anthropic-ai/claude-code@2.1.223
+RUN npm install -g @anthropic-ai/claude-code@2.1.224
 
 # Headless browser for the agent's verify-in-browser skill. Browsers install to
 # an IMAGE path — at runtime HOME=/data (the volume) and the Playwright default
