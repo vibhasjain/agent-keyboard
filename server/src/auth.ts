@@ -17,10 +17,23 @@
 // users are rejected — unset it to use runtime provisioning.
 
 import type { Request, Response, NextFunction } from "express";
+import { timingSafeEqual } from "node:crypto";
 import { readDataFile } from "./checkouts.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
+const AK_INTERNAL_SECRET = process.env.AK_INTERNAL_SECRET ?? "";
+function isInternalSecret(got: string): boolean {
+  const a = Buffer.from(got);
+  const b = Buffer.from(AK_INTERNAL_SECRET);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+// `trust proxy` is never enabled (see index.ts), so req.ip is the real socket
+// peer and cannot be spoofed via X-Forwarded-For. Undefined/empty fails closed.
+function isLoopback(req: Request): boolean {
+  const ip = req.ip ?? req.socket.remoteAddress ?? "";
+  return ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.");
+}
 const csv = (v: string | undefined): Set<string> =>
   new Set(
     (v ?? "")
@@ -122,6 +135,19 @@ async function verify(token: string): Promise<AuthedUser | null> {
 /** Express middleware: 401 without a token, 403 for a valid-but-wrong identity. */
 export function requireOwner() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (AK_INTERNAL_SECRET && isInternalSecret(req.header("x-ak-internal") ?? "")) {
+      if (isLoopback(req)) {
+        (req as Request & { user?: AuthedUser }).user = {
+          id: "internal",
+          email: "cron@internal",
+        };
+        next();
+        return;
+      }
+      console.warn(
+        `[auth] x-ak-internal presented from non-loopback peer ${req.ip ?? req.socket.remoteAddress ?? "unknown"} — ignoring`,
+      );
+    }
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
       res.status(500).json({ error: "server not configured: SUPABASE_URL / SUPABASE_ANON_KEY unset" });
       return;
