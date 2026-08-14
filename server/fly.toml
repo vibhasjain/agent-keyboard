@@ -24,6 +24,9 @@ primary_region = "iad"
   HOME = "/data"
   IS_SANDBOX = "1"
   NODE_ENV = "production"
+  # Volume fontconfig: chromium-headless-shell ignores $HOME font paths, so PDF
+  # rendering (cv-jobs worker) resolves fonts via this conf on /data instead.
+  FONTCONFIG_FILE = "/data/fontconfig/fonts.conf"
   CLAUDE_MODEL = "opus"
   # This deployment runs the 1M-context Opus variant — size the approximate
   # context gauge accordingly (the code default is 200k for standard windows).
