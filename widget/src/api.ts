@@ -180,7 +180,7 @@ export const api = {
     readSse(`/jobs/${encodeURIComponent(jobId)}/stream`, { method: 'GET' }, onFrame),
 
   listJobs: (siteId: string): Promise<{ jobs: JobRow[] }> =>
-    jsonFetch(`/jobs?siteId=${encodeURIComponent(siteId)}`),
+    jsonFetch(`/jobs?siteId=${encodeURIComponent(siteId)}&page=${encodeURIComponent(location.pathname)}`),
 
   /** Forcefully stop a running job. The job's stream then delivers a terminal error. */
   cancelJob: (jobId: string): Promise<{ stopped: boolean }> =>
@@ -193,17 +193,19 @@ export const api = {
       body: JSON.stringify({ text }),
     }),
 
-  /** Clean slate: stop active work, reset checkout to origin, and clear conversation context. */
+  /** Clean slate: stop active work, reset checkout to origin, and clear conversation context.
+   *  Sends the page so a page-scoped site restarts only this page's conversation. */
   restartSite: (siteId: string): Promise<{ ok: boolean; cleared?: boolean; reset?: unknown }> =>
-    jsonFetch(`/sites/${encodeURIComponent(siteId)}/restart`, { method: 'POST' }),
+    jsonFetch(`/sites/${encodeURIComponent(siteId)}/restart`, { method: 'POST', body: JSON.stringify({ page: location.pathname }) }),
 
   /** On-demand compaction of the site's Claude session (settings-menu "Compact"). */
   compact: (siteId: string): Promise<{ compacted: boolean }> =>
-    jsonFetch(`/sites/${encodeURIComponent(siteId)}/compact`, { method: 'POST' }),
+    jsonFetch(`/sites/${encodeURIComponent(siteId)}/compact`, { method: 'POST', body: JSON.stringify({ page: location.pathname }) }),
 
   conversation: (siteId: string, opts: { limit?: number; before?: string } = {}): Promise<{ messages: ConversationMessage[]; cursor: string | null }> => {
     const q = new URLSearchParams()
     q.set('limit', String(opts.limit ?? 40))
+    q.set('page', location.pathname)
     if (opts.before) q.set('before', opts.before)
     return jsonFetch(`/sites/${encodeURIComponent(siteId)}/conversation?${q.toString()}`)
   },

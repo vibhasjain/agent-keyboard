@@ -33,3 +33,15 @@ export function getSite(siteId: string): Site | null {
 export function listSitesPublic(): { id: string; domain: string }[] {
   return SITES.map((s) => ({ id: s.id, domain: s.domain }));
 }
+
+/** Per-page conversation slug for a raw `page` path. "" = the site-root
+ *  conversation (and everything on a site-scoped site — this is the opt-in gate).
+ *  Filename-safe by construction: output is [a-z0-9-] only, capped at 80. */
+export function pageSlugFor(site: Site, page: unknown): string {
+  if (site.sessionScope !== "page" || typeof page !== "string") return "";
+  let p = (page.split(/[?#]/)[0] ?? "").toLowerCase();
+  p = p.replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
+  p = p.replace(/\/index\.html?$/, "").replace(/^index\.html?$/, "").replace(/\.html?$/, "");
+  const slug = p.replace(/[^a-z0-9-]+/g, "-").replace(/-+/g, "-").replace(/^-+|-+$/g, "");
+  return slug.slice(0, 80).replace(/-+$/, "");
+}

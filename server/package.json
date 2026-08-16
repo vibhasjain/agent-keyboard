@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "typecheck": "tsc --noEmit",
-    "parse-check": "tsx src/dev/parse-check.ts"
+    "parse-check": "tsx src/dev/parse-check.ts",
+    "page-slug-check": "tsx src/dev/page-slug-check.ts"
   },
   "dependencies": {
     "busboy": "^1.6.0",

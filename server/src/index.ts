@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
 import { requireOwner } from "./auth.js";
-import { getSite, listSitesPublic, SITES } from "./sites.js";
+import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
 import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
@@ -108,7 +108,11 @@ function widgetJs(): Buffer | null {
   if (!p) return null;
   const src = readFileSync(p, "utf8")
     .replaceAll("__AK_SUPABASE_URL__", process.env.SUPABASE_URL ?? "")
-    .replaceAll("__AK_SUPABASE_ANON_KEY__", process.env.SUPABASE_ANON_KEY ?? "");
+    .replaceAll("__AK_SUPABASE_ANON_KEY__", process.env.SUPABASE_ANON_KEY ?? "")
+    .replaceAll(
+      "__AK_PAGE_SCOPED_SITES__",
+      SITES.filter((s) => s.sessionScope === "page").map((s) => s.id).join(","),
+    );
   const buf = Buffer.from(src, "utf8");
   if (process.env.NODE_ENV === "production") widgetJsCache = buf;
   return buf;
@@ -337,17 +341,21 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   // With the streaming-session flag on, a message opens a long-lived session that
   // stays open for follow-ups; otherwise it's a classic one-shot job.
   const input = STREAMING_SESSION ? new InputChannel() : null;
+  // On a page-scoped site the conversation follows the page ("" = site root);
+  // on everything else the slug is always "" and behavior is unchanged.
+  const pageSlug = pageSlugFor(site, page);
   const gen = input
-    ? runStreamingSession(site, { text, page, attachmentPaths }, input, ac.signal)
-    : runMessageJob(site, { text, page, attachmentPaths }, ac.signal);
+    ? runStreamingSession(site, { text, page, pageSlug, attachmentPaths }, input, ac.signal)
+    : runMessageJob(site, { text, page, pageSlug, attachmentPaths }, ac.signal);
   // Record which Claude session this job drives, so an auto-resume after a
   // self-triggered redeploy can pick the turn back up with --resume.
-  const conversationId = await conversationIdFor(site.id);
+  const conversationId = await conversationIdFor(site.id, pageSlug);
   const sessionId = sessionIdFor(conversationId);
   const job = await startJob({
     siteId: site.id,
     prompt: text,
     page,
+    pageSlug,
     gen,
     abort: () => ac.abort(),
     idemKey: idemKey || undefined,
@@ -455,14 +463,18 @@ app.post("/sites/:siteId/restart", authed, async (req, res) => {
     return;
   }
 
-  const running = listActive(site.id).filter((j) => j.status === "running");
+  // On a page-scoped site, restart from a page rotates only that page's
+  // conversation; the checkout is shared across pages, so only a site-root
+  // restart hard-resets it.
+  const pageSlug = pageSlugFor(site, (req.body as { page?: unknown } | undefined)?.page);
+  const running = listActive(site.id, pageSlug).filter((j) => j.status === "running");
   for (const job of running) cancelJob(job.job_id);
 
   let release: (() => void) | undefined;
   try {
     release = await acquireSiteLock(site.id);
-    const reset = await resetCheckoutToOrigin(site);
-    const conversationId = await rotateConversation(site.id);
+    const reset = pageSlug === "" ? await resetCheckoutToOrigin(site) : null;
+    const conversationId = await rotateConversation(site.id, pageSlug);
     res.json({
       ok: true,
       cancelled: running.length,
@@ -486,9 +498,10 @@ app.post("/sites/:siteId/compact", authed, async (req, res) => {
   }
   // Close any open session so the lock frees promptly; compaction summarizes the
   // session's memory anyway, and the next message resumes it compacted.
-  for (const job of listActive(site.id).filter((j) => j.status === "running")) cancelJob(job.job_id);
+  const pageSlug = pageSlugFor(site, (req.body as { page?: unknown } | undefined)?.page);
+  for (const job of listActive(site.id, pageSlug).filter((j) => j.status === "running")) cancelJob(job.job_id);
   try {
-    const compacted = await compactSession(site.id);
+    const compacted = await compactSession(site.id, pageSlug);
     res.json({ compacted });
   } catch (err) {
     res.status(500).json({ error: String((err as Error)?.message ?? err).slice(0, 300) });
@@ -535,8 +548,17 @@ app.get("/jobs/:jobId/stream", authed, async (req, res) => {
 /** List running jobs + a 10-minute finished window for a site (registry ∪ DB). */
 app.get("/jobs", authed, async (req, res) => {
   const siteId = typeof req.query.siteId === "string" ? req.query.siteId : "";
-  const rows = siteId ? await dbListJobs(siteId) : [];
-  const live = new Map(listActive(siteId || undefined).map((s) => [s.job_id, s]));
+  const site = siteId ? getSite(siteId) : null;
+  // Page filter only when the site opted into per-page sessions AND the caller
+  // sent a page — old cached widgets omit it and stay unfiltered (today's view).
+  const slug =
+    site?.sessionScope === "page" && typeof req.query.page === "string"
+      ? pageSlugFor(site, req.query.page)
+      : undefined;
+  const rows = (siteId ? await dbListJobs(siteId) : []).filter(
+    (row) => slug === undefined || pageSlugFor(site!, row.page ?? "") === slug,
+  );
+  const live = new Map(listActive(siteId || undefined, slug).map((s) => [s.job_id, s]));
   const merged: JobSnapshot[] = [];
   const seen = new Set<string>();
   for (const row of rows) {
@@ -573,10 +595,12 @@ app.get("/sites/:siteId/conversation", authed, async (req, res) => {
   }
   const limit = Number(req.query.limit ?? 40);
   const before = Number(req.query.before ?? 0);
+  const pageSlug = pageSlugFor(site, req.query.page);
   try {
     const out = await readConversation(site.id, {
       limit: Number.isFinite(limit) ? limit : 40,
       before: Number.isFinite(before) ? before : 0,
+      pageSlug,
     });
     res.json(out);
   } catch (err) {

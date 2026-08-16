@@ -105,12 +105,12 @@ function friendlyTool(b: any): string {
  */
 export async function readConversation(
   siteId: string,
-  opts: { limit?: number; before?: number } = {},
+  opts: { limit?: number; before?: number; pageSlug?: string } = {},
 ): Promise<{ messages: ChatMessage[]; cursor: number }> {
   const limit = Math.max(1, Math.min(opts.limit ?? 40, 200));
   const before = Math.max(0, opts.before ?? 0);
 
-  const conversationId = await conversationIdFor(siteId);
+  const conversationId = await conversationIdFor(siteId, opts.pageSlug ?? "");
   const sessionId = sessionIdFor(conversationId);
   const path = await sessionFilePath(sessionId, checkoutPath(siteId));
   if (!path) return { messages: [], cursor: 0 };

@@ -6,6 +6,11 @@
 export const SB_URL = '__AK_SUPABASE_URL__'
 export const SB_ANON = '__AK_SUPABASE_ANON_KEY__'
 
+// Site ids with per-page sessions; the server substitutes this when serving
+// /widget.js (same mechanism as the Supabase placeholders). Unsubstituted
+// (dev builds) it matches no site — everything stays site-scoped.
+const PAGE_SCOPED_SITES = '__AK_PAGE_SCOPED_SITES__'
+
 // We hand-roll auth and namespace our session under a distinct key so we never
 // collide with a host page that runs its own Supabase client (and its storage).
 export const AUTH_STORAGE_KEY = 'agent-keyboard-auth'
@@ -86,7 +91,18 @@ export function shouldMountHere(script: HTMLScriptElement | null): boolean {
   return true
 }
 
-/** localStorage key namespaced to this site. */
+/** Mirror of the server's filename-safe per-page conversation normalizer. */
+export function pageSlug(path = location.pathname): string {
+  let p = path.split(/[?#]/)[0].toLowerCase()
+  p = p.replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '')
+  p = p.replace(/\/index\.html?$/, '').replace(/^index\.html?$/, '').replace(/\.html?$/, '')
+  const slug = p.replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-+|-+$/g, '')
+  return slug.slice(0, 80).replace(/-+$/, '')
+}
+
+/** localStorage key namespaced to this site and, when configured, page. */
 export function lsKey(suffix: string): string {
+  const slug = PAGE_SCOPED_SITES.split(',').includes(CONFIG.site) ? pageSlug() : ''
+  if (slug) return `ak:${CONFIG.site}:${slug}:${suffix}`
   return `ak:${CONFIG.site}:${suffix}`
 }

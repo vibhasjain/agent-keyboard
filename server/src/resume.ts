@@ -43,6 +43,7 @@ function safe(id: string): string {
 interface ResumeInput {
   jobId: string;
   siteId: string;
+  pageSlug: string;
   conversationId: string | null;
   sessionId: string | null;
   streaming: boolean;
@@ -68,6 +69,7 @@ export function writePendingResume(jobs: ResumeInput[]): void {
       const marker = {
         jobId: job.jobId,
         siteId: job.siteId,
+        pageSlug: job.pageSlug,
         conversationId: job.conversationId,
         sessionId: job.sessionId,
         imageRef: process.env.FLY_IMAGE_REF ?? "",
@@ -100,6 +102,7 @@ export async function resumeAfterRedeploy(): Promise<void> {
     let marker: {
       jobId?: string;
       siteId?: string;
+      pageSlug?: string;
       conversationId?: string | null;
       sessionId?: string | null;
       imageRef?: string;
@@ -146,7 +149,9 @@ export async function resumeAfterRedeploy(): Promise<void> {
       const s = getSite(marker.siteId ?? "");
       if (!s) continue;
       // (e) Conversation not cleared / rotated since the marker was written.
-      if ((await conversationIdFor(s.id)) !== marker.conversationId) continue;
+      // Old (pre-page-scope) markers lack pageSlug → "" → the site root, which
+      // is correct: every pre-deploy job was root-scoped.
+      if ((await conversationIdFor(s.id, marker.pageSlug ?? "")) !== marker.conversationId) continue;
       // (f) The Claude session file still exists, so --resume will find it.
       if (!marker.conversationId || !existsSync(markerPathFor(marker.conversationId))) continue;
 
@@ -154,13 +159,17 @@ export async function resumeAfterRedeploy(): Promise<void> {
       // because the session marker file exists.
       const ac = new AbortController();
       const input = marker.streaming ? new InputChannel() : null;
+      const pageSlug = marker.pageSlug ?? "";
+      // ponytail: lossy page reconstruction; only feeds the "[Sent from]" prompt line
+      const page = pageSlug ? `/${pageSlug}` : "/";
       const gen = input
-        ? runStreamingSession(s, { text: CONTINUATION, page: "/", attachmentPaths: [] }, input, ac.signal)
-        : runMessageJob(s, { text: CONTINUATION, page: "/", attachmentPaths: [] }, ac.signal);
+        ? runStreamingSession(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [] }, input, ac.signal)
+        : runMessageJob(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [] }, ac.signal);
       await startJob({
         siteId: s.id,
         prompt: CONTINUATION,
-        page: "/",
+        page,
+        pageSlug,
         gen,
         abort: () => ac.abort(),
         streaming: !!input,

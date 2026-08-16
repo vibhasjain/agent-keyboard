@@ -90,25 +90,37 @@ export function sessionIdFor(conversationId: string): string {
   return uuidv5(conversationId, NAMESPACE);
 }
 
-/**
- * The active conversationId for a site. A per-site pointer file lets a future
- * "new chat" endpoint rotate it (start a fresh session); until then it's the
- * default `site:<id>`. Read lazily — no file means the default.
- */
-export async function conversationIdFor(siteId: string): Promise<string> {
-  const pointer = await readDataFile(join("agent-keyboard", "sites", siteId, "current-conversation"));
-  return pointer || `site:${siteId}`;
+/** Pointer-file location for a conversation dimension: the site root ("") or
+ *  one page of a page-scoped site (slug from pageSlugFor — [a-z0-9-] only,
+ *  so it is safe as a path segment). */
+function pointerPath(siteId: string, pageSlug = ""): string {
+  return pageSlug
+    ? join("agent-keyboard", "sites", siteId, "pages", pageSlug, "current-conversation")
+    : join("agent-keyboard", "sites", siteId, "current-conversation");
 }
 
 /**
- * Clear the context: point the site at a brand-new conversation. The next turn
- * gets a fresh Claude Code session (no memory) and the conversation history
- * reads empty (it's keyed off the new session). Destructive — the old session's
- * memory and transcript are abandoned. Returns the new conversationId.
+ * The active conversationId for a site — or for one page of a page-scoped site
+ * (pageSlug "" = the site root, identical to the pre-page-scope behavior). A
+ * pointer file lets "new chat" rotate it (start a fresh session); no file means
+ * the default `site:<id>` / `site:<id>:page:<slug>`. Read lazily.
  */
-export async function rotateConversation(siteId: string): Promise<string> {
-  const next = `site:${siteId}:${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
-  await writeDataFile(join("agent-keyboard", "sites", siteId, "current-conversation"), next);
+export async function conversationIdFor(siteId: string, pageSlug = ""): Promise<string> {
+  const pointer = await readDataFile(pointerPath(siteId, pageSlug));
+  return pointer || (pageSlug ? `site:${siteId}:page:${pageSlug}` : `site:${siteId}`);
+}
+
+/**
+ * Clear the context: point the site (or one page of it) at a brand-new
+ * conversation. The next turn gets a fresh Claude Code session (no memory) and
+ * the conversation history reads empty (it's keyed off the new session).
+ * Destructive — the old session's memory and transcript are abandoned.
+ * Returns the new conversationId.
+ */
+export async function rotateConversation(siteId: string, pageSlug = ""): Promise<string> {
+  const base = pageSlug ? `site:${siteId}:page:${pageSlug}` : `site:${siteId}`;
+  const next = `${base}:${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  await writeDataFile(pointerPath(siteId, pageSlug), next);
   return next;
 }
 
@@ -647,10 +659,10 @@ async function runCompactTurn(sessionId: string, dir: string, harness: ResolvedH
  *  Acquires the site lock so it can't race a live turn, then runs a /compact turn
  *  and reports whether a new compact boundary actually landed. Works regardless of
  *  streaming mode (it's a standalone turn, not tied to the message flow). */
-export async function compactSession(siteId: string): Promise<boolean> {
+export async function compactSession(siteId: string, pageSlug = ""): Promise<boolean> {
   const release = await acquireSiteLock(siteId);
   try {
-    const conversationId = await conversationIdFor(siteId);
+    const conversationId = await conversationIdFor(siteId, pageSlug);
     const sessionId = sessionIdFor(conversationId);
     const dir = checkoutPath(siteId);
     const harness = await loadHarness(siteId);
@@ -673,7 +685,7 @@ export type Frame = [string, unknown];
  */
 export async function* runMessageJob(
   site: Site,
-  opts: { text: string; page: string; attachmentPaths: string[] },
+  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[] },
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
   yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
@@ -703,7 +715,7 @@ export async function* runMessageJob(
     // the prompt, retries, and gitSummary. Equals site.branch unless pushBranch is set.
     const pushBranch = resolvePushBranch(site);
 
-    const conversationId = await conversationIdFor(site.id);
+    const conversationId = await conversationIdFor(site.id, opts.pageSlug ?? "");
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
@@ -899,7 +911,7 @@ export async function* runMessageJob(
       if (post.settings.clearNow) {
         const consumed = await saveSettings(site.id, { clearNow: undefined }).then(() => true, () => false);
         if (consumed) {
-          contextCleared = await rotateConversation(site.id).then(() => true, () => false);
+          contextCleared = await rotateConversation(site.id, opts.pageSlug ?? "").then(() => true, () => false);
           if (contextCleared) reply = `${reply}\n\n_Context cleared — fresh session, chat history wiped._`.trim();
         }
       }
@@ -955,7 +967,7 @@ export async function* runMessageJob(
  */
 export async function* runStreamingSession(
   site: Site,
-  opts: { text: string; page: string; attachmentPaths: string[] },
+  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[] },
   input: InputChannel,
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
@@ -983,7 +995,7 @@ export async function* runStreamingSession(
     let turnStartSha = await syncCheckout(site);
     const dir = checkoutPath(site.id);
     const pushBranch = resolvePushBranch(site);
-    const conversationId = await conversationIdFor(site.id);
+    const conversationId = await conversationIdFor(site.id, opts.pageSlug ?? "");
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });

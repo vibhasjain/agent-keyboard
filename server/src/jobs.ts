@@ -30,6 +30,7 @@ interface Job {
   jobId: string;
   kind: string;
   siteId: string;
+  pageSlug: string; // conversation dimension: "" = the site root
   status: JobStatus;
   statusLine: Record<string, unknown>;
   lastAssistant: Record<string, unknown> | null;
@@ -209,6 +210,7 @@ export async function startJob(opts: {
   kind?: string;
   prompt: string;
   page: string;
+  pageSlug?: string;
   gen: AsyncGenerator<Frame>;
   abort?: () => void;
   idemKey?: string;
@@ -224,6 +226,7 @@ export async function startJob(opts: {
     jobId,
     kind: opts.kind ?? "message",
     siteId: opts.siteId,
+    pageSlug: opts.pageSlug ?? "",
     status: "running",
     statusLine: { phase: "queued", detail: "Waiting for a free slot" },
     lastAssistant: null,
@@ -338,10 +341,12 @@ export function jobSnapshot(jobId: string): JobSnapshot | null {
   return job ? snapshot(job) : null;
 }
 
-export function listActive(siteId?: string): JobSnapshot[] {
+export function listActive(siteId?: string, pageSlug?: string): JobSnapshot[] {
   const out: JobSnapshot[] = [];
   for (const job of registry.values()) {
-    if (!siteId || job.siteId === siteId) out.push(snapshot(job));
+    if (siteId && job.siteId !== siteId) continue;
+    if (pageSlug !== undefined && job.pageSlug !== pageSlug) continue;
+    out.push(snapshot(job));
   }
   return out;
 }
@@ -354,6 +359,7 @@ export function listActive(siteId?: string): JobSnapshot[] {
 export function runningResumeInputs(): {
   jobId: string;
   siteId: string;
+  pageSlug: string;
   conversationId: string | null;
   sessionId: string | null;
   streaming: boolean;
@@ -363,6 +369,7 @@ export function runningResumeInputs(): {
   const out: {
     jobId: string;
     siteId: string;
+    pageSlug: string;
     conversationId: string | null;
     sessionId: string | null;
     streaming: boolean;
@@ -374,6 +381,7 @@ export function runningResumeInputs(): {
     out.push({
       jobId: job.jobId,
       siteId: job.siteId,
+      pageSlug: job.pageSlug,
       conversationId: job.conversationId,
       sessionId: job.sessionId,
       streaming: job.streaming,

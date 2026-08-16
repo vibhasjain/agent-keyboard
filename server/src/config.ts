@@ -15,6 +15,9 @@ export interface Site {
   // May contain the literal {ts} placeholder, substituted per job with a UTC
   // stamp (e.g. "agent-keyboard/{ts}" → a fresh branch each change). See claude.ts.
   pushBranch?: string;
+  // Opt-in per-page sessions; root "/" keeps the site conversation. Absent or
+  // "site" = one conversation per site, unchanged.
+  sessionScope?: "site" | "page";
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/i;
@@ -74,7 +77,7 @@ export function loadSites(): Site[] {
     if (typeof entry !== "object" || entry === null) {
       throw new Error(`${at} must be an object, e.g. ${SITES_EXAMPLE}`);
     }
-    const { id, repo, branch, domain, pushBranch } = entry as Record<string, unknown>;
+    const { id, repo, branch, domain, pushBranch, sessionScope } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !ID_RE.test(id)) {
       throw new Error(`${at}.id ${JSON.stringify(id)} must be a slug like "blog" (letters, digits, hyphens)`);
     }
@@ -92,6 +95,11 @@ export function loadSites(): Site[] {
     if (typeof domain !== "string" || !HOST_RE.test(domain)) {
       throw new Error(
         `${at}.domain must be a bare host with no scheme or path (e.g. "blog.example.com"), got ${JSON.stringify(domain)}`,
+      );
+    }
+    if (sessionScope !== undefined && sessionScope !== "site" && sessionScope !== "page") {
+      throw new Error(
+        `${at}.sessionScope, if set, must be "site" or "page", got ${JSON.stringify(sessionScope)}`,
       );
     }
     let pushBranchClean: string | undefined;
@@ -114,7 +122,14 @@ export function loadSites(): Site[] {
       pushBranchClean = pushBranch;
     }
     seen.add(id);
-    sites.push({ id, repo, branch, domain, ...(pushBranchClean ? { pushBranch: pushBranchClean } : {}) });
+    sites.push({
+      id,
+      repo,
+      branch,
+      domain,
+      ...(pushBranchClean ? { pushBranch: pushBranchClean } : {}),
+      ...(sessionScope === "page" ? { sessionScope } : {}),
+    });
   });
   return sites;
 }
