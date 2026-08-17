@@ -71,12 +71,18 @@ async function tick(): Promise<void> {
   try {
     if (!SECRET) return;
     if (Date.now() - startedAt < BOOT_GRACE_MS) return;
-    // A cycle can run for a long time; never stack a second one on top of it.
-    if (listActive(SITE).some((job) => job.status === "running")) return;
-
     const last = await readLastRun();
     const due = Date.now() - last;
     if (due < INTERVAL_MS) return;
+
+    // A cycle can run for a long time; never stack a second one on top of it.
+    // BUT a job wedged in "running" must not silence the schedule forever — if
+    // we are more than 2 intervals overdue, fire anyway.
+    const wedged = due > INTERVAL_MS * 2;
+    if (listActive(SITE).some((job) => job.status === "running")) {
+      if (!wedged) return;
+      console.warn(`[jobs-cron] a job has been running since ${new Date(last).toISOString()} — overdue, firing anyway`);
+    }
 
     const missed = last > 0 && due > INTERVAL_MS * 1.5;
     console.log(
