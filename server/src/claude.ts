@@ -1073,7 +1073,9 @@ export async function* runStreamingSession(
           },
         ]);
         await writeFile(marker, sessionId).catch(() => {});
-        await resetOutputs(site.id).catch(() => {}); // fresh image slate for the next turn
+        // Do NOT resetOutputs here: the result frame above carries these images'
+        // URLs and the browser hasn't fetched them yet. The reset at the next
+        // turn's injection (input.attach) / session start keeps the slate fresh.
         streamed = "";
         snapshot = "";
         armIdle();
