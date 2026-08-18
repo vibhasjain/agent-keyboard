@@ -14,7 +14,8 @@ import { dirname, join } from "node:path";
 
 import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
-import { requireOwner } from "./auth.js";
+import { requireOwner, requireOwnerOrGoogle } from "./auth.js";
+import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
 import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
@@ -76,13 +77,14 @@ function corsOrigin(
 app.use(
   cors({
     origin: corsOrigin,
-    allowedHeaders: ["Authorization", "Content-Type"],
+    allowedHeaders: ["Authorization", "Content-Type", "X-Auth-Kind"],
     methods: ["GET", "POST", "OPTIONS"],
   }),
 );
 app.use(express.json({ limit: "1mb" })); // attachments go via multipart, so 1mb is plenty
 
 const authed = requireOwner();
+const authedOrGoogle = requireOwnerOrGoogle();
 
 // ─── open routes ───────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
@@ -231,13 +233,6 @@ app.get("/demo/:scene", (req, res) => {
 // Images the agent shows in the chat load via <img>, which can't carry the auth
 // header — so this route is open, gated only by the unguessable uuid filename
 // (single-owner product; the id only ever reaches the owner via an authed frame).
-const ASSET_TYPES: Record<string, string> = {
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-};
 app.get("/sites/:siteId/assets/:name", (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   const name = String(req.params.name ?? "");
@@ -296,6 +291,8 @@ function rowToSnapshot(row: JobRow): JobSnapshot {
 }
 
 // ─── authed routes ───────────────────────────────────────────────────────────
+registerFeedRoutes(app, authedOrGoogle);
+
 app.get("/sites", authed, (_req, res) => {
   res.json(listSitesPublic());
 });

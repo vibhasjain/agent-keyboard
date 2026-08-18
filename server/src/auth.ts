@@ -3,6 +3,8 @@
 // require it to be on the allow-list (the agent has write access to real repos,
 // so the gate is deliberately strict: allow-listed accounts only, no public
 // signups, no multi-tenancy).
+// Closeout viewers may instead use a Google ID token, pinned to the configured
+// client and the hypertrack.io Workspace domain, for read-only routes.
 //
 // The allowed identities come from env: ALLOWED_EMAIL — one email, or a
 // comma-separated few (a client, a partner) — matched case-insensitively, and
@@ -17,12 +19,14 @@
 // users are rejected — unset it to use runtime provisioning.
 
 import type { Request, Response, NextFunction } from "express";
-import { timingSafeEqual } from "node:crypto";
+import { createPublicKey, createVerify, timingSafeEqual, type JsonWebKey } from "node:crypto";
 import { readDataFile } from "./checkouts.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
 const AK_INTERNAL_SECRET = process.env.AK_INTERNAL_SECRET ?? "";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
+const GOOGLE_HD = "hypertrack.io";
 function isInternalSecret(got: string): boolean {
   const a = Buffer.from(got);
   const b = Buffer.from(AK_INTERNAL_SECRET);
@@ -92,7 +96,19 @@ interface CacheEntry {
   user: AuthedUser | null; // null = a verified-invalid token (also cached, briefly)
   at: number;
 }
+interface GoogleCacheEntry extends CacheEntry {
+  expiresAt: number;
+}
 const cache = new Map<string, CacheEntry>();
+const googleCache = new Map<string, GoogleCacheEntry>();
+
+const GOOGLE_JWKS_URL = "https://www.googleapis.com/oauth2/v3/certs";
+const GOOGLE_JWKS_DEFAULT_TTL_MS = 60 * 60_000;
+const GOOGLE_JWKS_REFETCH_MS = 60_000;
+let googleKeys = new Map<string, JsonWebKey>();
+let googleKeysExpiresAt = 0;
+let googleKeysFetchedAt = 0;
+let googleKeysFetch: Promise<void> | null = null;
 
 function bearer(req: Request): string {
   const h = req.header("Authorization") ?? "";
@@ -132,40 +148,177 @@ async function verify(token: string): Promise<AuthedUser | null> {
   return user;
 }
 
+async function refreshGoogleKeys(): Promise<void> {
+  if (googleKeysFetch) return googleKeysFetch;
+  const now = Date.now();
+  if (now - googleKeysFetchedAt < GOOGLE_JWKS_REFETCH_MS) return;
+  googleKeysFetchedAt = now;
+  googleKeysFetch = (async () => {
+    const res = await fetch(GOOGLE_JWKS_URL);
+    if (!res.ok) throw new Error(`Google JWKS returned ${res.status}`);
+    const body = (await res.json()) as { keys?: JsonWebKey[] };
+    const keys = new Map<string, JsonWebKey>();
+    for (const key of body.keys ?? []) {
+      if (typeof key.kid === "string") keys.set(key.kid, key);
+    }
+    const maxAge = /(?:^|,)\s*max-age\s*=\s*"?(\d+)"?/i.exec(res.headers.get("cache-control") ?? "");
+    const ttl = maxAge ? Number(maxAge[1]) * 1000 : GOOGLE_JWKS_DEFAULT_TTL_MS;
+    googleKeys = keys;
+    googleKeysExpiresAt = Date.now() + ttl;
+  })();
+  try {
+    await googleKeysFetch;
+  } finally {
+    googleKeysFetch = null;
+  }
+}
+
+async function googleKey(kid: string): Promise<JsonWebKey | null> {
+  if (Date.now() >= googleKeysExpiresAt) {
+    await refreshGoogleKeys();
+    if (Date.now() >= googleKeysExpiresAt) return null;
+  }
+  let key = googleKeys.get(kid);
+  if (!key) {
+    await refreshGoogleKeys();
+    key = googleKeys.get(kid);
+  }
+  return key ?? null;
+}
+
+export async function verifyGoogle(token: string): Promise<AuthedUser | null> {
+  if (!GOOGLE_CLIENT_ID || !JWT_RE.test(token)) return null;
+  const now = Date.now();
+  const hit = googleCache.get(token);
+  if (hit && now - hit.at < CACHE_TTL_MS && now < hit.expiresAt) return hit.user;
+
+  try {
+    const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
+    if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
+    const header = JSON.parse(Buffer.from(encodedHeader, "base64url").toString("utf8")) as Record<string, unknown>;
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Record<string, unknown>;
+    if (header.alg !== "RS256" || typeof header.kid !== "string") return null;
+    const jwk = await googleKey(header.kid);
+    if (!jwk) return null;
+    const verifier = createVerify("RSA-SHA256");
+    verifier.update(`${encodedHeader}.${encodedPayload}`);
+    verifier.end();
+    if (!verifier.verify(createPublicKey({ key: jwk, format: "jwk" }), Buffer.from(encodedSignature, "base64url"))) {
+      return null;
+    }
+
+    const nowSeconds = Math.floor(now / 1000);
+    const issuerOk = payload.iss === "https://accounts.google.com" || payload.iss === "accounts.google.com";
+    const issuedAtOk = payload.iat === undefined ||
+      (typeof payload.iat === "number" && payload.iat <= nowSeconds + 300);
+    const user = issuerOk && payload.aud === GOOGLE_CLIENT_ID &&
+      typeof payload.exp === "number" && payload.exp > nowSeconds && issuedAtOk &&
+      payload.hd === GOOGLE_HD && payload.email_verified === true &&
+      typeof payload.email === "string" && typeof payload.sub === "string"
+      ? { id: String(payload.sub), email: String(payload.email) }
+      : null;
+    if (googleCache.size >= CACHE_MAX) {
+      const oldest = googleCache.keys().next().value;
+      if (oldest !== undefined) googleCache.delete(oldest);
+    }
+    const expiresAt = user && typeof payload.exp === "number"
+      ? payload.exp * 1000
+      : now + CACHE_TTL_MS;
+    googleCache.set(token, { user, at: now, expiresAt });
+    return user;
+  } catch {
+    return null;
+  }
+}
+
+interface OwnerAuth {
+  user: AuthedUser | null;
+  token: string;
+  configured: boolean;
+}
+
+async function authenticateOwner(req: Request): Promise<OwnerAuth> {
+  if (AK_INTERNAL_SECRET && isInternalSecret(req.header("x-ak-internal") ?? "")) {
+    if (isLoopback(req)) {
+      return {
+        user: { id: "internal", email: "cron@internal" },
+        token: "",
+        configured: true,
+      };
+    }
+    console.warn(
+      `[auth] x-ak-internal presented from non-loopback peer ${req.ip ?? req.socket.remoteAddress ?? "unknown"} — ignoring`,
+    );
+  }
+  const token = bearer(req);
+  const configured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+  return {
+    user: configured && token ? await verify(token) : null,
+    token,
+    configured,
+  };
+}
+
+function allow(req: Request, user: AuthedUser, next: NextFunction): void {
+  (req as Request & { user?: AuthedUser }).user = user;
+  next();
+}
+
 /** Express middleware: 401 without a token, 403 for a valid-but-wrong identity. */
 export function requireOwner() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
-    if (AK_INTERNAL_SECRET && isInternalSecret(req.header("x-ak-internal") ?? "")) {
-      if (isLoopback(req)) {
-        (req as Request & { user?: AuthedUser }).user = {
-          id: "internal",
-          email: "cron@internal",
-        };
-        next();
-        return;
-      }
-      console.warn(
-        `[auth] x-ak-internal presented from non-loopback peer ${req.ip ?? req.socket.remoteAddress ?? "unknown"} — ignoring`,
-      );
+    const owner = await authenticateOwner(req);
+    if (owner.user) {
+      allow(req, owner.user, next);
+      return;
     }
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    if (!owner.configured) {
       res.status(500).json({ error: "server not configured: SUPABASE_URL / SUPABASE_ANON_KEY unset" });
       return;
     }
+    if (!owner.token) {
+      res.status(401).json({ error: "sign in required" });
+      return;
+    }
+    // We can't cheaply distinguish "invalid token" (401) from "valid but not
+    // the owner" (403) without a second lookup; a wrong/expired token is by
+    // far the common case, so answer 401 and keep it simple.
+    res.status(401).json({ error: "invalid session or not authorized" });
+  };
+}
+
+/** Owner auth plus domain-pinned Google access for read-only site routes. */
+export function requireOwnerOrGoogle() {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const token = bearer(req);
+    if ((req.header("X-Auth-Kind") ?? "").trim().toLowerCase() === "google") {
+      if (!token) {
+        res.status(401).json({ error: "sign in required" });
+        return;
+      }
+      const user = await verifyGoogle(token);
+      if (user) {
+        allow(req, user, next);
+        return;
+      }
+      res.status(401).json({ error: "invalid session or not authorized" });
+      return;
+    }
+
+    const owner = await authenticateOwner(req);
+    if (owner.user) {
+      allow(req, owner.user, next);
+      return;
+    }
     if (!token) {
       res.status(401).json({ error: "sign in required" });
       return;
     }
-    const user = await verify(token);
+    const user = await verifyGoogle(token);
     if (!user) {
-      // We can't cheaply distinguish "invalid token" (401) from "valid but not
-      // the owner" (403) without a second lookup; a wrong/expired token is by
-      // far the common case, so answer 401 and keep it simple.
       res.status(401).json({ error: "invalid session or not authorized" });
       return;
     }
-    (req as Request & { user?: AuthedUser }).user = user;
-    next();
+    allow(req, user, next);
   };
 }
