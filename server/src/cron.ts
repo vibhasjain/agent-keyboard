@@ -210,7 +210,7 @@ async function tick(job: CronJob): Promise<void> {
     } else {
       intervalMs = job.everyHours * 3_600_000;
       last = await readLastRun(job.state);
-      dueAt = last + intervalMs;
+      dueAt = last === 0 ? now : last + intervalMs;
       if (now - last < intervalMs) return;
     }
 
