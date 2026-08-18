@@ -8,6 +8,7 @@ const clientId = "google-auth-check.apps.googleusercontent.com";
 const jwksUrl = "https://www.googleapis.com/oauth2/v3/certs";
 const kid = "google-auth-check-key";
 process.env.GOOGLE_OAUTH_CLIENT_ID = clientId;
+process.env.SESSION_SECRET = "google-auth-check-session-secret";
 
 const signingKeys = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const otherKeys = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -24,7 +25,7 @@ globalThis.fetch = async (input) => {
   } as Response;
 };
 
-const { verifyGoogle } = await import("../auth.js");
+const { mintGoogleSession, verifyGoogle, verifyGoogleSession } = await import("../auth.js");
 
 function encode(value: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -70,4 +71,20 @@ assert.equal(await verifyGoogle(unsigned), null);
 assert.equal(await verifyGoogle(mint(claims("bad-signature"), otherKeys.privateKey)), null);
 assert.equal(await verifyGoogle(mint(claims("unknown-kid"), signingKeys.privateKey, "unknown-key")), null);
 
-console.log("google-auth-check OK — valid Google token accepted and invalid claims, algorithms, keys, and signatures rejected.");
+const googleUser = { id: "google-user-123", email: "viewer@hypertrack.io" };
+const session = mintGoogleSession(googleUser, now);
+assert.equal(session.exp, now + 30 * 24 * 60 * 60);
+assert.deepEqual(verifyGoogleSession(session.sessionToken), {
+  id: "viewer@hypertrack.io",
+  email: "viewer@hypertrack.io",
+});
+
+const expiredSession = mintGoogleSession(googleUser, now - 30 * 24 * 60 * 60 - 1);
+assert.equal(verifyGoogleSession(expiredSession.sessionToken), null);
+
+const [sessionHeader, sessionPayload, sessionSig] = session.sessionToken.split(".");
+assert.ok(sessionHeader && sessionPayload && sessionSig);
+const tamperedSig = `${sessionSig[0] === "A" ? "B" : "A"}${sessionSig.slice(1)}`;
+assert.equal(verifyGoogleSession(`${sessionHeader}.${sessionPayload}.${tamperedSig}`), null);
+
+console.log("google-auth-check OK — Google ID tokens and long-lived sessions accept valid credentials and reject invalid, expired, and tampered tokens.");

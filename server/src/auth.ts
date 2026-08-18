@@ -19,14 +19,16 @@
 // users are rejected — unset it to use runtime provisioning.
 
 import type { Request, Response, NextFunction } from "express";
-import { createPublicKey, createVerify, timingSafeEqual, type JsonWebKey } from "node:crypto";
+import { createHmac, createPublicKey, createVerify, timingSafeEqual, type JsonWebKey } from "node:crypto";
 import { readDataFile } from "./checkouts.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
 const AK_INTERNAL_SECRET = process.env.AK_INTERNAL_SECRET ?? "";
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
+const SESSION_SECRET = process.env.SESSION_SECRET ?? "";
 const GOOGLE_HD = "hypertrack.io";
+const GOOGLE_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 function isInternalSecret(got: string): boolean {
   const a = Buffer.from(got);
   const b = Buffer.from(AK_INTERNAL_SECRET);
@@ -231,6 +233,68 @@ export async function verifyGoogle(token: string): Promise<AuthedUser | null> {
   }
 }
 
+interface GoogleSessionPayload {
+  email: string;
+  hd: string;
+  iat: number;
+  exp: number;
+}
+
+function encodeSessionPart(value: Record<string, unknown>): string {
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
+}
+
+function sessionSignature(message: string): Buffer {
+  return createHmac("sha256", SESSION_SECRET).update(message).digest();
+}
+
+export function googleSessionsConfigured(): boolean {
+  return !!SESSION_SECRET;
+}
+
+/** Mint a domain-pinned, 30-day session after a Google ID token is verified. */
+export function mintGoogleSession(
+  user: AuthedUser,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): { sessionToken: string; exp: number } {
+  if (!SESSION_SECRET) throw new Error("SESSION_SECRET unset");
+  const exp = nowSeconds + GOOGLE_SESSION_TTL_SECONDS;
+  const header = encodeSessionPart({ alg: "HS256", typ: "JWT" });
+  const payload = encodeSessionPart({ email: user.email, hd: GOOGLE_HD, iat: nowSeconds, exp });
+  const message = `${header}.${payload}`;
+  return {
+    sessionToken: `${message}.${sessionSignature(message).toString("base64url")}`,
+    exp,
+  };
+}
+
+/** Verify a server-minted Google viewer session without an external lookup. */
+export function verifyGoogleSession(token: string): AuthedUser | null {
+  if (!SESSION_SECRET || !JWT_RE.test(token)) return null;
+  try {
+    const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
+    if (!encodedHeader || !encodedPayload || !encodedSignature) return null;
+    const message = `${encodedHeader}.${encodedPayload}`;
+    const got = Buffer.from(encodedSignature, "base64url");
+    const expected = sessionSignature(message);
+    if (got.length !== expected.length || !timingSafeEqual(got, expected)) return null;
+
+    const header = JSON.parse(Buffer.from(encodedHeader, "base64url").toString("utf8")) as Record<string, unknown>;
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Partial<GoogleSessionPayload>;
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    if (header.alg !== "HS256" || header.typ !== "JWT" ||
+        typeof payload.email !== "string" || !payload.email || payload.hd !== GOOGLE_HD ||
+        !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp) ||
+        (payload.iat as number) > nowSeconds + 300 || (payload.exp as number) <= nowSeconds ||
+        (payload.exp as number) <= (payload.iat as number)) {
+      return null;
+    }
+    return { id: payload.email, email: payload.email };
+  } catch {
+    return null;
+  }
+}
+
 interface OwnerAuth {
   user: AuthedUser | null;
   token: string;
@@ -296,7 +360,7 @@ export function requireOwnerOrGoogle() {
         res.status(401).json({ error: "sign in required" });
         return;
       }
-      const user = await verifyGoogle(token);
+      const user = verifyGoogleSession(token) ?? await verifyGoogle(token);
       if (user) {
         allow(req, user, next);
         return;
@@ -314,7 +378,7 @@ export function requireOwnerOrGoogle() {
       res.status(401).json({ error: "sign in required" });
       return;
     }
-    const user = await verifyGoogle(token);
+    const user = verifyGoogleSession(token) ?? await verifyGoogle(token);
     if (!user) {
       res.status(401).json({ error: "invalid session or not authorized" });
       return;

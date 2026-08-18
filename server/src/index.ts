@@ -14,7 +14,13 @@ import { dirname, join } from "node:path";
 
 import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
-import { requireOwner, requireOwnerOrGoogle } from "./auth.js";
+import {
+  googleSessionsConfigured,
+  mintGoogleSession,
+  requireOwner,
+  requireOwnerOrGoogle,
+  verifyGoogle,
+} from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
 import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
@@ -291,6 +297,30 @@ function rowToSnapshot(row: JobRow): JobSnapshot {
 }
 
 // ─── authed routes ───────────────────────────────────────────────────────────
+app.post("/sites/:siteId/session", async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (!googleSessionsConfigured()) {
+    res.status(500).json({ error: "server not configured: SESSION_SECRET unset" });
+    return;
+  }
+  const idToken = typeof req.body?.idToken === "string" ? req.body.idToken.trim() : "";
+  if (!idToken) {
+    res.status(400).json({ error: "idToken required" });
+    return;
+  }
+  const user = await verifyGoogle(idToken);
+  if (!user) {
+    res.status(401).json({ error: "invalid session or not authorized" });
+    return;
+  }
+  const { sessionToken, exp } = mintGoogleSession(user);
+  res.json({ sessionToken, exp, email: user.email });
+});
+
 registerFeedRoutes(app, authedOrGoogle);
 
 app.get("/sites", authed, (_req, res) => {
