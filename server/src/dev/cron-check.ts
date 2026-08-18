@@ -11,13 +11,13 @@ for (const name of ["JOBS_CRONS", "JOBS_CRON_SITE", "JOBS_CRON_TARGET", "JOBS_CR
 
 process.env.JOBS_CRONS = JSON.stringify([
   { site: "alpha", prompt: "Run alpha" },
-  { site: "beta-2", prompt: "Run beta", hour: 7, tz: "UTC", everyHours: 2.5, state: "/tmp/beta-cron.json" },
+  { site: "beta-2", prompt: "Run beta", hour: 7, tz: "UTC", everyHours: 2.5, state: "/tmp/beta-cron.json", page: "/tasks" },
   { site: "off", prompt: "Do not run", disabled: true },
 ]);
 const configured = loadCronJobs();
 assert.equal(configured.length, 2);
 assert.deepEqual(
-  configured.map(({ site, prompt, hour, tz, everyHours, state }) => ({ site, prompt, hour, tz, everyHours, state })),
+  configured.map(({ site, prompt, hour, tz, everyHours, state, page }) => ({ site, prompt, hour, tz, everyHours, state, page })),
   [
     {
       site: "alpha",
@@ -26,6 +26,7 @@ assert.deepEqual(
       tz: "America/New_York",
       everyHours: undefined,
       state: "/data/agent-keyboard/cron-alpha.json",
+      page: "/",
     },
     {
       site: "beta-2",
@@ -34,6 +35,7 @@ assert.deepEqual(
       tz: "UTC",
       everyHours: 2.5,
       state: "/tmp/beta-cron.json",
+      page: "/tasks",
     },
   ],
   "configured jobs should parse, default, and skip disabled entries",
@@ -57,5 +59,6 @@ assert.equal(legacy[0]?.site, "cv-jobs");
 assert.equal(legacy[0]?.hour, 11);
 assert.equal(legacy[0]?.tz, "America/New_York");
 assert.equal(legacy[0]?.state, "/data/agent-keyboard/jobs-cron.json");
+assert.equal(legacy[0]?.page, "/jobs");
 
 console.log("cron-check OK — configured defaults, invalid fallback, and legacy scheduling all pass.");

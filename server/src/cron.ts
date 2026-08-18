@@ -29,7 +29,7 @@ interface CronJob {
   tz: string;
   everyHours?: number;
   state: string;
-  page: "/jobs" | "/";
+  page: string;
 }
 
 interface Clock { year: number; month: number; day: number; hour: number; minute: number; second: number }
@@ -117,6 +117,11 @@ export function loadCronJobs(): CronJob[] {
       return invalidCronJobs(`at index ${index}, field state`, "expected a non-empty string");
     }
 
+    const page = entry.page === undefined ? "/" : entry.page;
+    if (typeof page !== "string" || !page.startsWith("/")) {
+      return invalidCronJobs(`at index ${index}, field page`, "expected a non-empty string starting with '/'");
+    }
+
     jobs.push({
       site: entry.site,
       prompt: entry.prompt,
@@ -124,7 +129,7 @@ export function loadCronJobs(): CronJob[] {
       tz,
       ...(everyHours === undefined ? {} : { everyHours }),
       state,
-      page: "/",
+      page,
     });
   }
   return jobs;
