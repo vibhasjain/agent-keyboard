@@ -1,23 +1,24 @@
-// Jobs cron — fires one job-hunt cycle per day for the cv-jobs worker.
+// Jobs cron — fires one job-hunt cycle every day at a FIXED wall-clock time.
 //
-// It must survive machine restarts. A naive setInterval(24h) restarts its
-// countdown on every boot, so a single Fly restart silently pushes the run to
-// 24h later (observed 2026-08-15: a 09:45Z restart moved that day's run and it
-// never happened). Instead: persist the last run on the DATA VOLUME, tick every
-// few minutes, and fire whenever a run is DUE — including immediately after a
-// boot that missed one.
+// Two earlier designs failed and both lessons are baked in here:
+//   1. setInterval(24h) started at boot — a single Fly restart reset the
+//      countdown and silently skipped a day (observed 2026-08-15).
+//   2. "24h after the last run" — no restart bug, but the run time drifted
+//      later every day.
+// So: resolve today's target instant in a named timezone (DST-aware), persist
+// the last run on the DATA VOLUME, check every few minutes, and fire when today's
+// target has passed and we have not run since it — which also catches up a run
+// missed while the machine was down.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { listActive } from "./jobs.js";
 
 const STATE_PATH = process.env.JOBS_CRON_STATE ?? "/data/agent-keyboard/jobs-cron.json";
-const TICK_MS = 5 * 60_000;                       // how often we CHECK (cheap)
-const INTERVAL_MS = (() => {                      // how often we RUN
-  const n = Number(process.env.JOBS_CRON_INTERVAL_MS);
-  return Number.isFinite(n) && n > 0 ? n : 24 * 3_600_000;
-})();
-const BOOT_GRACE_MS = 2 * 60_000;                 // let the server settle first
+const TZ = process.env.JOBS_CRON_TZ ?? "America/New_York";
+const HOUR = Number(process.env.JOBS_CRON_HOUR ?? 11);     // 11:00 local in TZ
+const TICK_MS = 5 * 60_000;
+const BOOT_GRACE_MS = 2 * 60_000;
 const SITE = process.env.JOBS_CRON_SITE ?? "cv-jobs";
 const SECRET = process.env.AK_INTERNAL_SECRET ?? "";
 const PORT = Number(process.env.PORT ?? 8080);
@@ -34,13 +35,44 @@ const PROMPT =
 
 const startedAt = Date.now();
 
+interface Clock { year: number; month: number; day: number; hour: number; minute: number; second: number }
+
+/** Calendar/clock parts of an instant as seen in TZ. */
+function partsIn(instant: Date): Clock {
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone: TZ, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+  const m = new Map<string, number>(
+    dtf.formatToParts(instant).filter((p) => p.type !== "literal").map((p) => [String(p.type), Number(p.value)]),
+  );
+  const g = (k: string): number => m.get(k) ?? 0;
+  return { year: g("year"), month: g("month"), day: g("day"), hour: g("hour"), minute: g("minute"), second: g("second") };
+}
+
+/** TZ offset (ms) at a given instant — positive east of UTC. */
+function offsetMs(instant: Date): number {
+  const p = partsIn(instant);
+  return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - instant.getTime();
+}
+
+/** UTC instant of HOUR:00 local, on the TZ calendar day `dayShift` days from now. */
+function scheduledInstant(dayShift = 0): number {
+  const p = partsIn(new Date(Date.now() + dayShift * 86_400_000));
+  const naive = Date.UTC(p.year, p.month - 1, p.day, HOUR, 0, 0);
+  // Two passes settles the DST edge cases (the offset depends on the instant).
+  let utc = naive - offsetMs(new Date(naive));
+  utc = naive - offsetMs(new Date(utc));
+  return utc;
+}
+
 async function readLastRun(): Promise<number> {
   try {
-    const raw = await readFile(STATE_PATH, "utf8");
-    const at = Date.parse(JSON.parse(raw)?.lastRunAt ?? "");
+    const at = Date.parse(JSON.parse(await readFile(STATE_PATH, "utf8"))?.lastRunAt ?? "");
     return Number.isFinite(at) ? at : 0;
   } catch {
-    return 0; // no state yet — treat as "never ran", so the first tick fires
+    return 0;
   }
 }
 
@@ -71,27 +103,24 @@ async function tick(): Promise<void> {
   try {
     if (!SECRET) return;
     if (Date.now() - startedAt < BOOT_GRACE_MS) return;
-    const last = await readLastRun();
-    const due = Date.now() - last;
-    if (due < INTERVAL_MS) return;
 
-    // A cycle can run for a long time; never stack a second one on top of it.
-    // BUT a job wedged in "running" must not silence the schedule forever — if
-    // we are more than 2 intervals overdue, fire anyway.
-    const wedged = due > INTERVAL_MS * 2;
+    const target = scheduledInstant();
+    if (Date.now() < target) return;              // today's slot hasn't arrived
+    const last = await readLastRun();
+    if (last >= target) return;                   // already ran for today's slot
+
+    // Never stack cycles — but a job wedged "running" must not silence the
+    // schedule forever, so fire anyway once we are a full day past the slot.
     if (listActive(SITE).some((job) => job.status === "running")) {
-      if (!wedged) return;
-      console.warn(`[jobs-cron] a job has been running since ${new Date(last).toISOString()} — overdue, firing anyway`);
+      if (Date.now() - target < 86_400_000) return;
+      console.warn("[jobs-cron] a job is still running but we are a day overdue — firing anyway");
     }
 
-    const missed = last > 0 && due > INTERVAL_MS * 1.5;
     console.log(
-      `[jobs-cron] firing — last run ${last ? new Date(last).toISOString() : "never"}` +
-      `${missed ? " (missed a scheduled run; catching up)" : ""}`,
+      `[jobs-cron] firing for the ${String(HOUR).padStart(2, "0")}:00 ${TZ} slot ` +
+      `(${new Date(target).toISOString()}); last run ${last ? new Date(last).toISOString() : "never"}`,
     );
-    // Stamp BEFORE firing: if the cycle itself crashes we still wait a full
-    // interval rather than retrying every 5 minutes.
-    await writeLastRun(Date.now());
+    await writeLastRun(Date.now());               // stamp first so a crash can't retry-loop
     if (!(await fire())) await writeLastRun(last);
   } catch (err) {
     console.error("[jobs-cron] tick error", String(err));
@@ -103,9 +132,10 @@ export function startJobsCron(): void {
     console.warn("[jobs-cron] AK_INTERNAL_SECRET unset — cron disabled");
     return;
   }
+  const next = Date.now() < scheduledInstant() ? scheduledInstant() : scheduledInstant(1);
   console.log(
-    `[jobs-cron] armed — every ${Math.round(INTERVAL_MS / 3_600_000)}h for ${SITE}, ` +
-    `goal ${TARGET} submissions/run, checked every ${TICK_MS / 60_000}m, state at ${STATE_PATH}`,
+    `[jobs-cron] armed — daily at ${String(HOUR).padStart(2, "0")}:00 ${TZ}, goal ${TARGET} submissions/run; ` +
+    `next slot ${new Date(next).toISOString()}; state at ${STATE_PATH}`,
   );
   void tick();
   const timer = setInterval(() => void tick(), TICK_MS);
