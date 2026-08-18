@@ -8,6 +8,9 @@
     "start": "tsx src/index.ts",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
     "typecheck": "tsc --noEmit",
+    "cron-check": "tsx src/dev/cron-check.ts",
+    "feed-check": "tsx src/dev/feed-check.ts",
+    "google-auth-check": "tsx src/dev/google-auth-check.ts",
     "parse-check": "tsx src/dev/parse-check.ts",
     "page-slug-check": "tsx src/dev/page-slug-check.ts"
   },

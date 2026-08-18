@@ -1,4 +1,5 @@
-// Jobs cron — fires one job-hunt cycle every day at a FIXED wall-clock time.
+// Jobs cron — fires scheduled prompt cycles; JOBS_CRONS can define several.
+// Without JOBS_CRONS, the legacy job-hunt cycle runs daily at a FIXED wall-clock time.
 //
 // Two earlier designs failed and both lessons are baked in here:
 //   1. setInterval(24h) started at boot — a single Fly restart reset the
@@ -14,33 +15,130 @@ import { dirname } from "node:path";
 
 import { listActive } from "./jobs.js";
 
-const STATE_PATH = process.env.JOBS_CRON_STATE ?? "/data/agent-keyboard/jobs-cron.json";
-const TZ = process.env.JOBS_CRON_TZ ?? "America/New_York";
-const HOUR = Number(process.env.JOBS_CRON_HOUR ?? 11);     // 11:00 local in TZ
 const TICK_MS = 5 * 60_000;
 const BOOT_GRACE_MS = 2 * 60_000;
-const SITE = process.env.JOBS_CRON_SITE ?? "cv-jobs";
 const SECRET = process.env.AK_INTERNAL_SECRET ?? "";
 const PORT = Number(process.env.PORT ?? 8080);
-const TARGET = Number(process.env.JOBS_CRON_TARGET ?? 10);
-
-const PROMPT =
-  `[scheduled] Run one job-hunt cycle. GOAL FOR THIS RUN: ${TARGET} applications actually submitted ` +
-  `and verified via cloud/confirmations.py — that is the bar, not "attempted". Open CLOUD_WORKER.md at ` +
-  `the root of this checkout and follow it end to end; start with the queue in cloud/state.json ` +
-  `readyToSubmit, which holds prepared applications. Every submit runs headed under Xvfb ` +
-  `(xvfb-run -a env PLAYWRIGHT_BROWSERS_PATH=/data/pw-browsers APPLY_HEADED=1 …). Pace ~3 per ATS ` +
-  `vendor per hour and switch vendors on the first spam refusal. Commit and push after every submit. ` +
-  `Reply with: submitted N/${TARGET}, which ATS each, and anything that blocked you.`;
 
 const startedAt = Date.now();
 
+interface CronJob {
+  site: string;
+  prompt: string;
+  hour: number;
+  tz: string;
+  everyHours?: number;
+  state: string;
+  page: string;
+}
+
 interface Clock { year: number; month: number; day: number; hour: number; minute: number; second: number }
 
-/** Calendar/clock parts of an instant as seen in TZ. */
-function partsIn(instant: Date): Clock {
+function legacyCronJob(): CronJob {
+  const target = Number(process.env.JOBS_CRON_TARGET ?? 10);
+  const prompt =
+    `[scheduled] Run one job-hunt cycle. GOAL FOR THIS RUN: ${target} applications actually submitted ` +
+    `and verified via cloud/confirmations.py — that is the bar, not "attempted". Open CLOUD_WORKER.md at ` +
+    `the root of this checkout and follow it end to end; start with the queue in cloud/state.json ` +
+    `readyToSubmit, which holds prepared applications. Every submit runs headed under Xvfb ` +
+    `(xvfb-run -a env PLAYWRIGHT_BROWSERS_PATH=/data/pw-browsers APPLY_HEADED=1 …). Pace ~3 per ATS ` +
+    `vendor per hour and switch vendors on the first spam refusal. Commit and push after every submit. ` +
+    `Reply with: submitted N/${target}, which ATS each, and anything that blocked you.`;
+
+  return {
+    site: process.env.JOBS_CRON_SITE ?? "cv-jobs",
+    prompt,
+    hour: Number(process.env.JOBS_CRON_HOUR ?? 11),
+    tz: process.env.JOBS_CRON_TZ ?? "America/New_York",
+    state: process.env.JOBS_CRON_STATE ?? "/data/agent-keyboard/jobs-cron.json",
+    page: "/jobs",
+  };
+}
+
+function invalidCronJobs(location: string, detail: string): CronJob[] {
+  console.error(`[jobs-cron] invalid JOBS_CRONS ${location}: ${detail}; using legacy schedule`);
+  return [legacyCronJob()];
+}
+
+export function loadCronJobs(): CronJob[] {
+  const source = process.env.JOBS_CRONS;
+  if (!source?.trim()) return [legacyCronJob()];
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch (err) {
+    return invalidCronJobs("at root", `malformed JSON (${String(err)})`);
+  }
+  if (!Array.isArray(parsed)) return invalidCronJobs("at root", "expected an array");
+
+  const jobs: CronJob[] = [];
+  for (const [index, raw] of parsed.entries()) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return invalidCronJobs(`at index ${index}`, "expected an object");
+    }
+    const entry = raw as Record<string, unknown>;
+
+    if (entry.disabled !== undefined && typeof entry.disabled !== "boolean") {
+      return invalidCronJobs(`at index ${index}, field disabled`, "expected a boolean");
+    }
+    if (entry.disabled === true) continue;
+
+    if (typeof entry.site !== "string" || !/^[a-z0-9][a-z0-9-]*$/i.test(entry.site)) {
+      return invalidCronJobs(`at index ${index}, field site`, "expected a non-empty slug");
+    }
+    if (typeof entry.prompt !== "string" || !entry.prompt.trim()) {
+      return invalidCronJobs(`at index ${index}, field prompt`, "expected a non-empty string");
+    }
+
+    const hour = entry.hour === undefined ? 11 : entry.hour;
+    if (typeof hour !== "number" || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+      return invalidCronJobs(`at index ${index}, field hour`, "expected an integer from 0 through 23");
+    }
+
+    const everyHours = entry.everyHours;
+    if (everyHours !== undefined &&
+        (typeof everyHours !== "number" || !Number.isFinite(everyHours) || everyHours <= 0)) {
+      return invalidCronJobs(`at index ${index}, field everyHours`, "expected a finite number greater than 0");
+    }
+
+    const tz = entry.tz === undefined ? "America/New_York" : entry.tz;
+    if (typeof tz !== "string" || !tz.trim()) {
+      return invalidCronJobs(`at index ${index}, field tz`, "expected a non-empty string");
+    }
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: tz }).format();
+    } catch {
+      return invalidCronJobs(`at index ${index}, field tz`, "expected a valid time zone");
+    }
+
+    const state = entry.state === undefined ? `/data/agent-keyboard/cron-${entry.site}.json` : entry.state;
+    if (typeof state !== "string" || !state.trim()) {
+      return invalidCronJobs(`at index ${index}, field state`, "expected a non-empty string");
+    }
+
+    const page = entry.page === undefined ? "/" : entry.page;
+    if (typeof page !== "string" || !page.startsWith("/")) {
+      return invalidCronJobs(`at index ${index}, field page`, "expected a non-empty string starting with '/'");
+    }
+
+    jobs.push({
+      site: entry.site,
+      prompt: entry.prompt,
+      hour,
+      tz,
+      ...(everyHours === undefined ? {} : { everyHours }),
+      state,
+      page,
+    });
+  }
+  return jobs;
+}
+
+/** Calendar/clock parts of an instant as seen in a named timezone. */
+function partsIn(instant: Date, tz: string): Clock {
   const dtf = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ, hour12: false,
+    timeZone: tz, hour12: false,
     year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
@@ -52,79 +150,108 @@ function partsIn(instant: Date): Clock {
 }
 
 /** TZ offset (ms) at a given instant — positive east of UTC. */
-function offsetMs(instant: Date): number {
-  const p = partsIn(instant);
+function offsetMs(instant: Date, tz: string): number {
+  const p = partsIn(instant, tz);
   return Date.UTC(p.year, p.month - 1, p.day, p.hour % 24, p.minute, p.second) - instant.getTime();
 }
 
-/** UTC instant of HOUR:00 local, on the TZ calendar day `dayShift` days from now. */
-function scheduledInstant(dayShift = 0): number {
-  const p = partsIn(new Date(Date.now() + dayShift * 86_400_000));
-  const naive = Date.UTC(p.year, p.month - 1, p.day, HOUR, 0, 0);
+/** UTC instant of the job's local hour, on the TZ calendar day `dayShift` days from now. */
+function scheduledInstant(job: CronJob, dayShift = 0): number {
+  const p = partsIn(new Date(Date.now() + dayShift * 86_400_000), job.tz);
+  const naive = Date.UTC(p.year, p.month - 1, p.day, job.hour, 0, 0);
   // Two passes settles the DST edge cases (the offset depends on the instant).
-  let utc = naive - offsetMs(new Date(naive));
-  utc = naive - offsetMs(new Date(utc));
+  let utc = naive - offsetMs(new Date(naive), job.tz);
+  utc = naive - offsetMs(new Date(utc), job.tz);
   return utc;
 }
 
-async function readLastRun(): Promise<number> {
+async function readLastRun(state: string): Promise<number> {
   try {
-    const at = Date.parse(JSON.parse(await readFile(STATE_PATH, "utf8"))?.lastRunAt ?? "");
+    const at = Date.parse(JSON.parse(await readFile(state, "utf8"))?.lastRunAt ?? "");
     return Number.isFinite(at) ? at : 0;
   } catch {
     return 0;
   }
 }
 
-async function writeLastRun(when: number): Promise<void> {
+async function writeLastRun(state: string, when: number): Promise<void> {
   try {
-    await mkdir(dirname(STATE_PATH), { recursive: true });
-    await writeFile(STATE_PATH, `${JSON.stringify({ lastRunAt: new Date(when).toISOString() }, null, 1)}\n`);
+    await mkdir(dirname(state), { recursive: true });
+    await writeFile(state, `${JSON.stringify({ lastRunAt: new Date(when).toISOString() }, null, 1)}\n`);
   } catch (err) {
-    console.error("[jobs-cron] could not persist state", String(err));
+    console.error(`[jobs-cron] could not persist state for ${state}`, String(err));
   }
 }
 
-async function fire(): Promise<boolean> {
-  const res = await fetch(`http://127.0.0.1:${PORT}/sites/${SITE}/messages`, {
+async function fire(job: CronJob): Promise<boolean> {
+  const res = await fetch(`http://127.0.0.1:${PORT}/sites/${job.site}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-ak-internal": SECRET },
-    body: JSON.stringify({ text: PROMPT, page: "/jobs" }),
+    body: JSON.stringify({ text: job.prompt, page: job.page }),
   });
   await res.body?.cancel(); // durable job — don't hold the SSE stream open
   if (!res.ok) {
-    console.error(`[jobs-cron] enqueue failed: ${res.status} ${res.statusText}`);
+    console.error(`[jobs-cron] enqueue failed for ${job.site}: ${res.status} ${res.statusText}`);
     return false;
   }
   return true;
 }
 
-async function tick(): Promise<void> {
+async function tick(job: CronJob): Promise<void> {
   try {
     if (!SECRET) return;
-    if (Date.now() - startedAt < BOOT_GRACE_MS) return;
+    const now = Date.now();
+    if (now - startedAt < BOOT_GRACE_MS) return;
 
-    const target = scheduledInstant();
-    if (Date.now() < target) return;              // today's slot hasn't arrived
-    const last = await readLastRun();
-    if (last >= target) return;                   // already ran for today's slot
+    let dueAt: number;
+    let last: number;
+    let intervalMs: number | undefined;
 
-    // Never stack cycles — but a job wedged "running" must not silence the
-    // schedule forever, so fire anyway once we are a full day past the slot.
-    if (listActive(SITE).some((job) => job.status === "running")) {
-      if (Date.now() - target < 86_400_000) return;
-      console.warn("[jobs-cron] a job is still running but we are a day overdue — firing anyway");
+    if (job.everyHours === undefined) {
+      dueAt = scheduledInstant(job);
+      if (now < dueAt) return;                    // today's slot hasn't arrived
+      last = await readLastRun(job.state);
+      if (last >= dueAt) return;                  // already ran for today's slot
+    } else {
+      intervalMs = job.everyHours * 3_600_000;
+      last = await readLastRun(job.state);
+      dueAt = last === 0 ? now : last + intervalMs;
+      if (now - last < intervalMs) return;
+    }
+
+    // Never stack cycles — but a job wedged "running" must not silence the schedule forever.
+    if (listActive(job.site).some((active) => active.status === "running")) {
+      const overdueLimit = intervalMs === undefined ? 86_400_000 : 2 * intervalMs;
+      if (now - dueAt < overdueLimit) return;
+      console.warn(
+        intervalMs === undefined
+          ? `[jobs-cron] ${job.site} is still running but is a day overdue — firing anyway`
+          : `[jobs-cron] ${job.site} is still running but is over two intervals overdue — firing anyway`,
+      );
     }
 
     console.log(
-      `[jobs-cron] firing for the ${String(HOUR).padStart(2, "0")}:00 ${TZ} slot ` +
-      `(${new Date(target).toISOString()}); last run ${last ? new Date(last).toISOString() : "never"}`,
+      intervalMs === undefined
+        ? `[jobs-cron] firing ${job.site} for the ${String(job.hour).padStart(2, "0")}:00 ${job.tz} slot ` +
+          `(${new Date(dueAt).toISOString()}); last run ${last ? new Date(last).toISOString() : "never"}`
+        : `[jobs-cron] firing ${job.site} on its ${job.everyHours}h interval; ` +
+          `last run ${last ? new Date(last).toISOString() : "never"}`,
     );
-    await writeLastRun(Date.now());               // stamp first so a crash can't retry-loop
-    if (!(await fire())) await writeLastRun(last);
+    const stampedAt = Date.now();
+    await writeLastRun(job.state, stampedAt);      // stamp first so a crash can't retry-loop
+    try {
+      if (!(await fire(job))) await writeLastRun(job.state, last);
+    } catch (err) {
+      await writeLastRun(job.state, last);
+      throw err;
+    }
   } catch (err) {
-    console.error("[jobs-cron] tick error", String(err));
+    console.error(`[jobs-cron] tick error for ${job.site}`, String(err));
   }
+}
+
+async function tickAll(jobs: CronJob[]): Promise<void> {
+  await Promise.all(jobs.map((job) => tick(job)));
 }
 
 export function startJobsCron(): void {
@@ -132,12 +259,29 @@ export function startJobsCron(): void {
     console.warn("[jobs-cron] AK_INTERNAL_SECRET unset — cron disabled");
     return;
   }
-  const next = Date.now() < scheduledInstant() ? scheduledInstant() : scheduledInstant(1);
-  console.log(
-    `[jobs-cron] armed — daily at ${String(HOUR).padStart(2, "0")}:00 ${TZ}, goal ${TARGET} submissions/run; ` +
-    `next slot ${new Date(next).toISOString()}; state at ${STATE_PATH}`,
-  );
-  void tick();
-  const timer = setInterval(() => void tick(), TICK_MS);
+
+  const jobs = loadCronJobs();
+  if (jobs.length === 0) {
+    console.log("[jobs-cron] no enabled schedules in JOBS_CRONS — cron disabled");
+    return;
+  }
+
+  for (const job of jobs) {
+    if (job.everyHours === undefined) {
+      const today = scheduledInstant(job);
+      const next = Date.now() < today ? today : scheduledInstant(job, 1);
+      console.log(
+        `[jobs-cron] armed — site ${job.site}; daily at ${String(job.hour).padStart(2, "0")}:00 ${job.tz}; ` +
+        `next slot ${new Date(next).toISOString()}; state at ${job.state}`,
+      );
+    } else {
+      console.log(
+        `[jobs-cron] armed — site ${job.site}; every ${job.everyHours} hours; state at ${job.state}`,
+      );
+    }
+  }
+
+  void tickAll(jobs);
+  const timer = setInterval(() => void tickAll(jobs), TICK_MS);
   timer.unref?.();
 }
