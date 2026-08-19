@@ -21,9 +21,12 @@ interface Config {
   isDev: boolean
   guestDemo: boolean
   guestDemoUrl: string
+  // data-summon: mount hidden; ` / ~ (or a triple-tap on touch) summons and
+  // dismisses the widget. For pages where visitors shouldn't see the bar.
+  summon: boolean
 }
 
-export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '' }
+export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false }
 
 /** Resolve site + api base from the widget script element. Returns the site id
  *  (empty string means caller should refuse to mount). */
@@ -43,6 +46,8 @@ export function initConfig(script: HTMLScriptElement | null): string {
   // a scripted product tour. Customer/fork embeds keep the normal auth gate.
   const guestDemo = script?.getAttribute('data-guest-demo')
   CONFIG.guestDemo = guestDemo != null && guestDemo !== 'false'
+  const summon = script?.getAttribute('data-summon')
+  CONFIG.summon = summon != null && summon !== 'false'
   CONFIG.guestDemoUrl = CONFIG.guestDemo
     ? guestDemo?.trim() || new URL('/agent-keyboard-demo.json', location.href).toString()
     : ''

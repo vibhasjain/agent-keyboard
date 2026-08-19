@@ -637,25 +637,10 @@ export function mountBar(shadow: ShadowRoot): void {
     }
   }
 
-  // -- two-state toggle (rectangle ⇄ transcript) --
-  const cycleState = () => {
-    if (getState().ui.mode === 'expanded') collapseToCorner()
-    else enterExpanded()
-  }
-
-  // Tilde toggles the states, Quake-console style. It's a typable character, so
-  // never hijack it while a field is focused — in the composer/login inputs, or
-  // in any input on the host page — let it type normally there.
-  on(document, 'keydown', (e) => {
-    const ke = e as KeyboardEvent
-    if (ke.code !== 'Backquote' || ke.metaKey || ke.ctrlKey || ke.altKey) return
-    const sa = shadow.activeElement as HTMLElement | null
-    if (sa && (sa.tagName === 'INPUT' || sa.tagName === 'TEXTAREA')) return
-    const da = document.activeElement as HTMLElement | null
-    if (da && (da.tagName === 'INPUT' || da.tagName === 'TEXTAREA' || da.isContentEditable)) return
-    ke.preventDefault()
-    cycleState()
-  })
+  // Tilde is the widget's ONLY summon shortcut and it lives in index.ts now: it
+  // shows/hides the whole widget, never cycles mini ⇄ expanded (that fought
+  // host-page toggles and surprise-expanded the transcript). Escape's peeling
+  // (menu → lightbox → transcript → corner) lives in chat.ts. No other keys.
 
   on(miniBtn, 'click', enterExpanded)
 

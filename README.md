@@ -19,6 +19,10 @@ it keeps running server-side; reopen and the bar re-attaches.
 `data-site` is the id of a repo in your allow-list (the `SITES` env var). The API defaults to wherever
 the script is served from.
 
+Add `data-summon` and the bar stays invisible to visitors: <kbd>`</kbd>/<kbd>~</kbd> summons and
+dismisses it (a triple-tap anywhere on touch screens), and <kbd>Esc</kbd> steps the open widget back
+down. Those are the only keyboard interactions, with or without `data-summon`.
+
 **[agentkeyboard.com](https://agentkeyboard.com) runs this widget on itself** (`data-site="halo"`) —
 the marketing site edits its own repo. When you see a commit here authored by `Agent Keyboard`, it was
 made from the bar at the bottom of that page.

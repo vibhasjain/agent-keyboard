@@ -5,7 +5,7 @@
 
 import { consumeInviteToken, getPendingInvite, initAuth } from './auth'
 import { mountBar } from './bar'
-import { initConfig, shouldMountHere } from './config'
+import { CONFIG, initConfig, shouldMountHere } from './config'
 import { injectFonts } from './fonts'
 import { isGuestDemo, loadGuestDemo } from './guest-demo'
 import { bootRehydrate } from './jobstore'
@@ -69,9 +69,11 @@ function mount(): void {
   // Page-controlled visibility. hide() collapses the transcript FIRST: when
   // expanded, chat.ts holds a body scroll lock (position:fixed), and hiding
   // the host without releasing it freezes the page under an invisible widget.
+  // show() always surfaces the resting corner rectangle, never the transcript.
   const api = {
     visible: (): boolean => host.style.display !== 'none',
     show: (): void => {
+      if (getState().ui.mode === 'expanded') patchUi({ mode: 'mini' })
       host.style.display = ''
     },
     hide: (): void => {
@@ -85,6 +87,49 @@ function mount(): void {
     },
   }
   window.__agentKeyboard = api
+
+  // data-summon: invisible until summoned — except mid-invite, where hiding
+  // would bury the set-a-password form the link just opened.
+  if (CONFIG.summon && !getPendingInvite()) host.style.display = 'none'
+
+  // ` / ~ summons and dismisses the whole widget. It's a typable character —
+  // never hijack it while any field is focused, in the widget or on the host
+  // page. Together with Escape's peeling (chat.ts: menu → lightbox →
+  // transcript → corner) these are the widget's only keyboard shortcuts.
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Backquote' || e.metaKey || e.ctrlKey || e.altKey) return
+    const sa = shadow.activeElement as HTMLElement | null
+    if (sa && (sa.tagName === 'INPUT' || sa.tagName === 'TEXTAREA')) return
+    const da = document.activeElement as HTMLElement | null
+    if (da && (da.tagName === 'INPUT' || da.tagName === 'TEXTAREA' || da.isContentEditable)) return
+    e.preventDefault()
+    api.toggle()
+  })
+
+  // No tilde on phones: in summon mode, three quick taps anywhere
+  // non-interactive toggle the widget instead.
+  if (CONFIG.summon) {
+    let taps = 0
+    let lastTap = 0
+    document.addEventListener(
+      'touchend',
+      (e) => {
+        const t = e.target as HTMLElement | null
+        if (t && (t.closest('button, a, input, textarea, select, label') || t.id === 'agent-keyboard-host')) {
+          taps = 0
+          return
+        }
+        const now = Date.now()
+        taps = now - lastTap < 400 ? taps + 1 : 1
+        lastTap = now
+        if (taps >= 3) {
+          taps = 0
+          api.toggle()
+        }
+      },
+      { passive: true },
+    )
+  }
 }
 
 ;(function boot(): void {
