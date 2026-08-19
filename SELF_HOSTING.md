@@ -264,6 +264,15 @@ Ask the bar: *"invite esther@example.com"*. The agent runs the `provision-user` 
 emails them a link to set a password (landing on `$AK_PUBLIC_URL/welcome`), and their email is added
 to `/data/agent-keyboard/allowed-emails.json`, which the auth gate accepts alongside `ALLOWED_EMAIL`.
 
+**Scoped users** — an entry in that file can also be an object:
+`{"email": "boss@example.com", "sites": ["closeout"], "pathPrefix": "report/"}`. `sites` is
+auth-enforced (their login only works for those site ids); `pathPrefix` rides every prompt they send
+as a server note confining changes to that repo path — a guardrail for a trusted guest, not a hard
+sandbox (the agent runs with full repo access, and every change is still an auditable, revertible git
+commit). Ask the bar: *"invite boss@example.com scoped to the closeout site, report/ only"*.
+Re-inviting an email replaces its entry, so the same flow changes someone's scope. Env-listed
+`ALLOWED_EMAIL` owners are never scoped.
+
 Setup requirements, once:
 
 1. `SUPABASE_SERVICE_KEY` must be set (it's the same key durable jobs use).

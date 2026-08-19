@@ -15,11 +15,13 @@ import { dirname, join } from "node:path";
 import { assertServerConfig } from "./config.js";
 import { demoPage, isDemoScene } from "./demo.js";
 import {
+  allowsSite,
   googleSessionsConfigured,
   mintGoogleSession,
   requireOwner,
   requireOwnerOrGoogle,
   verifyGoogle,
+  type AuthedUser,
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
@@ -91,6 +93,33 @@ app.use(express.json({ limit: "1mb" })); // attachments go via multipart, so 1mb
 
 const authed = requireOwner();
 const authedOrGoogle = requireOwnerOrGoogle();
+
+// ─── per-user site/path scoping (see auth.ts UserScope) ─────────────────────
+function authedUser(req: Request): AuthedUser | undefined {
+  return (req as Request & { user?: AuthedUser }).user;
+}
+
+/** 403 + true when the caller is a scoped user and this site isn't theirs. */
+function denySite(req: Request, res: Response, siteId: string): boolean {
+  const user = authedUser(req);
+  if (user && !allowsSite(user, siteId)) {
+    res.status(403).json({ error: "not authorized for this site" });
+    return true;
+  }
+  return false;
+}
+
+/** The server-authored path constraint appended to every prompt and follow-up
+ *  from a path-scoped user. It rides the user turn because Claude sessions are
+ *  shared per site/page — the session-level scope note can't be per-user. */
+function pathScopeNote(user: AuthedUser | undefined): string {
+  const p = user?.scope?.pathPrefix;
+  if (!p) return "";
+  return (
+    `\n\n[Server note — sent by ${user!.email}, a restricted user: for this request you may only create, modify, or delete files under "${p}" in this repo (committing and pushing as usual). ` +
+    `If the request would require touching anything outside that path, make no change and reply that this user's access is limited to ${p}.]`
+  );
+}
 
 // ─── open routes ───────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
@@ -323,8 +352,9 @@ app.post("/sites/:siteId/session", async (req, res) => {
 
 registerFeedRoutes(app, authedOrGoogle);
 
-app.get("/sites", authed, (_req, res) => {
-  res.json(listSitesPublic());
+app.get("/sites", authed, (req, res) => {
+  const user = authedUser(req);
+  res.json(listSitesPublic().filter((s) => !user || allowsSite(user, s.id)));
 });
 
 /**
@@ -337,6 +367,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     res.status(404).json({ error: "unknown site" });
     return;
   }
+  if (denySite(req, res, site.id)) return;
   const body = (req.body ?? {}) as {
     text?: unknown;
     page?: unknown;
@@ -371,9 +402,12 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   // On a page-scoped site the conversation follows the page ("" = site root);
   // on everything else the slug is always "" and behavior is unchanged.
   const pageSlug = pageSlugFor(site, page);
+  // Path-scoped users: the constraint travels with the turn itself; the stored
+  // job prompt stays the user's own words.
+  const promptText = text + pathScopeNote(authedUser(req));
   const gen = input
-    ? runStreamingSession(site, { text, page, pageSlug, attachmentPaths }, input, ac.signal)
-    : runMessageJob(site, { text, page, pageSlug, attachmentPaths }, ac.signal);
+    ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths }, input, ac.signal)
+    : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths }, ac.signal);
   // Record which Claude session this job drives, so an auto-resume after a
   // self-triggered redeploy can pick the turn back up with --resume.
   const conversationId = await conversationIdFor(site.id, pageSlug);
@@ -403,12 +437,20 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
     res.status(404).json({ error: "unknown site" });
     return;
   }
+  if (denySite(req, res, site.id)) return;
   const text = typeof (req.body as { text?: unknown })?.text === "string" ? (req.body as { text: string }).text : "";
   if (!text.trim()) {
     res.status(400).json({ error: "text required" });
     return;
   }
-  const ok = appendToJob(req.params.jobId ?? "", text);
+  // The job must belong to the site in the URL — otherwise the site check
+  // above could be sidestepped by posting another site's jobId under this one.
+  const target = getJob(req.params.jobId ?? "");
+  if (!target || target.siteId !== site.id) {
+    res.status(409).json({ error: "job not accepting messages" });
+    return;
+  }
+  const ok = appendToJob(req.params.jobId ?? "", text + pathScopeNote(authedUser(req)));
   if (!ok) {
     res.status(409).json({ error: "job not accepting messages" });
     return;
@@ -423,6 +465,7 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
     res.status(404).json({ error: "unknown site" });
     return;
   }
+  if (denySite(req, res, site.id)) return;
   const bb = busboy({ headers: req.headers, limits: { files: 1, fileSize: 15 * 1024 * 1024 } });
   const chunks: Buffer[] = [];
   let fieldName: "photo" | "file" | null = null;
@@ -477,6 +520,8 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
 /** Forcefully stop a running job (kills the CLI child, releases the lock). The
  *  job's stream then delivers a terminal 'stopped' error to every viewer. */
 app.post("/jobs/:jobId/cancel", authed, (req, res) => {
+  const job = getJob(req.params.jobId ?? "");
+  if (job && denySite(req, res, job.siteId)) return;
   const stopped = cancelJob(req.params.jobId ?? "");
   res.json({ stopped });
 });
@@ -489,6 +534,7 @@ app.post("/sites/:siteId/restart", authed, async (req, res) => {
     res.status(404).json({ error: "unknown site" });
     return;
   }
+  if (denySite(req, res, site.id)) return;
 
   // On a page-scoped site, restart from a page rotates only that page's
   // conversation; the checkout is shared across pages, so only a site-root
@@ -523,6 +569,7 @@ app.post("/sites/:siteId/compact", authed, async (req, res) => {
     res.status(404).json({ error: "unknown site" });
     return;
   }
+  if (denySite(req, res, site.id)) return;
   // Close any open session so the lock frees promptly; compaction summarizes the
   // session's memory anyway, and the next message resumes it compacted.
   const pageSlug = pageSlugFor(site, (req.body as { page?: unknown } | undefined)?.page);
@@ -540,11 +587,13 @@ app.get("/jobs/:jobId/stream", authed, async (req, res) => {
   const jobId = req.params.jobId ?? "";
   const job = getJob(jobId);
   if (job) {
+    if (denySite(req, res, job.siteId)) return;
     await streamJobTail(req, res, job);
     return;
   }
   // Not in the registry: fall back to the durable DB row.
   const row = await dbGetJob(jobId);
+  if (row && denySite(req, res, row.site_id)) return;
   openSse(res);
   if (!row) {
     writeFrame(res, "error", { kind: "not_found", detail: "Unknown job." });
@@ -575,6 +624,12 @@ app.get("/jobs/:jobId/stream", authed, async (req, res) => {
 /** List running jobs + a 10-minute finished window for a site (registry ∪ DB). */
 app.get("/jobs", authed, async (req, res) => {
   const siteId = typeof req.query.siteId === "string" ? req.query.siteId : "";
+  if (siteId && denySite(req, res, siteId)) return;
+  // No siteId lists active jobs across ALL sites — nothing there for a scoped user.
+  if (!siteId && authedUser(req)?.scope) {
+    res.json({ jobs: [] });
+    return;
+  }
   const site = siteId ? getSite(siteId) : null;
   // Page filter only when the site opted into per-page sessions AND the caller
   // sent a page — old cached widgets omit it and stay unfiltered (today's view).
@@ -602,6 +657,7 @@ app.get("/jobs/:jobId", authed, async (req, res) => {
   const jobId = req.params.jobId ?? "";
   const snap = jobSnapshot(jobId);
   if (snap) {
+    if (denySite(req, res, snap.site_id)) return;
     res.json(snap);
     return;
   }
@@ -610,6 +666,7 @@ app.get("/jobs/:jobId", authed, async (req, res) => {
     res.status(404).json({ error: "job not found" });
     return;
   }
+  if (denySite(req, res, row.site_id)) return;
   res.json(rowToSnapshot(row));
 });
 
@@ -620,6 +677,7 @@ app.get("/sites/:siteId/conversation", authed, async (req, res) => {
     res.status(404).json({ error: "unknown site" });
     return;
   }
+  if (denySite(req, res, site.id)) return;
   const limit = Number(req.query.limit ?? 40);
   const before = Number(req.query.before ?? 0);
   const pageSlug = pageSlugFor(site, req.query.page);
@@ -637,7 +695,12 @@ app.get("/sites/:siteId/conversation", authed, async (req, res) => {
 });
 
 /** Private job-application feed generated by the cv-jobs worker. */
-app.get("/jobs-feed", authed, async (_req, res) => {
+app.get("/jobs-feed", authed, async (req, res) => {
+  // Personal feed — never for scoped users.
+  if (authedUser(req)?.scope) {
+    res.status(403).json({ error: "not authorized" });
+    return;
+  }
   const feedPath = process.env.JOBS_FEED_PATH ?? "/data/checkouts/cv-jobs/cloud/jobs-feed.json";
   res.setHeader("Cache-Control", "no-store");
   try {

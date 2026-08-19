@@ -10,12 +10,20 @@ their Supabase account, emails them a set-your-password link, and adds their
 email to the server's allow-list so the auth gate accepts them.
 
 ```bash
-node ~/.claude/skills/provision-user/invite.mjs someone@example.com [site-domain]
+node ~/.claude/skills/provision-user/invite.mjs someone@example.com [site-domain] [--sites siteId,siteId] [--path prefix/]
 ```
 
 Pass the `site-domain` you're inviting them to (e.g. `agentkeyboard.com`) so the
 email names it — if omitted, it uses the sole configured site, or a generic
 phrase when several exist.
+
+**Scoped access** — when the owner asks to invite someone "for one site only" or
+"who can only touch <path>": add `--sites` with the site id(s) from the SITES
+allow-list (auth then rejects them on every other site), and optionally `--path`
+with a repo path prefix (every prompt they send carries a server note confining
+the change to that path — a guardrail for a trusted guest, not a hard sandbox).
+Example: `--sites closeout --path report/`. Re-inviting an email replaces its
+existing entry, so the same command also tightens or loosens someone's scope.
 
 What it does:
 

@@ -17,10 +17,22 @@ import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-const email = (process.argv[2] || "").trim().toLowerCase();
-let siteArg = (process.argv[3] || "").trim();
-if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-  console.error("usage: node invite.mjs <email> [site-domain]");
+// Flags: --sites <id,id> restricts the user to those site ids (auth-enforced);
+// --path <prefix> additionally confines their change requests to that repo path
+// (rides every prompt as a server note). See auth.ts UserScope.
+const argv = process.argv.slice(2);
+const flags = { sites: null, path: "" };
+const positional = [];
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--sites") flags.sites = String(argv[++i] || "").split(",").map((s) => s.trim()).filter(Boolean);
+  else if (argv[i] === "--path") flags.path = String(argv[++i] || "").trim();
+  else positional.push(argv[i]);
+}
+const email = (positional[0] || "").trim().toLowerCase();
+let siteArg = (positional[1] || "").trim();
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (flags.path && !flags.sites?.length)) {
+  console.error("usage: node invite.mjs <email> [site-domain] [--sites siteId,siteId] [--path prefix/]");
+  console.error("(--path requires --sites: a path scope without a site scope grants nothing)");
   process.exit(2);
 }
 
@@ -160,11 +172,15 @@ const listPath = join(dataDir, "agent-keyboard", "allowed-emails.json");
 let list = [];
 try {
   const parsed = JSON.parse(await readFile(listPath, "utf8"));
-  if (Array.isArray(parsed)) list = parsed.map((e) => String(e).toLowerCase());
+  // Entries are "email" strings (full access) or {email, sites, pathPrefix?}
+  // objects (scoped) — see auth.ts parseAllowedList.
+  if (Array.isArray(parsed)) list = parsed;
 } catch {
   /* first user */
 }
-if (!list.includes(email)) list.push(email);
+const entryEmail = (e) => (typeof e === "string" ? e : e?.email || "").toLowerCase();
+list = list.filter((e) => entryEmail(e) !== email); // re-inviting replaces the old entry (and its scope)
+list.push(flags.sites?.length ? { email, sites: flags.sites, ...(flags.path ? { pathPrefix: flags.path } : {}) } : email);
 await mkdir(dirname(listPath), { recursive: true });
 await writeFile(`${listPath}.tmp`, JSON.stringify(list, null, 2) + "\n");
 await rename(`${listPath}.tmp`, listPath);

@@ -51,31 +51,64 @@ const csv = (v: string | undefined): Set<string> =>
 const ALLOWED_EMAILS = csv(process.env.ALLOWED_EMAIL);
 const ALLOWED_USER_IDS = csv(process.env.ALLOWED_USER_ID);
 
+// A provisioned entry may carry a scope: which site ids the user may operate
+// on, and (optionally) a repo path prefix their change requests are confined
+// to. Env-listed owners (ALLOWED_EMAIL) are never scoped. `null` scope = full
+// access (a plain string entry).
+export interface UserScope {
+  sites: string[];
+  pathPrefix?: string;
+}
+
+/** Parse allowed-emails.json content: entries are "email" strings (full access)
+ *  or {email, sites, pathPrefix?} objects (scoped). Malformed entries are
+ *  skipped — a typo must never widen access. Exported for the dev check. */
+export function parseAllowedList(raw: string): Map<string, UserScope | null> {
+  const out = new Map<string, UserScope | null>();
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed)) return out;
+  for (const entry of parsed) {
+    if (typeof entry === "string") {
+      out.set(entry.toLowerCase().trim(), null);
+    } else if (entry && typeof entry === "object" && typeof entry.email === "string") {
+      const sites = Array.isArray(entry.sites) ? entry.sites.map(String).filter(Boolean) : [];
+      if (!sites.length) continue; // a scoped entry with no sites grants nothing
+      const pathPrefix = typeof entry.pathPrefix === "string" && entry.pathPrefix ? entry.pathPrefix : undefined;
+      out.set(entry.email.toLowerCase().trim(), { sites, pathPrefix });
+    }
+  }
+  return out;
+}
+
 // Runtime-provisioned emails (allowed-emails.json on the volume), cached
 // briefly so the auth hot path doesn't stat the disk per request.
 const LIST_TTL_MS = 10_000;
-let listCache: { emails: Set<string>; at: number } = { emails: new Set(), at: 0 };
-async function provisionedEmails(): Promise<Set<string>> {
+let listCache: { entries: Map<string, UserScope | null>; at: number } = { entries: new Map(), at: 0 };
+async function provisionedEntries(): Promise<Map<string, UserScope | null>> {
   const now = Date.now();
-  if (now - listCache.at < LIST_TTL_MS) return listCache.emails;
-  const emails = new Set<string>();
+  if (now - listCache.at < LIST_TTL_MS) return listCache.entries;
+  let entries = new Map<string, UserScope | null>();
   try {
     const raw = await readDataFile("agent-keyboard/allowed-emails.json");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) for (const e of parsed) emails.add(String(e).toLowerCase().trim());
-    }
+    if (raw) entries = parseAllowedList(raw);
   } catch {
     /* unreadable list = nobody extra */
   }
-  listCache = { emails, at: now };
-  return emails;
+  listCache = { entries, at: now };
+  return entries;
 }
 
-async function isAllowedEmail(email: string): Promise<boolean> {
+/** Allowed → the user's scope (null = unrestricted); not allowed → undefined. */
+async function allowedScope(email: string): Promise<UserScope | null | undefined> {
   const e = email.toLowerCase();
-  if (ALLOWED_EMAILS.has(e)) return true;
-  return (await provisionedEmails()).has(e);
+  if (ALLOWED_EMAILS.has(e)) return null;
+  const entries = await provisionedEntries();
+  return entries.has(e) ? entries.get(e) : undefined;
+}
+
+/** True when this user may operate on the given site (unscoped users always may). */
+export function allowsSite(user: AuthedUser, siteId: string): boolean {
+  return !user.scope || user.scope.sites.includes(siteId);
 }
 
 const CACHE_TTL_MS = 60_000;
@@ -92,6 +125,8 @@ const JWT_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 export interface AuthedUser {
   id: string;
   email: string;
+  // Present only for scoped provisioned users — see UserScope above.
+  scope?: UserScope;
 }
 
 interface CacheEntry {
@@ -131,10 +166,10 @@ async function verify(token: string): Promise<AuthedUser | null> {
     });
     if (res.ok) {
       const body = (await res.json()) as { id?: string; email?: string };
-      const emailOk = !!body?.email && (await isAllowedEmail(body.email));
+      const scope = body?.email ? await allowedScope(body.email) : undefined;
       const idOk = ALLOWED_USER_IDS.size === 0 || (!!body?.id && ALLOWED_USER_IDS.has(body.id.toLowerCase()));
-      if (emailOk && idOk && body.id && body.email) {
-        user = { id: body.id, email: body.email };
+      if (scope !== undefined && idOk && body.id && body.email) {
+        user = { id: body.id, email: body.email, ...(scope ? { scope } : {}) };
       }
     }
   } catch {
