@@ -9,13 +9,16 @@ import { initConfig, shouldMountHere } from './config'
 import { injectFonts } from './fonts'
 import { isGuestDemo, loadGuestDemo } from './guest-demo'
 import { bootRehydrate } from './jobstore'
-import { patchUi } from './state'
+import { getState, patchUi } from './state'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
 
 declare global {
   interface Window {
-    __agentKeyboard?: boolean
+    // `true` from boot until mount; then the visibility API (host pages that
+    // summon the bar with a hotkey use it — see hide() for why display:none
+    // alone is not enough).
+    __agentKeyboard?: true | { visible(): boolean; show(): void; hide(): void; toggle(): boolean }
   }
 }
 
@@ -62,6 +65,26 @@ function mount(): void {
   // holds the set-a-password form. Otherwise rest as the corner rectangle.
   if (getPendingInvite()) patchUi({ mode: 'expanded' })
   bootRehydrate() // re-attach only if active-job key + stored session exist
+
+  // Page-controlled visibility. hide() collapses the transcript FIRST: when
+  // expanded, chat.ts holds a body scroll lock (position:fixed), and hiding
+  // the host without releasing it freezes the page under an invisible widget.
+  const api = {
+    visible: (): boolean => host.style.display !== 'none',
+    show: (): void => {
+      host.style.display = ''
+    },
+    hide: (): void => {
+      if (getState().ui.mode === 'expanded') patchUi({ mode: 'mini' })
+      host.style.display = 'none'
+    },
+    toggle: (): boolean => {
+      if (api.visible()) api.hide()
+      else api.show()
+      return api.visible()
+    },
+  }
+  window.__agentKeyboard = api
 }
 
 ;(function boot(): void {
