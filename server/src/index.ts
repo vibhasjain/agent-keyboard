@@ -25,7 +25,7 @@ import {
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
-import { runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
+import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
 import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
@@ -405,9 +405,10 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   // Path-scoped users: the constraint travels with the turn itself; the stored
   // job prompt stays the user's own words.
   const promptText = text + pathScopeNote(authedUser(req));
+  const sender = authedUser(req)?.email;
   const gen = input
-    ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths }, input, ac.signal)
-    : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths }, ac.signal);
+    ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths, sender }, input, ac.signal)
+    : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths, sender }, ac.signal);
   // Record which Claude session this job drives, so an auto-resume after a
   // self-triggered redeploy can pick the turn back up with --resume.
   const conversationId = await conversationIdFor(site.id, pageSlug);
@@ -450,7 +451,13 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
     res.status(409).json({ error: "job not accepting messages" });
     return;
   }
-  const ok = appendToJob(req.params.jobId ?? "", text + pathScopeNote(authedUser(req)));
+  // Follow-ups get the same "[Sent from … by <email>]" header as opening turns so
+  // the transcript can attribute them; the page is unknown here, "/" is fine.
+  const user = authedUser(req);
+  const ok = appendToJob(
+    req.params.jobId ?? "",
+    buildPrompt(site, { text: text + pathScopeNote(user), page: "/", attachmentPaths: [], sender: user?.email }),
+  );
   if (!ok) {
     res.status(409).json({ error: "job not accepting messages" });
     return;

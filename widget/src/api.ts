@@ -134,6 +134,9 @@ export interface ConversationMessage {
   tools?: unknown
   attachments?: number
   photos?: number
+  // Who typed a user turn (email). Absent on turns from before sender tagging
+  // shipped — those render without a name tag.
+  sender?: string
   // Client-only demo messages may carry visible attachment previews. The real
   // conversation API does not need to return these fields.
   thumbs?: string[]

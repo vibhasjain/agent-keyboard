@@ -356,6 +356,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-t-body{ flex:1; min-width:0; white-space:pre-wrap; }
 .ak-t.user{ color:var(--ak-ink3); margin-top:18px; }
 .ak-t.user .ak-t-mark{ color:var(--ak-ink3); }
+.ak-t-who{ font-size:10.5px; letter-spacing:.02em; margin-right:8px; opacity:.9; }
 .ak-t.asst{ color:var(--ak-ink); }
 .ak-t.asst .ak-t-mark{ color:var(--ak-warm); }
 .ak-t.asst .ak-t-body{ white-space:normal; }

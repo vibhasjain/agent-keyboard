@@ -23,6 +23,9 @@ export interface ChatMessage {
   attachments?: number;
   // Back-compat for older turns injected with "Photo(s) attached".
   photos?: number;
+  // Who typed a user turn (parsed from the "[Sent from … by <email>]" header);
+  // absent on turns from before sender tagging shipped.
+  sender?: string;
 }
 
 /** Claude Code slugs a project dir as its absolute cwd with `/` and `.` → `-`. */
@@ -53,9 +56,10 @@ export async function sessionFilePath(sessionId: string, cwd: string): Promise<s
  * clean. Returns the count from the stripped boilerplate so the widget can show
  * a marker (the staged files themselves are deleted after the job).
  */
-function cleanUserText(raw: string): { text: string; attachments: number; photos: number } {
+export function cleanUserText(raw: string): { text: string; attachments: number; photos: number; sender?: string } {
   let attachments = 0;
   let photos = 0;
+  let sender: string | undefined;
   const text = raw
     .split("\n")
     .filter((l) => {
@@ -67,11 +71,16 @@ function cleanUserText(raw: string): { text: string; attachments: number; photos
         photos += (l.match(/\.tmp\//g) ?? []).length || 1;
         return false;
       }
+      const sent = /^\[Sent from \S+(?: by (\S+))?\]$/i.exec(l);
+      if (sent) {
+        if (sent[1]) sender = sent[1];
+        return false;
+      }
       return !/^\[Sent from /i.test(l);
     })
     .join("\n")
     .trim();
-  return { text, attachments, photos };
+  return { text, attachments, photos, ...(sender ? { sender } : {}) };
 }
 
 function userText(content: unknown): string | null {
@@ -152,6 +161,7 @@ export async function readConversation(
             text: clean.text,
             ...(clean.attachments ? { attachments: clean.attachments } : {}),
             ...(clean.photos ? { photos: clean.photos } : {}),
+            ...(clean.sender ? { sender: clean.sender } : {}),
             ts,
             tools: [],
           });

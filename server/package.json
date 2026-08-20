@@ -13,7 +13,8 @@
     "google-auth-check": "tsx src/dev/google-auth-check.ts",
     "parse-check": "tsx src/dev/parse-check.ts",
     "page-slug-check": "tsx src/dev/page-slug-check.ts",
-    "scope-check": "tsx src/dev/scope-check.ts"
+    "scope-check": "tsx src/dev/scope-check.ts",
+    "sender-check": "tsx src/dev/sender-check.ts"
   },
   "dependencies": {
     "busboy": "^1.6.0",

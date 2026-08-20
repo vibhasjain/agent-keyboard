@@ -181,10 +181,15 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   return lines.join(" ");
 }
 
-/** Build the user turn: a "[Sent from …]" context line, the text, and any attachments. */
-function buildPrompt(site: Site, opts: { text: string; page: string; attachmentPaths: string[] }): string {
+/** Build the user turn: a "[Sent from … by <email>]" context line (conversation.ts parses the
+ *  sender back out for the transcript's name tags), the text, and any attachments. */
+export function buildPrompt(
+  site: Site,
+  opts: { text: string; page: string; attachmentPaths: string[]; sender?: string },
+): string {
   const page = opts.page || "/";
-  const lines = [`[Sent from https://${site.domain}${page}]`, "", opts.text];
+  const by = opts.sender ? ` by ${opts.sender}` : "";
+  const lines = [`[Sent from https://${site.domain}${page}${by}]`, "", opts.text];
   if (opts.attachmentPaths.length) {
     lines.push("");
     lines.push(
@@ -685,7 +690,7 @@ export type Frame = [string, unknown];
  */
 export async function* runMessageJob(
   site: Site,
-  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[] },
+  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[]; sender?: string },
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
   yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
@@ -967,7 +972,7 @@ export async function* runMessageJob(
  */
 export async function* runStreamingSession(
   site: Site,
-  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[] },
+  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[]; sender?: string },
   input: InputChannel,
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {

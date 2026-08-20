@@ -144,10 +144,23 @@ function attachmentMarker(count: number, noun = 'attachment'): HTMLElement {
   return m
 }
 
+// One stable color per sender so teammates sharing a site can tell turns apart:
+// djb2 over the email → hue, fixed S/L so every hue reads on the dark ground.
+export function senderColor(email: string): string {
+  let h = 5381
+  for (let i = 0; i < email.length; i++) h = (h * 33 + email.charCodeAt(i)) >>> 0
+  return `hsl(${h % 360} 55% 72%)`
+}
+
+// Turns that originate on this device (live, queued, follow-ups) are always the
+// signed-in user's; cross-device re-attach carries no prompt and renders from
+// history, which brings its own sender. Guest demo has no session → no tag.
+const localSender = (): string | undefined => getSessionEmail() ?? undefined
+
 function msgEl(
   role: 'user' | 'assistant',
   text: string,
-  extras?: { thumbs?: string[]; files?: string[]; attachments?: number; photos?: number; images?: string[] },
+  extras?: { thumbs?: string[]; files?: string[]; attachments?: number; photos?: number; images?: string[]; sender?: string },
 ): HTMLElement {
   if (role === 'user') {
     const body = el('div')
@@ -155,7 +168,15 @@ function msgEl(
     if (extras?.files?.length) body.appendChild(attachmentMarker(extras.files.length, 'file'))
     if (extras?.attachments && !extras?.thumbs?.length && !extras?.files?.length) body.appendChild(attachmentMarker(extras.attachments))
     else if (extras?.photos && !extras?.thumbs?.length) body.appendChild(photoMarker(extras.photos))
-    body.appendChild(el('div', undefined, (n) => (n.textContent = text)))
+    const line = el('div')
+    if (extras?.sender) {
+      // Name tag precedes the text inline: "alice@x.com  make the footer amber"
+      const who = el('span', 'ak-t-who', (n) => (n.textContent = extras.sender!))
+      who.style.color = senderColor(extras.sender)
+      line.appendChild(who)
+    }
+    line.appendChild(document.createTextNode(text))
+    body.appendChild(line)
     return lineEl('user', '>', body)
   }
   // Assistant: markdown text, plus any images the agent chose to show (same
@@ -287,6 +308,7 @@ function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
     thumbs: m.thumbs,
     files: m.files,
     images: m.images,
+    sender: m.sender,
   })
   if (m.role === 'assistant') markAnsweredOptions(node, m.chosenOption ?? answer)
   return node
@@ -632,7 +654,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     for (let i = 0; i < live.length; i++) {
       const t = live[i]
       const node =
-        t.role === 'error' ? errorEl(t.text) : msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images })
+        t.role === 'error' ? errorEl(t.text) : msgEl(t.role, t.text, { thumbs: t.thumbs, files: t.files, images: t.images, sender: localSender() })
       if (t.role === 'assistant') markAnsweredOptions(node, answerFor(turns, history.length + i))
       listEl.appendChild(node)
     }
@@ -662,7 +684,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
           (activeAttachmentOnly && !norm(lastUser.text) && (lastUser.attachments ?? lastUser.photos ?? 0) > 0))
       if (!guest && !liveUser && !dupOfHistory) {
         // Prompt and attachment previews are fixed for the lifetime of a job — build once.
-        liveUser = msgEl('user', prompt || '', { thumbs: activeThumbs, files: activeFiles })
+        liveUser = msgEl('user', prompt || '', { thumbs: activeThumbs, files: activeFiles, sender: localSender() })
         listEl.appendChild(liveUser)
       }
       if (liveUser) show(liveUser, !guest && (!!prompt || activeAttachmentOnly) && !dupOfHistory)
@@ -700,12 +722,12 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const followups = getPendingFollowups()
     clearNode(queuedBox)
     for (const text of followups) {
-      const line = msgEl('user', text)
+      const line = msgEl('user', text, { sender: localSender() })
       line.classList.add('queued')
       queuedBox.appendChild(line)
     }
     for (const m of q) {
-      const line = msgEl('user', m.text, { thumbs: m.thumbs, files: m.files })
+      const line = msgEl('user', m.text, { thumbs: m.thumbs, files: m.files, sender: localSender() })
       line.classList.add('queued')
       queuedBox.appendChild(line)
     }
