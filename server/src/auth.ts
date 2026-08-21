@@ -10,7 +10,7 @@
 // The allowed identities come from env: ALLOWED_EMAIL — one email, or a
 // comma-separated few (a client, a partner) — matched case-insensitively, and
 // an optional ALLOWED_USER_ID pin (one or more Supabase UUIDs, checked only if
-// set). A 60s in-memory cache keeps us from hitting Supabase on every SSE
+// set — it pins Supabase identities; Google viewers are identified by email only). A 60s in-memory cache keeps us from hitting Supabase on every SSE
 // re-attach / poll.
 //
 // Emails provisioned at runtime (the provision-user skill: "invite
@@ -50,8 +50,12 @@ const csv = (v: string | undefined): Set<string> =>
   );
 const ALLOWED_EMAILS = csv(process.env.ALLOWED_EMAIL);
 const ALLOWED_USER_IDS = csv(process.env.ALLOWED_USER_ID);
-const GOOGLE_CLIENT_IDS = csv(process.env.GOOGLE_OAUTH_CLIENT_ID);
-const GOOGLE_HD_SITES = csv(process.env.GOOGLE_HD_SITES);
+// Case-preserving: client ids and site ids are compared exactly (csv() lower-cases
+// for email matching, which would silently mis-match a mixed-case site id).
+const csvExact = (v: string | undefined): Set<string> =>
+  new Set((v ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+const GOOGLE_CLIENT_IDS = csvExact(process.env.GOOGLE_OAUTH_CLIENT_ID);
+const GOOGLE_HD_SITES = csvExact(process.env.GOOGLE_HD_SITES);
 
 // A provisioned entry may carry a scope: which site ids the user may operate
 // on, and (optionally) a repo path prefix their change requests are confined
