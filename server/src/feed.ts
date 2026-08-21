@@ -3,6 +3,7 @@ import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { extname, join, resolve, sep } from "node:path";
 
+import { denySite } from "./auth.js";
 import { checkoutPath } from "./checkouts.js";
 import { getSite } from "./sites.js";
 
@@ -29,6 +30,7 @@ export function registerFeedRoutes(app: Express, auth: RequestHandler): void {
       res.status(404).json({ error: "unknown site" });
       return;
     }
+    if (denySite(req, res, site.id)) return;
     res.setHeader("Cache-Control", "no-store");
     try {
       const feed = await readFile(join(checkoutPath(site.id), "cloud", "feed.json"), "utf8");
@@ -44,6 +46,7 @@ export function registerFeedRoutes(app: Express, auth: RequestHandler): void {
       res.status(404).json({ error: "unknown site" });
       return;
     }
+    if (denySite(req, res, site.id)) return;
     const raw = typeof req.params[0] === "string" ? req.params[0] : "";
     let relative: string;
     try {

@@ -149,6 +149,10 @@ Everything runs in one small Fly app with one volume.
    can go in the `[env]` block of `server/fly.toml` instead — set `AK_PUBLIC_URL` to
    `https://YOUR-APP.fly.dev` so user-provisioning invite emails land on your `/welcome` page.
 
+   For Google read-only viewers, set `GOOGLE_OAUTH_CLIENT_ID` to one client ID or a comma-separated list
+   and set `SESSION_SECRET`. Viewers may be Workspace (`hd`) accounts or emails in `ALLOWED_EMAIL` / the
+   provisioned list; their `sites` scopes apply to viewer routes. `GOOGLE_HD_SITES` optionally confines Workspace viewers to listed site IDs.
+
    > Upgrading an existing deployment? Run `fly ssh console -a YOUR-APP -C "ls -la /data/.claude"`
    > first — the server now loads user-level Claude settings/skills from the volume
    > (`--setting-sources user,project`), so anything already sitting in `/data/.claude` starts being

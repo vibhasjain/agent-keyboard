@@ -3,8 +3,9 @@
 // require it to be on the allow-list (the agent has write access to real repos,
 // so the gate is deliberately strict: allow-listed accounts only, no public
 // signups, no multi-tenancy).
-// Closeout viewers may instead use a Google ID token, pinned to the configured
-// client and the hypertrack.io Workspace domain, for read-only routes.
+// Read-only viewers may instead use a Google ID token from a configured client:
+// hypertrack.io Workspace accounts (optionally site-scoped), env allow-listed
+// personal accounts, or runtime-provisioned accounts (with their saved scope).
 //
 // The allowed identities come from env: ALLOWED_EMAIL — one email, or a
 // comma-separated few (a client, a partner) — matched case-insensitively, and
@@ -25,7 +26,6 @@ import { readDataFile } from "./checkouts.js";
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
 const AK_INTERNAL_SECRET = process.env.AK_INTERNAL_SECRET ?? "";
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID ?? "";
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "";
 const GOOGLE_HD = "hypertrack.io";
 const GOOGLE_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -50,6 +50,8 @@ const csv = (v: string | undefined): Set<string> =>
   );
 const ALLOWED_EMAILS = csv(process.env.ALLOWED_EMAIL);
 const ALLOWED_USER_IDS = csv(process.env.ALLOWED_USER_ID);
+const GOOGLE_CLIENT_IDS = csv(process.env.GOOGLE_OAUTH_CLIENT_ID);
+const GOOGLE_HD_SITES = csv(process.env.GOOGLE_HD_SITES);
 
 // A provisioned entry may carry a scope: which site ids the user may operate
 // on, and (optionally) a repo path prefix their change requests are confined
@@ -111,6 +113,16 @@ export function allowsSite(user: AuthedUser, siteId: string): boolean {
   return !user.scope || user.scope.sites.includes(siteId);
 }
 
+/** 403 + true when the caller is a scoped user and this site isn't theirs. */
+export function denySite(req: Request, res: Response, siteId: string): boolean {
+  const user = (req as Request & { user?: AuthedUser }).user;
+  if (user && !allowsSite(user, siteId)) {
+    res.status(403).json({ error: "not authorized for this site" });
+    return true;
+  }
+  return false;
+}
+
 const CACHE_TTL_MS = 60_000;
 // Cap the verification cache so a flood of unique tokens from an unauthenticated
 // caller can't grow it without bound; once full, entries evict FIFO (the Map
@@ -125,7 +137,9 @@ const JWT_RE = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 export interface AuthedUser {
   id: string;
   email: string;
-  // Present only for scoped provisioned users — see UserScope above.
+  // Present for verified Workspace viewers; personal Google viewers omit it.
+  hd?: string;
+  // Present for scoped provisioned users or site-confined Workspace viewers.
   scope?: UserScope;
 }
 
@@ -224,7 +238,7 @@ async function googleKey(kid: string): Promise<JsonWebKey | null> {
 }
 
 export async function verifyGoogle(token: string): Promise<AuthedUser | null> {
-  if (!GOOGLE_CLIENT_ID || !JWT_RE.test(token)) return null;
+  if (!GOOGLE_CLIENT_IDS.size || !JWT_RE.test(token)) return null;
   const now = Date.now();
   const hit = googleCache.get(token);
   if (hit && now - hit.at < CACHE_TTL_MS && now < hit.expiresAt) return hit.user;
@@ -248,12 +262,26 @@ export async function verifyGoogle(token: string): Promise<AuthedUser | null> {
     const issuerOk = payload.iss === "https://accounts.google.com" || payload.iss === "accounts.google.com";
     const issuedAtOk = payload.iat === undefined ||
       (typeof payload.iat === "number" && payload.iat <= nowSeconds + 300);
-    const user = issuerOk && payload.aud === GOOGLE_CLIENT_ID &&
+    const claimsOk = issuerOk && typeof payload.aud === "string" &&
+      GOOGLE_CLIENT_IDS.has(payload.aud) &&
       typeof payload.exp === "number" && payload.exp > nowSeconds && issuedAtOk &&
-      payload.hd === GOOGLE_HD && payload.email_verified === true &&
-      typeof payload.email === "string" && typeof payload.sub === "string"
-      ? { id: String(payload.sub), email: String(payload.email) }
-      : null;
+      payload.email_verified === true && typeof payload.email === "string" &&
+      typeof payload.sub === "string";
+    let user: AuthedUser | null = null;
+    if (claimsOk) {
+      const id = String(payload.sub);
+      const email = String(payload.email);
+      if (payload.hd === GOOGLE_HD) {
+        const scope = GOOGLE_HD_SITES.size ? { sites: [...GOOGLE_HD_SITES] } : undefined;
+        user = { id, email, hd: GOOGLE_HD, ...(scope ? { scope } : {}) };
+      } else if (payload.hd === undefined) {
+        // Personal Google accounts have no hosted-domain claim. A foreign
+        // hosted domain must not inherit access merely because its email is on
+        // an allow-list.
+        const scope = await allowedScope(email);
+        if (scope !== undefined) user = { id, email, ...(scope ? { scope } : {}) };
+      }
+    }
     if (googleCache.size >= CACHE_MAX) {
       const oldest = googleCache.keys().next().value;
       if (oldest !== undefined) googleCache.delete(oldest);
@@ -270,7 +298,7 @@ export async function verifyGoogle(token: string): Promise<AuthedUser | null> {
 
 interface GoogleSessionPayload {
   email: string;
-  hd: string;
+  hd: string | null;
   iat: number;
   exp: number;
 }
@@ -287,7 +315,7 @@ export function googleSessionsConfigured(): boolean {
   return !!SESSION_SECRET;
 }
 
-/** Mint a domain-pinned, 30-day session after a Google ID token is verified. */
+/** Mint a 30-day viewer session after a Google ID token is verified. */
 export function mintGoogleSession(
   user: AuthedUser,
   nowSeconds = Math.floor(Date.now() / 1000),
@@ -295,7 +323,7 @@ export function mintGoogleSession(
   if (!SESSION_SECRET) throw new Error("SESSION_SECRET unset");
   const exp = nowSeconds + GOOGLE_SESSION_TTL_SECONDS;
   const header = encodeSessionPart({ alg: "HS256", typ: "JWT" });
-  const payload = encodeSessionPart({ email: user.email, hd: GOOGLE_HD, iat: nowSeconds, exp });
+  const payload = encodeSessionPart({ email: user.email, hd: user.hd ?? null, iat: nowSeconds, exp });
   const message = `${header}.${payload}`;
   return {
     sessionToken: `${message}.${sessionSignature(message).toString("base64url")}`,
@@ -303,8 +331,8 @@ export function mintGoogleSession(
   };
 }
 
-/** Verify a server-minted Google viewer session without an external lookup. */
-export function verifyGoogleSession(token: string): AuthedUser | null {
+/** Verify a server-minted Google viewer session and refresh its current scope. */
+export async function verifyGoogleSession(token: string): Promise<AuthedUser | null> {
   if (!SESSION_SECRET || !JWT_RE.test(token)) return null;
   try {
     const [encodedHeader, encodedPayload, encodedSignature] = token.split(".");
@@ -318,13 +346,25 @@ export function verifyGoogleSession(token: string): AuthedUser | null {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as Partial<GoogleSessionPayload>;
     const nowSeconds = Math.floor(Date.now() / 1000);
     if (header.alg !== "HS256" || header.typ !== "JWT" ||
-        typeof payload.email !== "string" || !payload.email || payload.hd !== GOOGLE_HD ||
+        typeof payload.email !== "string" || !payload.email ||
         !Number.isInteger(payload.iat) || !Number.isInteger(payload.exp) ||
         (payload.iat as number) > nowSeconds + 300 || (payload.exp as number) <= nowSeconds ||
         (payload.exp as number) <= (payload.iat as number)) {
       return null;
     }
-    return { id: payload.email, email: payload.email };
+    if (payload.hd === GOOGLE_HD) {
+      const scope = GOOGLE_HD_SITES.size ? { sites: [...GOOGLE_HD_SITES] } : undefined;
+      return {
+        id: payload.email,
+        email: payload.email,
+        hd: GOOGLE_HD,
+        ...(scope ? { scope } : {}),
+      };
+    }
+    if (payload.hd !== null) return null;
+    const scope = await allowedScope(payload.email);
+    if (scope === undefined) return null;
+    return { id: payload.email, email: payload.email, ...(scope ? { scope } : {}) };
   } catch {
     return null;
   }
@@ -386,7 +426,7 @@ export function requireOwner() {
   };
 }
 
-/** Owner auth plus domain-pinned Google access for read-only site routes. */
+/** Owner auth plus verified Google access for read-only site routes. */
 export function requireOwnerOrGoogle() {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const token = bearer(req);
@@ -395,7 +435,7 @@ export function requireOwnerOrGoogle() {
         res.status(401).json({ error: "sign in required" });
         return;
       }
-      const user = verifyGoogleSession(token) ?? await verifyGoogle(token);
+      const user = (await verifyGoogleSession(token)) ?? await verifyGoogle(token);
       if (user) {
         allow(req, user, next);
         return;
@@ -413,7 +453,7 @@ export function requireOwnerOrGoogle() {
       res.status(401).json({ error: "sign in required" });
       return;
     }
-    const user = verifyGoogleSession(token) ?? await verifyGoogle(token);
+    const user = (await verifyGoogleSession(token)) ?? await verifyGoogle(token);
     if (!user) {
       res.status(401).json({ error: "invalid session or not authorized" });
       return;

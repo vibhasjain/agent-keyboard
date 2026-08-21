@@ -9,6 +9,9 @@
 #     SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
 # Optional: OPENAI_API_KEY (voice), GEMINI_API_KEY (image-gen skill),
 # ALLOWED_USER_ID, EXTRA_ORIGINS. See SELF_HOSTING.md.
+# Google viewers: GOOGLE_OAUTH_CLIENT_ID accepts one or comma-separated client IDs (with SESSION_SECRET).
+# They may be Workspace (hd) accounts or ALLOWED_EMAIL/provisioned users; provisioned sites scopes apply
+# to viewer routes, and GOOGLE_HD_SITES optionally confines Workspace viewers to listed site IDs.
 app = "agent-keyboard"
 primary_region = "iad"
 

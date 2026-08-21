@@ -26,6 +26,17 @@ const { registerFeedRoutes } = await import("../feed.js");
 const app = express();
 registerFeedRoutes(app, (_req, _res, next) => next());
 const server = createServer(app);
+let scopedSites = ["other"];
+const scopedApp = express();
+registerFeedRoutes(scopedApp, (req, _res, next) => {
+  (req as typeof req & { user?: { id: string; email: string; scope: { sites: string[] } } }).user = {
+    id: "u",
+    email: "x@y.z",
+    scope: { sites: scopedSites },
+  };
+  next();
+});
+const scopedServer = createServer(scopedApp);
 
 interface Reply {
   status: number;
@@ -33,48 +44,60 @@ interface Reply {
   body: string;
 }
 
-try {
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const port = (server.address() as AddressInfo).port;
-  const request = (path: string): Promise<Reply> => new Promise((resolve, reject) => {
-    const req = get({ host: "127.0.0.1", port, path }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on("data", (chunk: Buffer) => chunks.push(chunk));
-      res.on("end", () => resolve({
-        status: res.statusCode ?? 0,
-        headers: res.headers,
-        body: Buffer.concat(chunks).toString("utf8"),
-      }));
-    });
-    req.on("error", reject);
-  });
+const listen = (target: typeof server): Promise<number> => new Promise((resolve, reject) => {
+  target.once("error", reject);
+  target.listen(0, "127.0.0.1", () => resolve((target.address() as AddressInfo).port));
+});
 
-  const feed = await request("/sites/testsite/feed");
+const request = (port: number, path: string): Promise<Reply> => new Promise((resolve, reject) => {
+  const req = get({ host: "127.0.0.1", port, path }, (res) => {
+    const chunks: Buffer[] = [];
+    res.on("data", (chunk: Buffer) => chunks.push(chunk));
+    res.on("end", () => resolve({
+      status: res.statusCode ?? 0,
+      headers: res.headers,
+      body: Buffer.concat(chunks).toString("utf8"),
+    }));
+  });
+  req.on("error", reject);
+});
+
+const close = (target: typeof server): Promise<void> => new Promise((resolve, reject) => {
+  target.close((err) => err ? reject(err) : resolve());
+});
+
+try {
+  const port = await listen(server);
+  const scopedPort = await listen(scopedServer);
+
+  const feed = await request(port, "/sites/testsite/feed");
   assert.equal(feed.status, 200);
   assert.equal(feed.body, feedBody, "feed contents should be served verbatim");
   assert.equal(feed.headers["cache-control"], "no-store");
 
+  assert.equal((await request(scopedPort, "/sites/testsite/feed")).status, 403);
+  assert.equal((await request(scopedPort, "/sites/testsite/files/a.txt")).status, 403);
+  scopedSites = ["testsite"];
+  assert.equal((await request(scopedPort, "/sites/testsite/feed")).status, 200);
+  assert.equal((await request(scopedPort, "/sites/testsite/files/a.txt")).status, 200);
+
   await rm(feedPath);
-  const missingFeed = await request("/sites/testsite/feed");
+  const missingFeed = await request(port, "/sites/testsite/feed");
   assert.equal(missingFeed.status, 200);
   assert.deepEqual(JSON.parse(missingFeed.body), { updatedAt: null, candidates: [], meetings: [] });
 
-  const file = await request("/sites/testsite/files/a.txt");
+  const file = await request(port, "/sites/testsite/files/a.txt");
   assert.equal(file.status, 200);
   assert.equal(file.body, "hello\n");
   assert.match(file.headers["content-type"] ?? "", /^text\/plain\b/);
   assert.equal(file.headers["cache-control"], "no-store");
 
-  assert.equal((await request("/sites/testsite/files/../../../../etc/passwd")).status, 404);
-  assert.equal((await request("/sites/testsite/files/%2E%2E%2F%2E%2E%2F%2E%2E%2F%2E%2E%2Fetc%2Fpasswd")).status, 404);
-  assert.equal((await request("/sites/testsite/files/missing.txt")).status, 404);
+  assert.equal((await request(port, "/sites/testsite/files/../../../../etc/passwd")).status, 404);
+  assert.equal((await request(port, "/sites/testsite/files/%2E%2E%2F%2E%2E%2F%2E%2E%2F%2E%2E%2Fetc%2Fpasswd")).status, 404);
+  assert.equal((await request(port, "/sites/testsite/files/missing.txt")).status, 404);
 } finally {
-  if (server.listening) {
-    await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
-  }
+  if (server.listening) await close(server);
+  if (scopedServer.listening) await close(scopedServer);
   await rm(temp, { recursive: true, force: true });
 }
 
