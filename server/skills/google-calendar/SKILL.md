@@ -41,7 +41,8 @@ node ~/.claude/skills/google-calendar/gcal.mjs PATCH  "calendars/$CAL/events/<ev
 node ~/.claude/skills/google-calendar/gcal.mjs DELETE "calendars/$CAL/events/<eventId>"
 ```
 
-A 404 on the calendar means the owner hasn't shared it with the service
-account yet — tell them to share it (Calendar settings → Share with specific
-people → the service account's email → "Make changes to events"). Never print
-the key or the access token.
+The service account acts as the calendar owner via Google Workspace domain-wide
+delegation (admin console → Security → API controls → Domain-wide delegation →
+the SA's client id with scope `https://www.googleapis.com/auth/calendar`).
+An `unauthorized_client` error at token exchange means that delegation is
+missing. Never print the key or the access token.

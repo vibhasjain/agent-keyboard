@@ -27,6 +27,9 @@ const unsigned =
   "." +
   b64({
     iss: sa.client_email,
+    // Domain-wide delegation: act as the calendar's owner (Workspace admin has
+    // authorised this SA's client id for the calendar scope).
+    sub: process.env.GOOGLE_CALENDAR_ID,
     scope: "https://www.googleapis.com/auth/calendar",
     aud: sa.token_uri,
     iat: now,
