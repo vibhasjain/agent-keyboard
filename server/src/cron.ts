@@ -37,13 +37,15 @@ interface Clock { year: number; month: number; day: number; hour: number; minute
 function legacyCronJob(): CronJob {
   const target = Number(process.env.JOBS_CRON_TARGET ?? 10);
   const prompt =
-    `[scheduled] Run one job-hunt cycle. GOAL FOR THIS RUN: ${target} applications actually submitted ` +
-    `and verified via cloud/confirmations.py — that is the bar, not "attempted". Open CLOUD_WORKER.md at ` +
-    `the root of this checkout and follow it end to end; start with the queue in cloud/state.json ` +
-    `readyToSubmit, which holds prepared applications. Every submit runs headed under Xvfb ` +
+    `[scheduled] Run one job-hunt cycle. DAILY TARGET: ${target} applications submitted and verified via ` +
+    `cloud/confirmations.py per America/New_York calendar day, counted across ALL runs that day — not per run. ` +
+    `First: \`node cloud/ledger.mjs list --status submitted --json\` and count today's appliedOn; if today already ` +
+    `has ${target}, do housekeeping only (triage-queue, Gmail cleanup, stamp) and stop. Otherwise apply only up to ` +
+    `the remainder. Open CLOUD_WORKER.md at the root of this checkout and follow it end to end; drain the ledger ` +
+    `queue (workable rows) before discovering anything new. Every submit runs headed under Xvfb ` +
     `(xvfb-run -a env PLAYWRIGHT_BROWSERS_PATH=/data/pw-browsers APPLY_HEADED=1 …). Pace ~3 per ATS ` +
     `vendor per hour and switch vendors on the first spam refusal. Commit and push after every submit. ` +
-    `Reply with: submitted N/${target}, which ATS each, and anything that blocked you.`;
+    `Reply with: submitted today N/${target}, which ATS each, and anything that blocked you.`;
 
   return {
     site: process.env.JOBS_CRON_SITE ?? "cv-jobs",
