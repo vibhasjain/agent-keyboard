@@ -159,6 +159,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   const lines = [
     `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
     `Modify only files inside this repository. Everything else under /data is off-limits — other checkouts, other sites' state, server config, auth files — with exactly two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")}, where you may install or edit skills to gain new capabilities (they load from the next turn).`,
+    `One more allowance, controlled by the repository owner: if THIS repository's own instructions (CLAUDE.md, AGENTS.md, or a runbook such as CLOUD_WORKER.md) explicitly name another repository you may work on, clone it under .tmp/<name>/ inside this checkout (it survives turn resets), make the change there, run that repo's own checks, commit and push to the branch those instructions name, and remove nothing else. Never touch other sites' checkouts under /data/checkouts.`,
   ];
   if (pushBranch === site.branch) {
     lines.push(
