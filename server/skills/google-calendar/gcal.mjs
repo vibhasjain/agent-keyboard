@@ -1,49 +1,31 @@
 // Zero-dep authenticated call against the Google Calendar REST API. Usage:
 //   node gcal.mjs <METHOD> <path-under-/calendar/v3/> [json-body]
-//   node gcal.mjs GET  "calendars/$GOOGLE_CALENDAR_ID/events?timeMin=2026-08-21T00:00:00Z&singleEvents=true&orderBy=startTime"
-//   node gcal.mjs POST "calendars/$GOOGLE_CALENDAR_ID/events" '{"summary":"Call","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
-// Auth is a service account (GOOGLE_CALENDAR_SA_JSON, a Fly secret — never
-// hardcoded, never committed): a self-signed RS256 JWT swapped for a 1h access
-// token. No browser, no refresh token, never expires.
-
-import { createSign } from "node:crypto";
+//   node gcal.mjs GET  "calendars/$CAL/events?timeMin=2026-08-21T00:00:00Z&singleEvents=true&orderBy=startTime"
+//   node gcal.mjs POST "calendars/$CAL/events" '{"summary":"Call","start":{"dateTime":"..."},"end":{"dateTime":"..."}}'
+// Auth: GOOGLE_CALENDAR_OAUTH_JSON = {"client_id","client_secret","refresh_token"}
+// (a Fly secret — never hardcoded, never committed). The refresh token was
+// granted once by the calendar owner via OAuth consent on an Internal
+// Workspace app, so it does not expire; each run swaps it for a 1h access token.
 
 const [method, path, body] = process.argv.slice(2);
 if (!method || !path) {
   console.error("usage: node gcal.mjs <METHOD> <path> [json-body]");
   process.exit(2);
 }
-const saJson = process.env.GOOGLE_CALENDAR_SA_JSON;
-if (!saJson) {
-  console.error("GOOGLE_CALENDAR_SA_JSON is not configured — calendar access is disabled on this deployment.");
+const oauthJson = process.env.GOOGLE_CALENDAR_OAUTH_JSON;
+if (!oauthJson) {
+  console.error("GOOGLE_CALENDAR_OAUTH_JSON is not configured — calendar access is disabled on this deployment.");
   process.exit(3);
 }
-const sa = JSON.parse(saJson);
+const { client_id, client_secret, refresh_token } = JSON.parse(oauthJson);
 
-const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-const now = Math.floor(Date.now() / 1000);
-const unsigned =
-  b64({ alg: "RS256", typ: "JWT" }) +
-  "." +
-  b64({
-    iss: sa.client_email,
-    // Domain-wide delegation: act as the calendar's owner (Workspace admin has
-    // authorised this SA's client id for the calendar scope).
-    sub: process.env.GOOGLE_CALENDAR_ID,
-    scope: "https://www.googleapis.com/auth/calendar",
-    aud: sa.token_uri,
-    iat: now,
-    exp: now + 3600,
-  });
-const jwt = unsigned + "." + createSign("RSA-SHA256").update(unsigned).sign(sa.private_key, "base64url");
-
-const tok = await fetch(sa.token_uri, {
+const tok = await fetch("https://oauth2.googleapis.com/token", {
   method: "POST",
   headers: { "content-type": "application/x-www-form-urlencoded" },
-  body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt }),
+  body: new URLSearchParams({ grant_type: "refresh_token", client_id, client_secret, refresh_token }),
 });
 if (!tok.ok) {
-  console.error("token exchange failed:", tok.status, await tok.text());
+  console.error("token refresh failed:", tok.status, await tok.text());
   process.exit(1);
 }
 const { access_token } = await tok.json();

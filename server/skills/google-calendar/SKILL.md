@@ -5,12 +5,13 @@ description: Read and write the owner's Google Calendar over the REST API (list 
 
 # google-calendar
 
-Direct Google Calendar API access via a service account. Requires the
-`GOOGLE_CALENDAR_SA_JSON` (service-account key) and `GOOGLE_CALENDAR_ID`
-(the calendar's address, e.g. `owner@example.com`) environment variables —
-Fly secrets on configured deployments, never in this repo. If unset, say so:
-"Calendar access isn't configured on this deployment — the owner needs to set
-the GOOGLE_CALENDAR_SA_JSON and GOOGLE_CALENDAR_ID secrets."
+Direct Google Calendar REST API access as the owner. Requires the
+`GOOGLE_CALENDAR_OAUTH_JSON` (`{"client_id","client_secret","refresh_token"}`
+from a one-time owner consent) and `GOOGLE_CALENDAR_ID` (the calendar's
+address, e.g. `owner@example.com`) environment variables — Fly secrets on
+configured deployments, never in this repo. If unset, say so: "Calendar access
+isn't configured on this deployment — the owner needs to set the
+GOOGLE_CALENDAR_OAUTH_JSON and GOOGLE_CALENDAR_ID secrets."
 
 ## How
 
@@ -41,8 +42,6 @@ node ~/.claude/skills/google-calendar/gcal.mjs PATCH  "calendars/$CAL/events/<ev
 node ~/.claude/skills/google-calendar/gcal.mjs DELETE "calendars/$CAL/events/<eventId>"
 ```
 
-The service account acts as the calendar owner via Google Workspace domain-wide
-delegation (admin console → Security → API controls → Domain-wide delegation →
-the SA's client id with scope `https://www.googleapis.com/auth/calendar`).
-An `unauthorized_client` error at token exchange means that delegation is
-missing. Never print the key or the access token.
+An `invalid_grant` at token refresh means the owner revoked the grant — they
+need to re-run the consent once. Never print the secret, refresh token or
+access token.
