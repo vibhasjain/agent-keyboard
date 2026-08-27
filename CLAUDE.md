@@ -51,6 +51,10 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   `{id, repo, branch, domain}`: `id` = the `data-site` slug, `repo` = https clone URL, `branch` = the
   branch the host deploys from, `domain` = bare host (drives CORS + the "[Sent from …]" prompt
   context). e.g. `[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]`.
+  Optional per-entry fields: `sessionScope:"page"` (one conversation per page) and `guest:true` — the
+  site is shared with invited people, so its agent is spawned without the owner's personal secrets
+  (`PERSONAL_ENV` in `server/src/claude.ts`) and under deny rules for the personal skills, the auth
+  file, and every other site's checkout/state (`guestArgs`). Closeout's two sites are `guest`.
   This project's own site is served with `data-site="halo"`, so the page edits its own repo.
 - **Auth** — `server/src/auth.ts`, `requireOwner()`: a Supabase JWT for the one allow-listed email.
   The widget hand-rolls GoTrue REST (no supabase-js) and stores its session under

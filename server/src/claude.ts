@@ -19,7 +19,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { v5 as uuidv5 } from "uuid";
-import type { Site } from "./sites.js";
+import { SITES, type Site } from "./sites.js";
 import { randomUUID } from "node:crypto";
 import {
   DATA_DIR,
@@ -80,6 +80,48 @@ const SESSION_MAX_MS = envInt("AK_SESSION_MAX_MS", 3_600_000); // absolute sessi
 export const CLAUDE_HOME = process.env.HOME ?? DATA_DIR;
 
 const STATE_ROOT = join(DATA_DIR, "agent-keyboard");
+
+// ─── guest fence ─────────────────────────────────────────────────────────────
+// A site marked guest:true in SITES is shared with invited people. Its agent
+// runs without the owner's personal credentials (dropped from the spawn env)
+// and under deny rules for the personal skills, the auth file, and every OTHER
+// site's checkout, state, and transcripts. Deny rules hold under
+// bypassPermissions (verified 2026-08-27). Not a sandbox: same unix user as the
+// server, so /proc and the volume are still reachable by a determined agent.
+// ponytail: denylist, not an env allowlist — extend PERSONAL_ENV when a new
+// personal secret lands on Fly.
+export const PERSONAL_ENV = [
+  "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD",
+  "GOOGLE_CALENDAR_ID", "GOOGLE_CALENDAR_OAUTH_JSON",
+  "LINKEDIN_LI_AT", "MDBLIST_KEY", "STREMIO_AUTHKEY",
+];
+export const PERSONAL_SKILLS = ["google-calendar"];
+
+/** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites) + harness overrides. */
+export function spawnEnv(site: Site, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  if (site.guest) for (const k of PERSONAL_ENV) delete env[k];
+  return env;
+}
+
+/** Extra CLI args for a guest site: a --settings blob of deny rules. */
+export function guestArgs(site: Site): string[] {
+  if (!site.guest) return [];
+  const deny = [
+    ...PERSONAL_SKILLS.map((name) => `Skill(${name})`),
+    `Read(${join(STATE_ROOT, "allowed-emails.json")})`,
+  ];
+  for (const other of SITES) {
+    if (other.id === site.id) continue;
+    const dirs = [
+      checkoutPath(other.id),
+      join(STATE_ROOT, "sites", other.id),
+      join(CLAUDE_HOME, ".claude", "projects", checkoutPath(other.id).replace(/[^a-zA-Z0-9]/g, "-")),
+    ];
+    for (const d of dirs) for (const tool of ["Read", "Edit", "Write"]) deny.push(`${tool}(${d}/**)`);
+  }
+  return ["--settings", JSON.stringify({ permissions: { deny } })];
+}
 const CONVERSATIONS_DIR = join(STATE_ROOT, "conversations"); // session-created markers
 
 // uuidv5 URL namespace: a guaranteed-valid RFC 4122 namespace UUID.
@@ -161,6 +203,11 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
     `Modify only files inside this repository. Everything else under /data is off-limits — other checkouts, other sites' state, server config, auth files — with exactly two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")}, where you may install or edit skills to gain new capabilities (they load from the next turn).`,
     `One more allowance, controlled by the repository owner: if THIS repository's own instructions (CLAUDE.md, AGENTS.md, or a runbook such as CLOUD_WORKER.md) explicitly name another repository you may work on, clone it under .tmp/<name>/ inside this checkout (it survives turn resets), make the change there, run that repo's own checks, commit and push to the branch those instructions name, and remove nothing else. Never touch other sites' checkouts under /data/checkouts.`,
   ];
+  if (site.guest) {
+    lines.push(
+      `This site is shared with invited guests: the owner's personal credentials and personal skills (${PERSONAL_SKILLS.join(", ")}) are deliberately unavailable in this session, and other sites' files are denied. If asked for them, say they are not available on this site.`,
+    );
+  }
   if (pushBranch === site.branch) {
     lines.push(
       `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (Netlify deploys the site from it).`,
@@ -251,6 +298,7 @@ function streamArgs(
     // (harness.ts); with no settings file the defaults reproduce the historical
     // hardcoded values (--model $CLAUDE_MODEL, --permission-mode bypassPermissions).
     ...harness.args,
+    ...guestArgs(site),
     "--output-format",
     "stream-json",
     "--verbose",
@@ -494,7 +542,7 @@ function spawnClaude(
   args: string[],
   cwd: string,
   onEvent: (e: LowEvent) => void,
-  opts: { extraEnv?: Record<string, string>; timeoutMs?: number; stdin?: string; keepStdinOpen?: boolean } = {},
+  opts: { env?: NodeJS.ProcessEnv; timeoutMs?: number; stdin?: string; keepStdinOpen?: boolean } = {},
 ): {
   child: ChildProcess;
   done: Promise<{ result?: ClaudeResult; stderr: string }>;
@@ -506,7 +554,7 @@ function spawnClaude(
   const timeoutMs = opts.timeoutMs ?? RUN_TIMEOUT_MS;
   const child = spawn(process.env.CLAUDE_BIN ?? "claude", args, {
     cwd,
-    env: opts.extraEnv ? { ...process.env, ...opts.extraEnv } : process.env,
+    env: opts.env ?? process.env,
     // Classic: stdin = ignore → the CLI sees EOF immediately (prompt goes via -p),
     // dropping both the "no stdin data in 3s" warning and that 3s startup wait.
     // Streaming-input: pipe stdin so we can write the turn as a stream-json line.
@@ -638,7 +686,7 @@ async function countCompactBoundaries(sessionId: string, cwd: string): Promise<n
  * mode are not guaranteed — auto-compaction remains the safety net either way).
  * Uses the site's harness args so compaction runs on the configured model.
  */
-async function runCompactTurn(sessionId: string, dir: string, harness: ResolvedHarness): Promise<boolean> {
+async function runCompactTurn(site: Site, sessionId: string, dir: string, harness: ResolvedHarness): Promise<boolean> {
   const before = await countCompactBoundaries(sessionId, dir);
   const args = [
     "--resume",
@@ -654,7 +702,7 @@ async function runCompactTurn(sessionId: string, dir: string, harness: ResolvedH
     "user,project",
   ];
   const { done } = spawnClaude(args, dir, () => {}, {
-    extraEnv: harness.env,
+    env: spawnEnv(site, harness.env),
     timeoutMs: COMPACT_TIMEOUT_MS,
   });
   await done;
@@ -672,7 +720,9 @@ export async function compactSession(siteId: string, pageSlug = ""): Promise<boo
     const sessionId = sessionIdFor(conversationId);
     const dir = checkoutPath(siteId);
     const harness = await loadHarness(siteId);
-    return await runCompactTurn(sessionId, dir, harness);
+    const site = SITES.find((s) => s.id === siteId);
+    if (!site) return false;
+    return await runCompactTurn(site, sessionId, dir, harness);
   } finally {
     release();
   }
@@ -733,7 +783,7 @@ export async function* runMessageJob(
     const [initialHarness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
     let harness = initialHarness;
     console.log(
-      `[harness] site=${site.id} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
+      `[harness] site=${site.id} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${site.guest ? " guest" : ""}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
     );
 
     // Fresh slate for images the agent shows this turn (see collectOutputs).
@@ -806,7 +856,7 @@ export async function* runMessageJob(
             queue.push(["status", { phase: "tool", detail: e.detail }]);
           }
         },
-        { extraEnv: harness.env, ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
+        { env: spawnEnv(site, harness.env), ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
       );
       child = c;
       const settled = done.finally(() => queue.close());
@@ -903,7 +953,7 @@ export async function* runMessageJob(
         const consumed = await clearCompactFlag(site.id).then(() => true, () => false);
         if (consumed) {
           yield ["status", { phase: "compacting", detail: "Compacting memory" }];
-          const ok = await runCompactTurn(sessionId, dir, post).catch(() => false);
+          const ok = await runCompactTurn(site, sessionId, dir, post).catch(() => false);
           reply = `${reply}\n\n_${ok ? "Memory compacted." : "On-demand compact didn't take — auto-compaction stays active."}_`.trim();
         }
         // clear failed → skip the compact entirely rather than risk re-running
@@ -1009,7 +1059,7 @@ export async function* runStreamingSession(
     const prompt = buildPrompt(site, opts);
     const [harness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
     console.log(
-      `[harness] site=${site.id} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}`,
+      `[harness] site=${site.id} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}${site.guest ? " guest" : ""}`,
     );
     await resetOutputs(site.id).catch(() => {});
 
@@ -1123,7 +1173,7 @@ export async function* runStreamingSession(
           onResult(e.result);
         }
       },
-      { extraEnv: harness.env, stdin: userMessageLine(prompt), keepStdinOpen: true },
+      { env: spawnEnv(site, harness.env), stdin: userMessageLine(prompt), keepStdinOpen: true },
     );
     child = spawned.child;
     closeInput = spawned.closeInput;

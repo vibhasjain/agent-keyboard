@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Agent Keyboard — embeddable prompt bar that drives the real Claude Code CLI against per-site git checkouts.",
+  "description": "Agent Keyboard \u2014 embeddable prompt bar that drives the real Claude Code CLI against per-site git checkouts.",
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
@@ -14,7 +14,8 @@
     "parse-check": "tsx src/dev/parse-check.ts",
     "page-slug-check": "tsx src/dev/page-slug-check.ts",
     "scope-check": "tsx src/dev/scope-check.ts",
-    "sender-check": "tsx src/dev/sender-check.ts"
+    "sender-check": "tsx src/dev/sender-check.ts",
+    "guest-check": "tsx src/dev/guest-check.ts"
   },
   "dependencies": {
     "busboy": "^1.6.0",

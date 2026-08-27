@@ -18,6 +18,9 @@ export interface Site {
   // Opt-in per-page sessions; root "/" keeps the site conversation. Absent or
   // "site" = one conversation per site, unchanged.
   sessionScope?: "site" | "page";
+  /** Shared with invited guests: the owner's personal credentials and skills are
+   *  withheld from this site's agent, and other sites' files are denied. */
+  guest?: boolean;
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/i;
@@ -77,7 +80,7 @@ export function loadSites(): Site[] {
     if (typeof entry !== "object" || entry === null) {
       throw new Error(`${at} must be an object, e.g. ${SITES_EXAMPLE}`);
     }
-    const { id, repo, branch, domain, pushBranch, sessionScope } = entry as Record<string, unknown>;
+    const { id, repo, branch, domain, pushBranch, sessionScope, guest } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !ID_RE.test(id)) {
       throw new Error(`${at}.id ${JSON.stringify(id)} must be a slug like "blog" (letters, digits, hyphens)`);
     }
@@ -96,6 +99,9 @@ export function loadSites(): Site[] {
       throw new Error(
         `${at}.domain must be a bare host with no scheme or path (e.g. "blog.example.com"), got ${JSON.stringify(domain)}`,
       );
+    }
+    if (guest !== undefined && typeof guest !== "boolean") {
+      throw new Error(`${at}.guest, if set, must be true or false, got ${JSON.stringify(guest)}`);
     }
     if (sessionScope !== undefined && sessionScope !== "site" && sessionScope !== "page") {
       throw new Error(
@@ -129,6 +135,7 @@ export function loadSites(): Site[] {
       domain,
       ...(pushBranchClean ? { pushBranch: pushBranchClean } : {}),
       ...(sessionScope === "page" ? { sessionScope } : {}),
+      ...(guest === true ? { guest: true } : {}),
     });
   });
   return sites;
