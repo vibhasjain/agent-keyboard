@@ -51,7 +51,6 @@ interface Composer {
   setNote: (text: string, isError?: boolean) => void
   flashConfirm: (text: string) => void
   reset: () => void
-  teardownVoice: () => void
 }
 
 function makeComposer(): Composer {
@@ -385,7 +384,6 @@ function makeComposer(): Composer {
       }, 1200)
     },
     reset,
-    teardownVoice: () => voice.teardown(),
   }
 }
 
@@ -664,6 +662,8 @@ export function mountBar(shadow: ShadowRoot): void {
     if (job.phase === 'streaming') return job.disconnected ? 'reconnecting…' : job.line || thinkingWord(job.startedAt)
     if (job.phase === 'done') return job.summary
     if (job.phase === 'error') return job.message
+    if (ui.voice === 'live') return 'Listening…'
+    if (ui.voice === 'connecting') return 'Connecting mic…'
     return getState().auth === 'authed' ? 'Whatsup?' : 'Log in'
   }
 
@@ -716,10 +716,9 @@ export function mountBar(shadow: ShadowRoot): void {
     }
 
     placeFooter(view)
-    // Leaving the transcript stashes the composer, so dictation can no longer be
-    // seen — stop the mic rather than record invisibly. voice.teardown() leaves what
-    // it already transcribed in the textarea, so it survives as a draft.
-    if (lastView === 'expanded' && view !== 'expanded') composer.teardownVoice()
+    // Leaving the transcript does NOT stop the mic: the owner minimizes to browse the
+    // site while still talking; "over and out" sends, or re-open and tap stop. The
+    // rectangle says "Listening…" meanwhile (miniLine) so it never records invisibly.
 
     lastView = view
   }
