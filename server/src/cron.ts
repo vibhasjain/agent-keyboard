@@ -13,7 +13,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 
+import { rotateConversation } from "./claude.js";
 import { listActive } from "./jobs.js";
+import { getSite, pageSlugFor } from "./sites.js";
 
 const TICK_MS = 5 * 60_000;
 const BOOT_GRACE_MS = 2 * 60_000;
@@ -30,6 +32,8 @@ interface CronJob {
   everyHours?: number;
   state: string;
   page: string;
+  /** Clear the context (fresh session, empty history) right before each run. */
+  fresh: boolean;
 }
 
 interface Clock { year: number; month: number; day: number; hour: number; minute: number; second: number }
@@ -54,6 +58,7 @@ function legacyCronJob(): CronJob {
     tz: process.env.JOBS_CRON_TZ ?? "America/New_York",
     state: process.env.JOBS_CRON_STATE ?? "/data/agent-keyboard/jobs-cron.json",
     page: "/jobs",
+    fresh: false,
   };
 }
 
@@ -85,6 +90,9 @@ export function loadCronJobs(): CronJob[] {
       return invalidCronJobs(`at index ${index}, field disabled`, "expected a boolean");
     }
     if (entry.disabled === true) continue;
+    if (entry.fresh !== undefined && typeof entry.fresh !== "boolean") {
+      return invalidCronJobs(`at index ${index}, field fresh`, "expected a boolean");
+    }
 
     if (typeof entry.site !== "string" || !/^[a-z0-9][a-z0-9-]*$/i.test(entry.site)) {
       return invalidCronJobs(`at index ${index}, field site`, "expected a non-empty slug");
@@ -132,6 +140,7 @@ export function loadCronJobs(): CronJob[] {
       ...(everyHours === undefined ? {} : { everyHours }),
       state,
       page,
+      fresh: entry.fresh === true,
     });
   }
   return jobs;
@@ -186,6 +195,11 @@ async function writeLastRun(state: string, when: number): Promise<void> {
 }
 
 async function fire(job: CronJob): Promise<boolean> {
+  if (job.fresh) {
+    // Fresh session every run: yesterday's transcript is dead weight (tokens) for today's cycle.
+    const site = getSite(job.site);
+    if (site) await rotateConversation(site.id, pageSlugFor(site, job.page));
+  }
   const res = await fetch(`http://127.0.0.1:${PORT}/sites/${job.site}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-ak-internal": SECRET },
