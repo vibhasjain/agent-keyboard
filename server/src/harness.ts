@@ -22,6 +22,7 @@ export interface HarnessSettings {
   permissionMode?: PermissionMode;
   compactNow?: boolean;
   clearNow?: boolean;
+  env?: Record<string, string>;
 }
 
 export interface ResolvedHarness {
@@ -107,6 +108,25 @@ const KNOBS: Knob[] = [
   },
 ];
 
+const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+KNOBS.push({
+  key: "env",
+  validate: (v, warn) => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== "object" || Array.isArray(v)) {
+      warn(`env must be an object of string values, got ${JSON.stringify(v)} — ignored`);
+      return undefined;
+    }
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (ENV_NAME_RE.test(k) && typeof val === "string") out[k] = val;
+      else warn(`env.${k} must be a string under a valid variable name — dropped`);
+    }
+    return out;
+  },
+  describe: `"env": {"NAME": "value", …} — extra environment variables for your shell, e.g. {"SUPABASE_ACCESS_TOKEN": "sbp_…"} logs the supabase CLI into this site's own Supabase account (the owner pastes the token; never print it back)`,
+});
+
 function siteRel(siteId: string, file: string): string {
   return join("agent-keyboard", "sites", siteId, file);
 }
@@ -142,7 +162,7 @@ function resolve(settings: HarnessSettings, warnings: string[]): ResolvedHarness
   for (const knob of KNOBS) {
     if (knob.toArgs) args.push(...knob.toArgs(settings[knob.key]));
   }
-  return { settings, warnings, args, env: {} };
+  return { settings, warnings, args, env: settings.env ?? {} };
 }
 
 /** The no-settings-file harness: exactly the historical hardcoded CLI args. */
@@ -230,7 +250,7 @@ export function harnessNote(siteId: string, h: ResolvedHarness, usage: TurnUsage
   const effort = s.effort ?? "default";
   const mode = s.permissionMode ?? "bypassPermissions";
   const lines = [
-    `Harness: model ${model}, effort ${effort}, permissions ${mode}.` +
+    `Harness: model ${model}, effort ${effort}, permissions ${mode}${s.env && Object.keys(s.env).length ? `, env ${Object.keys(s.env).join(",")}` : ""}.` +
       (usage
         ? ` Context window: ~${usage.contextPct}% used as of the last turn (~${usage.contextTokens.toLocaleString("en-US")} of ${CONTEXT_WINDOW_TOKENS.toLocaleString("en-US")} tokens, approximate).`
         : ""),

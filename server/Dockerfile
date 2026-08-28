@@ -37,6 +37,17 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
 # The real Claude Code CLI (pinned).
 RUN npm install -g @anthropic-ai/claude-code@2.1.247
 
+# OpenAI Codex CLI (pinned) — the GPT lane for the fable-subagents skill and the
+# codex plugin (/codex:rescue). Login lives on the volume: /data/.codex/auth.json.
+RUN npm install -g @openai/codex@0.149.0
+
+# Supabase CLI (pinned). Logged in per site via SUPABASE_ACCESS_TOKEN in that
+# site's settings.json "env" knob (harness.ts) — each site's own Supabase account.
+RUN curl -fsSL -o /tmp/supabase.deb \
+      "https://github.com/supabase/cli/releases/download/v2.109.1/supabase_2.109.1_linux_$(dpkg --print-architecture).deb" \
+    && apt-get install -y --no-install-recommends /tmp/supabase.deb && rm -f /tmp/supabase.deb \
+    && rm -rf /var/lib/apt/lists/*
+
 # Headless browser for the agent's verify-in-browser skill. Browsers install to
 # an IMAGE path — at runtime HOME=/data (the volume) and the Playwright default
 # ($HOME/.cache/ms-playwright) would resolve to a place they were never
@@ -61,7 +72,7 @@ COPY server/tsconfig.json ./
 COPY server/src ./src
 
 # Repo-shipped agent skills (image-gen, verify-in-browser, provision-user,
-# self-ops, frontend-design, ponytail) — seeded into /data/.claude/skills at boot
+# self-ops, frontend-design, ponytail, fable-subagents) — seeded into /data/.claude/skills at boot
 # (see src/skills.ts). Below npm ci so a skill edit doesn't bust the dependency
 # layer (sharp's native build).
 COPY server/skills /app/skills
