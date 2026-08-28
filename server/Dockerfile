@@ -35,7 +35,7 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && rm -rf /var/lib/apt/lists/*
 
 # The real Claude Code CLI (pinned).
-RUN npm install -g @anthropic-ai/claude-code@2.1.247
+RUN npm install -g @anthropic-ai/claude-code@2.1.251
 
 # OpenAI Codex CLI (pinned) — the GPT lane for the fable-subagents skill and the
 # codex plugin (/codex:rescue). Login lives on the volume: /data/.codex/auth.json.
