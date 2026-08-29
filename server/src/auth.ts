@@ -25,6 +25,32 @@ import { readDataFile } from "./checkouts.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
+
+// Extra Supabase projects whose sessions we also accept — a provisioned user's
+// OWN site login (e.g. Esther's estherfell.com project) so her site's Google
+// sign-in doubles as her Agent Keyboard viewer session. JSON array of
+// {url, anon}. Identities from these projects must be runtime-provisioned
+// (allowed-emails.json) — never an ALLOWED_EMAIL owner — so a foreign project
+// can't mint an owner identity. ponytail: env JSON, no per-site mapping.
+interface SupabaseProject { url: string; anon: string; external: boolean }
+function viewerProjects(): SupabaseProject[] {
+  const raw = process.env.VIEWER_SUPABASE_PROJECTS ?? "";
+  if (!raw.trim()) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error("not an array");
+    return parsed
+      .filter((p): p is { url: string; anon: string } => !!p && typeof p.url === "string" && typeof p.anon === "string")
+      .map((p) => ({ url: p.url, anon: p.anon, external: true }));
+  } catch (err) {
+    console.error("[auth] VIEWER_SUPABASE_PROJECTS ignored — invalid JSON array of {url, anon}:", String(err));
+    return [];
+  }
+}
+const SUPABASE_PROJECTS: SupabaseProject[] = [
+  { url: SUPABASE_URL, anon: SUPABASE_ANON_KEY, external: false },
+  ...viewerProjects(),
+];
 const AK_INTERNAL_SECRET = process.env.AK_INTERNAL_SECRET ?? "";
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "";
 const GOOGLE_HD = "hypertrack.io";
@@ -179,16 +205,23 @@ async function verify(token: string): Promise<AuthedUser | null> {
 
   let user: AuthedUser | null = null;
   try {
-    const res = await fetch(`${SUPABASE_URL.replace(/\/$/, "")}/auth/v1/user`, {
-      headers: { Authorization: `Bearer ${token}`, apikey: SUPABASE_ANON_KEY },
-    });
-    if (res.ok) {
+    // A token belongs to exactly one project: the first /auth/v1/user that
+    // answers 200 decides; the rest are never asked.
+    for (const project of SUPABASE_PROJECTS) {
+      const res = await fetch(`${project.url.replace(/\/$/, "")}/auth/v1/user`, {
+        headers: { Authorization: `Bearer ${token}`, apikey: project.anon },
+      });
+      if (!res.ok) continue;
       const body = (await res.json()) as { id?: string; email?: string };
       const scope = body?.email ? await allowedScope(body.email) : undefined;
       const idOk = ALLOWED_USER_IDS.size === 0 || (!!body?.id && ALLOWED_USER_IDS.has(body.id.toLowerCase()));
-      if (scope !== undefined && idOk && body.id && body.email) {
+      // External projects may only vouch for SCOPED provisioned users (scope is
+      // an object); env owners and unscoped entries resolve to null → rejected.
+      const ownerOk = !project.external || scope !== null;
+      if (scope !== undefined && idOk && ownerOk && body.id && body.email) {
         user = { id: body.id, email: body.email, ...(scope ? { scope } : {}) };
       }
+      break;
     }
   } catch {
     // Network / Supabase down: treat as unauthenticated, but don't cache the
