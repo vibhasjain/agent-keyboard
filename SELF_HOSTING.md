@@ -255,6 +255,14 @@ There is no settings UI. The agent's own runtime is steered in the same chat:
   `provision-user` (below), `self-ops` (needs `FLY_API_TOKEN`), `frontend-design`, and `ponytail`
   (lazy-senior-dev discipline, on by default).
 
+- **Extra env vars** — "log into your own Supabase account" or "add a GMAIL_APP_PASSWORD" makes the
+  agent write `{"env": {"NAME": "value"}}` into its own settings file, e.g. `SUPABASE_ACCESS_TOKEN` or
+  `GMAIL_APP_PASSWORD` (paste the value in chat; the agent applies it and won't print it back).
+- **Its own daily cron** — "run every morning at 8am" or "pause my daily run" makes the agent write a
+  `{"cron": {...}}` block into its own settings file (`hour`, `tz`, `everyHours`, `page`, `fresh`,
+  `disabled`, `prompt`) — this is on top of any server-wide `JOBS_CRONS` schedule and overrides it for
+  that site. Changes apply within one tick (≤5 min), no redeploy.
+
 State lives in `/data/agent-keyboard/sites/<id>/settings.json`. If the agent ever wedges its own
 settings, reset from your machine:
 

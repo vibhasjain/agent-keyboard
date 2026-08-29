@@ -16,6 +16,16 @@ import { DATA_DIR, readDataFile, writeDataFile } from "./checkouts.js";
 
 export type PermissionMode = "bypassPermissions" | "plan" | "acceptEdits" | "default";
 
+export interface CronSettings {
+  prompt: string;
+  hour: number; // 0-23, default 11
+  tz: string; // default America/New_York
+  everyHours?: number; // when set, replaces the daily hour slot
+  page: string; // default "/"
+  fresh: boolean; // default false
+  disabled: boolean; // default false
+}
+
 export interface HarnessSettings {
   model?: string;
   effort?: string;
@@ -23,6 +33,7 @@ export interface HarnessSettings {
   compactNow?: boolean;
   clearNow?: boolean;
   env?: Record<string, string>;
+  cron?: CronSettings;
 }
 
 export interface ResolvedHarness {
@@ -125,6 +136,81 @@ KNOBS.push({
     return out;
   },
   describe: `"env": {"NAME": "value", …} — extra environment variables for your shell, e.g. {"SUPABASE_ACCESS_TOKEN": "sbp_…"} logs the supabase CLI into this site's own Supabase account (the owner pastes the token; never print it back)`,
+});
+
+// ponytail: duplicated (not imported) from cron.ts's own per-field checks —
+// importing them here would make cron.ts and harness.ts import each other
+// (cron.ts already needs loadHarness below). Four one-line predicates aren't
+// worth a cycle.
+function isValidCronHour(v: unknown): v is number {
+  return typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= 23;
+}
+function isValidCronTz(v: unknown): v is string {
+  if (typeof v !== "string" || !v.trim()) return false;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: v }).format();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+KNOBS.push({
+  key: "cron",
+  validate: (v, warn) => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== "object" || Array.isArray(v)) {
+      warn(`cron must be an object — dropped`);
+      return undefined;
+    }
+    const c = v as Record<string, unknown>;
+    if (typeof c.prompt !== "string" || !c.prompt.trim()) {
+      warn(`cron.prompt must be a non-empty string — cron dropped`);
+      return undefined;
+    }
+    const hour = c.hour === undefined ? 11 : c.hour;
+    if (!isValidCronHour(hour)) {
+      warn(`cron.hour must be an integer 0-23 — cron dropped`);
+      return undefined;
+    }
+    const tz = c.tz === undefined ? "America/New_York" : c.tz;
+    if (!isValidCronTz(tz)) {
+      warn(`cron.tz must be a valid time zone name — cron dropped`);
+      return undefined;
+    }
+    let everyHours: number | undefined;
+    if (c.everyHours !== undefined) {
+      if (typeof c.everyHours !== "number" || !Number.isFinite(c.everyHours) || c.everyHours <= 0) {
+        warn(`cron.everyHours must be a finite number greater than 0 — cron dropped`);
+        return undefined;
+      }
+      everyHours = c.everyHours;
+    }
+    const page = c.page === undefined ? "/" : c.page;
+    if (typeof page !== "string" || !page.startsWith("/")) {
+      warn(`cron.page must be a string starting with "/" — cron dropped`);
+      return undefined;
+    }
+    if (c.fresh !== undefined && typeof c.fresh !== "boolean") {
+      warn(`cron.fresh must be a boolean — cron dropped`);
+      return undefined;
+    }
+    if (c.disabled !== undefined && typeof c.disabled !== "boolean") {
+      warn(`cron.disabled must be a boolean — cron dropped`);
+      return undefined;
+    }
+    const cron: CronSettings = {
+      prompt: c.prompt,
+      hour,
+      tz,
+      page,
+      fresh: c.fresh === true,
+      disabled: c.disabled === true,
+    };
+    if (everyHours !== undefined) cron.everyHours = everyHours;
+    return cron;
+  },
+  describe: `"cron": {"hour": 0-23, "tz": "America/New_York", "everyHours"?: n, "page": "/jobs", "fresh": true|false, "disabled": true|false, "prompt": "[scheduled] …"} — your own daily scheduled run: the server sends "prompt" to this site at hour:00 in tz (or every everyHours hours); "disabled": true pauses it; "fresh": true starts a new session before each run; changes apply from the next tick (≤5 min)`,
 });
 
 function siteRel(siteId: string, file: string): string {
@@ -249,8 +335,11 @@ export function harnessNote(siteId: string, h: ResolvedHarness, usage: TurnUsage
   const model = s.model ?? DEFAULT_MODEL;
   const effort = s.effort ?? "default";
   const mode = s.permissionMode ?? "bypassPermissions";
+  const cron = s.cron
+    ? `, cron ${s.cron.everyHours ? `every ${s.cron.everyHours}h` : `daily ${s.cron.hour}:00 ${s.cron.tz}`}${s.cron.disabled ? " (paused)" : ""}`
+    : "";
   const lines = [
-    `Harness: model ${model}, effort ${effort}, permissions ${mode}${s.env && Object.keys(s.env).length ? `, env ${Object.keys(s.env).join(",")}` : ""}.` +
+    `Harness: model ${model}, effort ${effort}, permissions ${mode}${cron}${s.env && Object.keys(s.env).length ? `, env ${Object.keys(s.env).join(",")}` : ""}.` +
       (usage
         ? ` Context window: ~${usage.contextPct}% used as of the last turn (~${usage.contextTokens.toLocaleString("en-US")} of ${CONTEXT_WINDOW_TOKENS.toLocaleString("en-US")} tokens, approximate).`
         : ""),

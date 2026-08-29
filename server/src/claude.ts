@@ -99,9 +99,9 @@ export const PERSONAL_SKILLS = ["google-calendar"];
 
 /** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites) + harness overrides. */
 export function spawnEnv(site: Site, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  const env: NodeJS.ProcessEnv = { ...process.env };
   if (site.guest) for (const k of PERSONAL_ENV) delete env[k];
-  return env;
+  return { ...env, ...extra };
 }
 
 /** Extra CLI args for a guest site: a --settings blob of deny rules. */

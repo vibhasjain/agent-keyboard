@@ -11,11 +11,13 @@
 // target has passed and we have not run since it — which also catches up a run
 // missed while the machine was down.
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 
 import { rotateConversation } from "./claude.js";
+import { DATA_DIR } from "./checkouts.js";
+import { loadHarness } from "./harness.js";
 import { listActive } from "./jobs.js";
-import { getSite, pageSlugFor } from "./sites.js";
+import { getSite, pageSlugFor, SITES } from "./sites.js";
 
 const TICK_MS = 5 * 60_000;
 const BOOT_GRACE_MS = 2 * 60_000;
@@ -143,6 +145,65 @@ export function loadCronJobs(): CronJob[] {
       fresh: entry.fresh === true,
     });
   }
+  return jobs;
+}
+
+// ─── per-site knob crons ──────────────────────────────────────────────────
+// Beyond JOBS_CRONS (fixed at boot), each site's agent can set its own
+// schedule via the `cron` knob in its settings.json (harness.ts validates it).
+// Re-read every tick — cheap (SITES is a handful of sites) — so a site can
+// edit its own settings.json and see it apply within one tick, no restart.
+const CRON_STATE_ROOT = join(DATA_DIR, "agent-keyboard");
+const knobLogCache = new Map<string, string>(); // site -> last-logged descriptor, so `fly logs` only sees changes
+
+/** One CronJob per site with an enabled cron knob; `null` for a site whose
+ *  knob explicitly paused it (still occupies the site so it overrides env). */
+async function loadKnobJobs(): Promise<Map<string, CronJob | null>> {
+  const map = new Map<string, CronJob | null>();
+  for (const site of SITES) {
+    try {
+      const cron = (await loadHarness(site.id)).settings.cron;
+      if (!cron) {
+        knobLogCache.delete(site.id); // let a later re-add log as "seen" again
+        continue;
+      }
+      const desc = cron.disabled
+        ? "disabled"
+        : cron.everyHours !== undefined
+          ? `every ${cron.everyHours}h`
+          : `daily ${String(cron.hour).padStart(2, "0")}:00 ${cron.tz}`;
+      if (knobLogCache.get(site.id) !== desc) {
+        knobLogCache.set(site.id, desc);
+        console.log(`[jobs-cron] knob cron for ${site.id}: ${desc}`);
+      }
+      if (cron.disabled) {
+        map.set(site.id, null);
+        continue;
+      }
+      map.set(site.id, {
+        site: site.id,
+        prompt: cron.prompt,
+        hour: cron.hour,
+        tz: cron.tz,
+        ...(cron.everyHours === undefined ? {} : { everyHours: cron.everyHours }),
+        state: join(CRON_STATE_ROOT, `cron-${site.id}.json`),
+        page: cron.page,
+        fresh: cron.fresh,
+      });
+    } catch (err) {
+      // A bad knob on one site must never take down another site's jobs.
+      console.error(`[jobs-cron] failed to load cron knob for site ${site.id}`, String(err));
+    }
+  }
+  return map;
+}
+
+/** env jobs (JOBS_CRONS, fixed at boot) + per-site knob jobs (re-read every
+ *  tick); a site with a knob entry — even a paused one — overrides its env entry. */
+async function effectiveJobs(envJobs: CronJob[]): Promise<CronJob[]> {
+  const knobs = await loadKnobJobs();
+  const jobs = envJobs.filter((j) => !knobs.has(j.site));
+  for (const job of knobs.values()) if (job) jobs.push(job);
   return jobs;
 }
 
@@ -276,13 +337,12 @@ export function startJobsCron(): void {
     return;
   }
 
-  const jobs = loadCronJobs();
-  if (jobs.length === 0) {
-    console.log("[jobs-cron] no enabled schedules in JOBS_CRONS — cron disabled");
-    return;
+  const envJobs = loadCronJobs();
+  if (envJobs.length === 0) {
+    console.log("[jobs-cron] no enabled JOBS_CRONS schedules — per-site cron knobs are still checked every tick");
   }
 
-  for (const job of jobs) {
+  for (const job of envJobs) {
     if (job.everyHours === undefined) {
       const today = scheduledInstant(job);
       const next = Date.now() < today ? today : scheduledInstant(job, 1);
@@ -297,7 +357,13 @@ export function startJobsCron(): void {
     }
   }
 
-  void tickAll(jobs);
-  const timer = setInterval(() => void tickAll(jobs), TICK_MS);
+  // Per-site knob crons can appear, change, or disappear between ticks, so the
+  // effective job list is recomputed fresh every cycle (env jobs are static).
+  const runCycle = () =>
+    void effectiveJobs(envJobs)
+      .then(tickAll)
+      .catch((err) => console.error("[jobs-cron] cycle error", String(err)));
+  runCycle();
+  const timer = setInterval(runCycle, TICK_MS);
   timer.unref?.();
 }

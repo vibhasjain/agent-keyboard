@@ -19,9 +19,10 @@ ENV HOME=/data \
     NODE_ENV=production \
     PORT=8080
 
-# git (checkout + commit + push), ripgrep/jq/python3 for the agent's toolbelt.
+# git (checkout + commit + push), ripgrep/jq/python3 for the agent's toolbelt,
+# xauth (xvfb-run needs it to fake a display for the headed-Playwright submit path).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git ripgrep jq python3 \
+      ca-certificates curl git ripgrep jq python3 xauth \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (gh) from the official apt repo (not in Debian default).
