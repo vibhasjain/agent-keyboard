@@ -21,14 +21,14 @@ Use the fleet registry through the seeded helper at
 | `agentkeyboard` | `main / halo` | no | `#6fd3c7` | agentkeyboard.com — edits Agent Keyboard's own repo |
 | `makemepixels` | `main / makemepixels` | no | `#f47fb0` | makemepixels.com |
 | `menuplusplus` | `mpp / mpp` | no | `#6dd396` | menuplusplus.com (live agent, fork server) |
-| `estherandvibhas` | `main / estherandvibhas /` | no | `#b794f6` | estherandvibhas.com |
+| `estherandvibes` | `main / estherandvibhas /` | no | `#b794f6` | estherandvibhas.com |
 | `estherfell` | `main / estherfell /` | yes | `#e8c95a` | estherfell.com |
 | `closeoutcopilot` | `main / closeout /` | yes | `#e7d3b8` | closeoutcopilot.com deck |
 | `closeoutjobs` | `main / closeout-jobs` | yes | `#9aa7c7` | closeout jobs worker |
 | `menuplusplusserver` | `mpp / keyboard` | no | `#ef8e7d` | the Menu Plus Plus Agent Keyboard — edits the MPP fork's own bar/server code |
 
 `nutrition`, `movies`, `movieclub`, and `vanlife` are page agents — fixed
-sub-page sessions of their site. `home`, `estherandvibhas`, `estherfell`, and
+sub-page sessions of their site. `home`, `estherandvibes`, `estherfell`, and
 `closeoutcopilot` are page-scoped sites: add `:/path` to target any other page
 session; `/` is the default.
 
@@ -46,7 +46,7 @@ without stopping the job.
 
 ```bash
 bash /data/.claude/skills/relay/relay.sh menuplusplus "Check the current batch status" --from home
-bash /data/.claude/skills/relay/relay.sh estherandvibhas:/rsvp "Fix the RSVP copy" --reply-to home
+bash /data/.claude/skills/relay/relay.sh estherandvibes:/rsvp "Fix the RSVP copy" --reply-to home
 ```
 
 Use `--reply-to <handle>` when the target should send a completion report. Use
