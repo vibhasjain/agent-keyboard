@@ -258,5 +258,9 @@ export function ringRouter(): express.Router {
     });
   });
 
+  router.get("/fleet", authed, (_req: Request, res: Response) => {
+    res.json(registry());
+  });
+
   return router;
 }
