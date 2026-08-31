@@ -172,6 +172,17 @@ export function markerPathFor(conversationId: string): string {
   return join(CONVERSATIONS_DIR, safe);
 }
 
+/** True when the CLI already has a transcript for this session in this cwd —
+ *  ground truth for create-vs-resume. The marker is only written after a
+ *  turn's result, so a first turn killed mid-flight leaves jsonl-but-no-marker
+ *  and every later spawn with --session-id fails "already in use" forever
+ *  (this bricked makemepixels for 10 days). Path mirrors the CLI's project-dir
+ *  convention (cwd, non-alnum → "-"); cwds are fixed per site so it's stable. */
+function sessionFileExists(cwd: string, sessionId: string): boolean {
+  const proj = cwd.replace(/[^a-zA-Z0-9]/g, "-");
+  return existsSync(join(CLAUDE_HOME, ".claude", "projects", proj, `${sessionId}.jsonl`));
+}
+
 /** A compact UTC stamp (YYYYMMDD-HHMMSS) — substituted for {ts} in a pushBranch. */
 function timestampSlug(d = new Date()): string {
   const p = (n: number) => String(n).padStart(2, "0");
@@ -776,7 +787,7 @@ export async function* runMessageJob(
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
-    let resume = existsSync(marker);
+    let resume = existsSync(marker) || sessionFileExists(dir, sessionId);
     const prompt = buildPrompt(site, opts);
 
     // Per-site harness settings (model / effort / permission mode — see
@@ -1056,7 +1067,7 @@ export async function* runStreamingSession(
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
-    const resume = existsSync(marker);
+    const resume = existsSync(marker) || sessionFileExists(dir, sessionId);
     const prompt = buildPrompt(site, opts);
     const [harness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
     console.log(
