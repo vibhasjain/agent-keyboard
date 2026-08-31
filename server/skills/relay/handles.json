@@ -25,6 +25,38 @@
       "color": "#7fb4e8",
       "desc": "career-ops worker (vibhasjain.com)"
     },
+    "nutrition": {
+      "instance": "main",
+      "site": "cv",
+      "page": "/nutrition",
+      "pageScoped": true,
+      "color": "#b3d96b",
+      "desc": "vibhasjain.com/nutrition — nutrition logging"
+    },
+    "movies": {
+      "instance": "main",
+      "site": "cv",
+      "page": "/movies",
+      "pageScoped": true,
+      "color": "#d873e8",
+      "desc": "vibhasjain.com/movies"
+    },
+    "movieclub": {
+      "instance": "main",
+      "site": "cv",
+      "page": "/movieclub",
+      "pageScoped": true,
+      "color": "#5bc8e8",
+      "desc": "vibhasjain.com/movieclub"
+    },
+    "vanlife": {
+      "instance": "main",
+      "site": "estherandvibhas",
+      "page": "/vanlife",
+      "pageScoped": true,
+      "color": "#a0aef2",
+      "desc": "estherandvibhas.com/vanlife"
+    },
     "agentkeyboard": {
       "instance": "main",
       "site": "halo",

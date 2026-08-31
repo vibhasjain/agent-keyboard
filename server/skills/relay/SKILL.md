@@ -14,6 +14,10 @@ Use the fleet registry through the seeded helper at
 | --- | --- | --- | --- | --- |
 | `home` | `main / cv /` | no | `#ffb86b` | vibhasjain.com homepage — THE MASTER ORCHESTRATOR |
 | `jobs` | `main / cv-jobs` | no | `#7fb4e8` | career-ops worker (vibhasjain.com) |
+| `nutrition` | `main / cv /nutrition` | no | `#b3d96b` | vibhasjain.com/nutrition — nutrition logging |
+| `movies` | `main / cv /movies` | no | `#d873e8` | vibhasjain.com/movies |
+| `movieclub` | `main / cv /movieclub` | no | `#5bc8e8` | vibhasjain.com/movieclub |
+| `vanlife` | `main / estherandvibhas /vanlife` | no | `#a0aef2` | estherandvibhas.com/vanlife |
 | `agentkeyboard` | `main / halo` | no | `#6fd3c7` | agentkeyboard.com — edits Agent Keyboard's own repo |
 | `makemepixels` | `main / makemepixels` | no | `#f47fb0` | makemepixels.com |
 | `menuplusplus` | `mpp / mpp` | no | `#6dd396` | menuplusplus.com (live agent, fork server) |
@@ -23,8 +27,10 @@ Use the fleet registry through the seeded helper at
 | `closeoutjobs` | `main / closeout-jobs` | yes | `#9aa7c7` | closeout jobs worker |
 | `menuplusplusserver` | `mpp / keyboard` | no | `#ef8e7d` | the Menu Plus Plus Agent Keyboard — edits the MPP fork's own bar/server code |
 
-`home`, `estherandvibhas`, `estherfell`, and `closeoutcopilot` are page-scoped.
-Add `:/path` to target a page session; `/` is the default.
+`nutrition`, `movies`, `movieclub`, and `vanlife` are page agents — fixed
+sub-page sessions of their site. `home`, `estherandvibhas`, `estherfell`, and
+`closeoutcopilot` are page-scoped sites: add `:/path` to target any other page
+session; `/` is the default.
 
 ## Mentions
 
