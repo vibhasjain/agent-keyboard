@@ -176,7 +176,12 @@ export function ringRouter(): express.Router {
       res.status(503).json({ error: "ring not configured" });
       return;
     }
-    if (!isRingSecret(req.header("x-ring-secret") ?? "")) {
+    // The Pebble app's webhook UI recommends a standard Authorization header,
+    // so the secret is accepted either way: x-ring-secret: <s> or
+    // Authorization: Bearer <s> (bare <s> also fine).
+    const auth = req.header("authorization") ?? "";
+    const bearer = auth.replace(/^Bearer\s+/i, "");
+    if (!isRingSecret(req.header("x-ring-secret") ?? "") && !isRingSecret(bearer)) {
       res.status(401).json({ error: "not authorized" });
       return;
     }
