@@ -20,8 +20,8 @@ Use the fleet registry through the seeded helper at
 | `estherandvibhas` | `main / estherandvibhas /` | no | `#b794f6` | estherandvibhas.com |
 | `estherfell` | `main / estherfell /` | yes | `#e8c95a` | estherfell.com |
 | `closeoutcopilot` | `main / closeout /` | yes | `#e7d3b8` | closeoutcopilot.com deck |
-| `closeout-jobs` | `main / closeout-jobs` | yes | `#9aa7c7` | closeout jobs worker |
-| `forge` | `mpp / keyboard` | no | `#ef8e7d` | fork server (agent-keyboard-mpp) self-edit site |
+| `closeoutjobs` | `main / closeout-jobs` | yes | `#9aa7c7` | closeout jobs worker |
+| `menuplusplusserver` | `mpp / keyboard` | no | `#ef8e7d` | the Menu Plus Plus Agent Keyboard — edits the MPP fork's own bar/server code |
 
 `home`, `estherandvibhas`, `estherfell`, and `closeoutcopilot` are page-scoped.
 Add `:/path` to target a page session; `/` is the default.
@@ -60,7 +60,7 @@ Callback turns arrive like normal messages beginning `[relay:done <handle>]`.
 When one arrives, summarize it for the owner. Do **not** relay it onward unless
 the prompt explicitly asks you to.
 
-Guest handles `estherfell`, `closeoutcopilot`, and `closeout-jobs` have both
+Guest handles `estherfell`, `closeoutcopilot`, and `closeoutjobs` have both
 relay secrets stripped. They cannot run callbacks: use `--wait` or poll `--jobs`
 for work sent to them, and never use a guest handle as `--reply-to`.
 

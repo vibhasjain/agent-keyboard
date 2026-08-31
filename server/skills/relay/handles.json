@@ -66,18 +66,18 @@
       "color": "#e7d3b8",
       "desc": "closeoutcopilot.com deck"
     },
-    "closeout-jobs": {
+    "closeoutjobs": {
       "instance": "main",
       "site": "closeout-jobs",
       "guest": true,
       "color": "#9aa7c7",
       "desc": "closeout jobs worker"
     },
-    "forge": {
+    "menuplusplusserver": {
       "instance": "mpp",
       "site": "keyboard",
       "color": "#ef8e7d",
-      "desc": "fork server (agent-keyboard-mpp) self-edit site — edits the MPP fork's own repo"
+      "desc": "the Menu Plus Plus Agent Keyboard — edits the MPP fork's own bar/server code"
     }
   }
 }
