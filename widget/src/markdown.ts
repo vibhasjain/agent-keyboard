@@ -3,12 +3,34 @@
 // paragraphs. NEVER emits raw host HTML. (No tables or strikethrough — poor
 // fit for a phone-width transcript.)
 
+import { AGENT_TAGS } from './config'
+
 function escape(s: string): string {
   return s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
+}
+
+// Fleet-agent mentions: a bare "@pixels" becomes that agent's colored tag. Built
+// once, longest handle first so "@closeout-jobs" wins over "@closeout"; runs
+// after the stash below, so a backticked `@pixels` stays plain code. "a@pixels"
+// (no leading space) is an address, not a mention.
+const HANDLES = Object.keys(AGENT_TAGS).sort((a, b) => b.length - a.length)
+const MENTION = HANDLES.length ? new RegExp(`(^|[\\s(>])@(${HANDLES.join('|')})(?![\\w-])`, 'g') : null
+
+function agentTags(s: string): string {
+  if (!MENTION) return s
+  return s.replace(MENTION, (_m, pre: string, handle: string) => {
+    const c = AGENT_TAGS[handle]
+    return `${pre}<span class="ak-at" style="color:${c};background:${c}1f;border-color:${c}4d">@${handle}</span>`
+  })
+}
+
+/** User turns render as plain text (no markdown), but mentions still tag. */
+export function renderUserText(src: string): string {
+  return agentTags(escape(src ?? ''))
 }
 
 // Inline spans run on already-escaped text, so the only '<'/'>' present are ours.
@@ -21,11 +43,12 @@ function inline(s: string): string {
   const keep = (html: string): string => `\uE000${stash.push(html) - 1}\uE000`
   const anchor = (href: string, label: string): string =>
     `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`
-  return s
+  const stashed = s
     .replace(/`([^`]+)`/g, (_m, c) => keep(`<code>${c}</code>`))
     .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, text, href) => keep(anchor(href, text)))
     // Bare URLs → clickable, trimming common trailing punctuation ("visit https://x.com.")
     .replace(/https?:\/\/[^\s<>()\uE000]*[^\s<>().,;:!?'"\uE000]/g, (u) => keep(anchor(u, u)))
+  return agentTags(stashed)
     .replace(/\*\*([^*]+)\*\*/g, (_m, c) => `<strong>${c}</strong>`)
     .replace(/(^|[^*])\*([^*\n]+)\*/g, (_m, pre, c) => `${pre}<em>${c}</em>`)
     .replace(/\uE000(\d+)\uE000/g, (_m, i) => stash[Number(i)] ?? '')

@@ -26,6 +26,12 @@ Use the fleet registry through the seeded helper at
 `home`, `evie`, `esther`, and `closeout` are page-scoped. Add `:/path` to
 target a page session; `/` is the default.
 
+## Mentions
+
+When a reply refers to a fleet agent, write the bare handle — `@pixels`, not
+`` `@pixels` `` and not `**@pixels**`. The owner's bar renders a bare mention as
+that agent's colored tag; backticks make it plain code and lose the color.
+
 ## Send work
 
 Fire-and-forget is the default: it prints the durable job id and disconnects

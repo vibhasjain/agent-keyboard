@@ -31,6 +31,7 @@ import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, ou
 import { readConversation } from "./conversation.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
+import { ringRouter } from "./ring.js";
 import { seedSkills } from "./skills.js";
 import {
   startJob,
@@ -124,6 +125,31 @@ function widgetJsPath(): string | null {
   if (existsSync(devFallback)) return devFallback;
   return null;
 }
+// Fleet-agent handles → identity colors, read once from the relay skill's
+// registry so the transcript can render "@home" as that agent's colored tag. A
+// missing or malformed registry just means no tags — never a broken widget.
+// Quotes are pre-escaped because the placeholder sits inside a string literal
+// whose quote style the minifier picks.
+const AGENT_TAGS = (() => {
+  const paths = [
+    join(process.env.SKILLS_SRC_DIR ?? "/app/skills", "relay", "handles.json"),
+    join(process.cwd(), "skills", "relay", "handles.json"), // dev: tsx runs from server/
+  ];
+  for (const p of paths) {
+    try {
+      const handles = JSON.parse(readFileSync(p, "utf8")).handles as Record<string, { color?: unknown }>;
+      const tags: Record<string, string> = {};
+      for (const [handle, h] of Object.entries(handles)) {
+        if (typeof h?.color === "string") tags[handle] = h.color;
+      }
+      return JSON.stringify(tags).replaceAll('"', '\\"');
+    } catch {
+      /* try the next path */
+    }
+  }
+  return "{}";
+})();
+
 // The built bundle ships with `__AK_` placeholders for the Supabase URL + anon
 // key; we inject the real values here so they live only in the server's env,
 // never in the repo. Cache the injected buffer in production; in dev, re-read
@@ -139,7 +165,8 @@ function widgetJs(): Buffer | null {
     .replaceAll(
       "__AK_PAGE_SCOPED_SITES__",
       SITES.filter((s) => s.sessionScope === "page").map((s) => s.id).join(","),
-    );
+    )
+    .replaceAll("__AK_AGENT_TAGS__", AGENT_TAGS);
   const buf = Buffer.from(src, "utf8");
   if (process.env.NODE_ENV === "production") widgetJsCache = buf;
   return buf;
@@ -702,6 +729,9 @@ app.post("/realtime/token", authed, async (_req, res) => {
   }
   res.json(out);
 });
+
+// Ring webhook + focus registry (see ring.ts).
+app.use(ringRouter());
 
 // ─── boot + graceful shutdown ────────────────────────────────────────────────
 const port = Number(process.env.PORT ?? 8080);

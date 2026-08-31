@@ -8,7 +8,7 @@ import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { chooseGuestDemo, getGuestDemoMessages, getGuestDemoRevision, isGuestDemo, resetGuestDemo, subscribeGuestDemo } from './guest-demo'
 import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, getSendEpoch, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
-import { renderMarkdown } from './markdown'
+import { renderMarkdown, renderUserText } from './markdown'
 import { getState, patchUi, subscribe, type Subagent, type TodoItem } from './state'
 
 export interface Chat {
@@ -175,7 +175,8 @@ function msgEl(
       who.style.color = senderColor(extras.sender)
       line.appendChild(who)
     }
-    line.appendChild(document.createTextNode(text))
+    // Plain text (no markdown in user turns) — but @handle mentions still tag.
+    line.appendChild(el('span', undefined, (n) => (n.innerHTML = renderUserText(text))))
     body.appendChild(line)
     return lineEl('user', '>', body)
   }
