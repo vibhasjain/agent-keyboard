@@ -60,6 +60,12 @@ bash /data/.claude/skills/relay/relay.sh --jobs home:/movies
 
 Posting to a busy site simply queues the task FIFO.
 
+The `mpp` instance (`menuplusplus`, `menuplusplusserver`) auto-suspends when
+idle and wakes on any request. Prefer `--wait` for those two handles — it holds
+the connection and keeps the machine awake for the whole job. A fire-and-forget
+job there may pause mid-run once idle and only finish at the machine's next
+wake (jobs are durable and auto-resume).
+
 ## Completion callbacks
 
 Callback turns arrive like normal messages beginning `[relay:done <handle>]`.
