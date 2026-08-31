@@ -25,32 +25,32 @@
       "color": "#7fb4e8",
       "desc": "career-ops worker (vibhasjain.com)"
     },
-    "halo": {
+    "agentkeyboard": {
       "instance": "main",
       "site": "halo",
       "color": "#6fd3c7",
       "desc": "agentkeyboard.com — edits Agent Keyboard's own repo"
     },
-    "pixels": {
+    "makemepixels": {
       "instance": "main",
       "site": "makemepixels",
       "color": "#f47fb0",
       "desc": "makemepixels.com"
     },
-    "menu": {
+    "menuplusplus": {
       "instance": "mpp",
       "site": "mpp",
       "color": "#6dd396",
       "desc": "menuplusplus.com (live agent, fork server)"
     },
-    "evie": {
+    "estherandvibhas": {
       "instance": "main",
       "site": "estherandvibhas",
       "pageScoped": true,
       "color": "#b794f6",
       "desc": "estherandvibhas.com"
     },
-    "esther": {
+    "estherfell": {
       "instance": "main",
       "site": "estherfell",
       "pageScoped": true,
@@ -58,7 +58,7 @@
       "color": "#e8c95a",
       "desc": "estherfell.com"
     },
-    "closeout": {
+    "closeoutcopilot": {
       "instance": "main",
       "site": "closeout",
       "pageScoped": true,
@@ -77,7 +77,7 @@
       "instance": "mpp",
       "site": "keyboard",
       "color": "#ef8e7d",
-      "desc": "fork server self-edit site"
+      "desc": "fork server (agent-keyboard-mpp) self-edit site — edits the MPP fork's own repo"
     }
   }
 }

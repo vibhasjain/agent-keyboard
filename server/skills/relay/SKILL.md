@@ -14,23 +14,24 @@ Use the fleet registry through the seeded helper at
 | --- | --- | --- | --- | --- |
 | `home` | `main / cv /` | no | `#ffb86b` | vibhasjain.com homepage — THE MASTER ORCHESTRATOR |
 | `jobs` | `main / cv-jobs` | no | `#7fb4e8` | career-ops worker (vibhasjain.com) |
-| `halo` | `main / halo` | no | `#6fd3c7` | agentkeyboard.com — edits Agent Keyboard's own repo |
-| `pixels` | `main / makemepixels` | no | `#f47fb0` | makemepixels.com |
-| `menu` | `mpp / mpp` | no | `#6dd396` | menuplusplus.com (live agent, fork server) |
-| `evie` | `main / estherandvibhas /` | no | `#b794f6` | estherandvibhas.com |
-| `esther` | `main / estherfell /` | yes | `#e8c95a` | estherfell.com |
-| `closeout` | `main / closeout /` | yes | `#e7d3b8` | closeoutcopilot.com deck |
+| `agentkeyboard` | `main / halo` | no | `#6fd3c7` | agentkeyboard.com — edits Agent Keyboard's own repo |
+| `makemepixels` | `main / makemepixels` | no | `#f47fb0` | makemepixels.com |
+| `menuplusplus` | `mpp / mpp` | no | `#6dd396` | menuplusplus.com (live agent, fork server) |
+| `estherandvibhas` | `main / estherandvibhas /` | no | `#b794f6` | estherandvibhas.com |
+| `estherfell` | `main / estherfell /` | yes | `#e8c95a` | estherfell.com |
+| `closeoutcopilot` | `main / closeout /` | yes | `#e7d3b8` | closeoutcopilot.com deck |
 | `closeout-jobs` | `main / closeout-jobs` | yes | `#9aa7c7` | closeout jobs worker |
-| `forge` | `mpp / keyboard` | no | `#ef8e7d` | fork server self-edit site |
+| `forge` | `mpp / keyboard` | no | `#ef8e7d` | fork server (agent-keyboard-mpp) self-edit site |
 
-`home`, `evie`, `esther`, and `closeout` are page-scoped. Add `:/path` to
-target a page session; `/` is the default.
+`home`, `estherandvibhas`, `estherfell`, and `closeoutcopilot` are page-scoped.
+Add `:/path` to target a page session; `/` is the default.
 
 ## Mentions
 
-When a reply refers to a fleet agent, write the bare handle — `@pixels`, not
-`` `@pixels` `` and not `**@pixels**`. The owner's bar renders a bare mention as
-that agent's colored tag; backticks make it plain code and lose the color.
+When a reply refers to a fleet agent, write the bare handle — `@makemepixels`,
+not `` `@makemepixels` `` and not `**@makemepixels**`. The owner's bar renders a
+bare mention as that agent's colored tag; backticks make it plain code and lose
+the color.
 
 ## Send work
 
@@ -38,8 +39,8 @@ Fire-and-forget is the default: it prints the durable job id and disconnects
 without stopping the job.
 
 ```bash
-bash /data/.claude/skills/relay/relay.sh menu "Check the current batch status" --from home
-bash /data/.claude/skills/relay/relay.sh evie:/rsvp "Fix the RSVP copy" --reply-to home
+bash /data/.claude/skills/relay/relay.sh menuplusplus "Check the current batch status" --from home
+bash /data/.claude/skills/relay/relay.sh estherandvibhas:/rsvp "Fix the RSVP copy" --reply-to home
 ```
 
 Use `--reply-to <handle>` when the target should send a completion report. Use
@@ -47,7 +48,7 @@ Use `--reply-to <handle>` when the target should send a completion report. Use
 it waits up to 900 seconds unless `--timeout <sec>` overrides that limit.
 
 ```bash
-bash /data/.claude/skills/relay/relay.sh halo "Inspect the current server status" --wait
+bash /data/.claude/skills/relay/relay.sh agentkeyboard "Inspect the current server status" --wait
 bash /data/.claude/skills/relay/relay.sh --jobs home:/movies
 ```
 
@@ -59,9 +60,9 @@ Callback turns arrive like normal messages beginning `[relay:done <handle>]`.
 When one arrives, summarize it for the owner. Do **not** relay it onward unless
 the prompt explicitly asks you to.
 
-Guest handles `esther`, `closeout`, and `closeout-jobs` have both relay secrets
-stripped. They cannot run callbacks: use `--wait` or poll `--jobs` for work sent
-to them, and never use a guest handle as `--reply-to`.
+Guest handles `estherfell`, `closeoutcopilot`, and `closeout-jobs` have both
+relay secrets stripped. They cannot run callbacks: use `--wait` or poll `--jobs`
+for work sent to them, and never use a guest handle as `--reply-to`.
 
 `home` is the master orchestrator. Subagents report to it. Only relay when your
 prompt asks you to relay.
