@@ -91,6 +91,7 @@ const STATE_ROOT = join(DATA_DIR, "agent-keyboard");
 // ponytail: denylist, not an env allowlist — extend PERSONAL_ENV when a new
 // personal secret lands on Fly.
 export const PERSONAL_ENV = [
+  "AK_INTERNAL_SECRET", "AK_RELAY_SECRET",
   "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD",
   "GOOGLE_CALENDAR_ID", "GOOGLE_CALENDAR_OAUTH_JSON",
   "LINKEDIN_LI_AT", "MDBLIST_KEY", "STREMIO_AUTHKEY",
@@ -732,7 +733,7 @@ export type Frame = [string, unknown];
 
 /**
  * Run one message against a site as an async generator of [event, payload]
- * frames. jobs.ts drains it (holding the global Semaphore(2)); the finally runs
+ * frames. jobs.ts drains it (holding the global job semaphore); the finally runs
  * on natural completion AND on gen.return() teardown, so the site lock is
  * always released and the child always killed.
  *

@@ -12,7 +12,7 @@ const TERMINAL = new Set<JobStatus>(["done", "error", "interrupted"]);
 const DB_THROTTLE_MS = 2_000;
 const RETENTION_MS = 15 * 60_000; // finished jobs linger 15 min for cheap re-attach
 const IDEM_TTL_MS = 10 * 60_000;
-const MAX_CONCURRENT = 2; // each job is a Claude CLI subprocess
+const MAX_CONCURRENT = 4; // each job is a Claude CLI subprocess
 
 export interface JobSnapshot {
   job_id: string;

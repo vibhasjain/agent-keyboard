@@ -52,12 +52,18 @@ const SUPABASE_PROJECTS: SupabaseProject[] = [
   ...viewerProjects(),
 ];
 const AK_INTERNAL_SECRET = process.env.AK_INTERNAL_SECRET ?? "";
+const AK_RELAY_SECRET = process.env.AK_RELAY_SECRET ?? "";
 const SESSION_SECRET = process.env.SESSION_SECRET ?? "";
 const GOOGLE_HD = "hypertrack.io";
 const GOOGLE_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 function isInternalSecret(got: string): boolean {
   const a = Buffer.from(got);
   const b = Buffer.from(AK_INTERNAL_SECRET);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function isRelaySecret(got: string): boolean {
+  const a = Buffer.from(got);
+  const b = Buffer.from(AK_RELAY_SECRET);
   return a.length === b.length && timingSafeEqual(a, b);
 }
 // `trust proxy` is never enabled (see index.ts), so req.ip is the real socket
@@ -425,6 +431,13 @@ async function authenticateOwner(req: Request): Promise<OwnerAuth> {
     console.warn(
       `[auth] x-ak-internal presented from non-loopback peer ${req.ip ?? req.socket.remoteAddress ?? "unknown"} — ignoring`,
     );
+  }
+  if (AK_RELAY_SECRET && isRelaySecret(req.header("x-ak-relay") ?? "")) {
+    return {
+      user: { id: "relay", email: "relay@internal" },
+      token: "",
+      configured: true,
+    };
   }
   const token = bearer(req);
   const configured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;

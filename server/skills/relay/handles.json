@@ -1,0 +1,83 @@
+{
+  "instances": {
+    "main": {
+      "app": "agent-keyboard",
+      "url": "https://agent-keyboard.fly.dev"
+    },
+    "mpp": {
+      "app": "agent-keyboard-mpp",
+      "url": "https://agent-keyboard-mpp.fly.dev"
+    }
+  },
+  "handles": {
+    "home": {
+      "instance": "main",
+      "site": "cv",
+      "page": "/",
+      "pageScoped": true,
+      "master": true,
+      "color": "#ffb86b",
+      "desc": "vibhasjain.com homepage — THE MASTER ORCHESTRATOR"
+    },
+    "jobs": {
+      "instance": "main",
+      "site": "cv-jobs",
+      "color": "#7fb4e8",
+      "desc": "career-ops worker (vibhasjain.com)"
+    },
+    "halo": {
+      "instance": "main",
+      "site": "halo",
+      "color": "#6fd3c7",
+      "desc": "agentkeyboard.com — edits Agent Keyboard's own repo"
+    },
+    "pixels": {
+      "instance": "main",
+      "site": "makemepixels",
+      "color": "#f47fb0",
+      "desc": "makemepixels.com"
+    },
+    "menu": {
+      "instance": "mpp",
+      "site": "mpp",
+      "color": "#6dd396",
+      "desc": "menuplusplus.com (live agent, fork server)"
+    },
+    "evie": {
+      "instance": "main",
+      "site": "estherandvibhas",
+      "pageScoped": true,
+      "color": "#b794f6",
+      "desc": "estherandvibhas.com"
+    },
+    "esther": {
+      "instance": "main",
+      "site": "estherfell",
+      "pageScoped": true,
+      "guest": true,
+      "color": "#e8c95a",
+      "desc": "estherfell.com"
+    },
+    "closeout": {
+      "instance": "main",
+      "site": "closeout",
+      "pageScoped": true,
+      "guest": true,
+      "color": "#e7d3b8",
+      "desc": "closeoutcopilot.com deck"
+    },
+    "closeout-jobs": {
+      "instance": "main",
+      "site": "closeout-jobs",
+      "guest": true,
+      "color": "#9aa7c7",
+      "desc": "closeout jobs worker"
+    },
+    "forge": {
+      "instance": "mpp",
+      "site": "keyboard",
+      "color": "#ef8e7d",
+      "desc": "fork server self-edit site"
+    }
+  }
+}
