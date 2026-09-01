@@ -50,6 +50,7 @@ import {
   getJob as dbGetJob,
   listJobs as dbListJobs,
   interruptRunningJobs,
+  markRequeued,
   listRequeueableJobs,
   type JobRow,
 } from "./jobstore.js";
@@ -777,9 +778,11 @@ app.listen(port, () => {
           idemKey: `requeue-${row.job_id}`,
         }),
       })
-        .then((r) => {
+        .then(async (r) => {
           void r.body?.cancel();
           console.log(`[boot] requeued ${row.job_id} -> ${row.site_id} (${r.status})`);
+          // Tag the old row so a later boot never rescues it a second time.
+          if (r.ok) await markRequeued(row.job_id).catch(() => {});
         })
         .catch((e) => console.error(`[boot] requeue ${row.job_id} failed`, String(e)));
     }

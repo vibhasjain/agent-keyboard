@@ -139,14 +139,37 @@ export async function listJobs(siteId: string): Promise<JobRow[]> {
  * boot sweep flips them to interrupted; the caller re-enqueues them.
  */
 export async function listRequeueableJobs(): Promise<JobRow[]> {
-  const filter =
-    `status=eq.running&kind=eq.message` +
-    `&or=(status_line.is.null,status_line->>phase.eq.queued,status_line->>phase.eq.syncing)` +
+  const phases = `or=(status_line.is.null,status_line->>phase.eq.queued,status_line->>phase.eq.syncing)`;
+  // Rows a dead process left 'running' (crash / sleep — never got a terminal write).
+  const live = `status=eq.running&kind=eq.message&${phases}&order=created_at.asc&limit=50`;
+  // Rows a GRACEFUL shutdown interrupted before they ever started: a deploy
+  // marks every running row interrupted, which would silently orphan queued
+  // work, so the sweep also rescues recent never-started interrupted rows —
+  // unless an earlier sweep already re-entered them (error.kind 'requeued').
+  // The 30-minute window bounds how far back a boot can resurrect.
+  const since = new Date(Date.now() - 30 * 60_000).toISOString();
+  const dead =
+    `status=eq.interrupted&kind=eq.message&${phases}` +
+    `&updated_at=gte.${encodeURIComponent(since)}` +
+    `&or=(error.is.null,error->>kind.neq.requeued)` +
     `&order=created_at.asc&limit=50`;
-  const res = await req(`${TABLE}?${filter}`, { method: "GET", headers: headers() });
-  if (!res || !res.ok) return [];
-  const rows = (await res.json().catch(() => [])) as JobRow[];
+  const [liveRes, deadRes] = await Promise.all([
+    req(`${TABLE}?${live}`, { method: "GET", headers: headers() }),
+    req(`${TABLE}?${dead}`, { method: "GET", headers: headers() }),
+  ]);
+  const rows: JobRow[] = [];
+  for (const res of [liveRes, deadRes]) {
+    if (res && res.ok) rows.push(...((await res.json().catch(() => [])) as JobRow[]));
+  }
   return rows.filter((r) => r.prompt);
+}
+
+/** Boot sweep: after a dead job's prompt re-enters the queue, tag its old row
+ *  so a later sweep never rescues the same row twice. */
+export async function markRequeued(jobId: string): Promise<void> {
+  await updateJob(jobId, {
+    error: { kind: "requeued", detail: "Re-entered by the boot sweep after a redeploy." },
+  });
 }
 
 /**
