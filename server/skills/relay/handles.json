@@ -13,6 +13,7 @@
     "home": {
       "instance": "main",
       "site": "cv",
+      "url": "https://vibhasjain.com/",
       "page": "/",
       "pageScoped": true,
       "master": true,
@@ -22,12 +23,14 @@
     "jobs": {
       "instance": "main",
       "site": "cv-jobs",
+      "url": "https://vibhasjain.com/jobs",
       "color": "#7fb4e8",
       "desc": "career-ops worker (vibhasjain.com)"
     },
     "nutrition": {
       "instance": "main",
       "site": "cv",
+      "url": "https://vibhasjain.com/nutrition",
       "page": "/nutrition",
       "pageScoped": true,
       "color": "#b3d96b",
@@ -36,6 +39,7 @@
     "movies": {
       "instance": "main",
       "site": "cv",
+      "url": "https://vibhasjain.com/movies",
       "page": "/movies",
       "pageScoped": true,
       "color": "#d873e8",
@@ -44,6 +48,7 @@
     "movieclub": {
       "instance": "main",
       "site": "cv",
+      "url": "https://vibhasjain.com/movieclub",
       "page": "/movieclub",
       "pageScoped": true,
       "color": "#5bc8e8",
@@ -52,6 +57,7 @@
     "vanlife": {
       "instance": "main",
       "site": "estherandvibhas",
+      "url": "https://estherandvibhas.com/vanlife",
       "page": "/vanlife",
       "pageScoped": true,
       "color": "#a0aef2",
@@ -60,24 +66,28 @@
     "agentkeyboard": {
       "instance": "main",
       "site": "halo",
+      "url": "https://agentkeyboard.com",
       "color": "#6fd3c7",
       "desc": "agentkeyboard.com — edits Agent Keyboard's own repo"
     },
     "makemepixels": {
       "instance": "main",
       "site": "makemepixels",
+      "url": "https://makemepixels.com",
       "color": "#f47fb0",
       "desc": "makemepixels.com"
     },
     "menuplusplus": {
       "instance": "mpp",
       "site": "mpp",
+      "url": "https://menuplusplus.com",
       "color": "#6dd396",
       "desc": "menuplusplus.com (live agent, fork server)"
     },
     "estherandvibes": {
       "instance": "main",
       "site": "estherandvibhas",
+      "url": "https://estherandvibhas.com",
       "pageScoped": true,
       "color": "#b794f6",
       "desc": "estherandvibhas.com"
@@ -85,6 +95,7 @@
     "estherfell": {
       "instance": "main",
       "site": "estherfell",
+      "url": "https://estherfell.com",
       "pageScoped": true,
       "guest": true,
       "color": "#e8c95a",
@@ -93,6 +104,7 @@
     "closeoutcopilot": {
       "instance": "main",
       "site": "closeout",
+      "url": "https://closeoutcopilot.com",
       "pageScoped": true,
       "guest": true,
       "color": "#e7d3b8",

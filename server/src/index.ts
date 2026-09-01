@@ -126,7 +126,7 @@ function widgetJsPath(): string | null {
   if (existsSync(devFallback)) return devFallback;
   return null;
 }
-// Fleet-agent handles → identity colors, read once from the relay skill's
+// Fleet-agent handles → identity colors + page URLs, read once from the relay
 // registry so the transcript can render "@home" as that agent's colored tag. A
 // missing or malformed registry just means no tags — never a broken widget.
 // Quotes are pre-escaped because the placeholder sits inside a string literal
@@ -138,10 +138,15 @@ const AGENT_TAGS = (() => {
   ];
   for (const p of paths) {
     try {
-      const handles = JSON.parse(readFileSync(p, "utf8")).handles as Record<string, { color?: unknown }>;
-      const tags: Record<string, string> = {};
+      const handles = JSON.parse(readFileSync(p, "utf8")).handles as Record<string, { color?: unknown; url?: unknown }>;
+      const tags: Record<string, { c: string; u?: string }> = {};
       for (const [handle, h] of Object.entries(handles)) {
-        if (typeof h?.color === "string") tags[handle] = h.color;
+        if (typeof h?.color === "string") {
+          tags[handle] = {
+            c: h.color,
+            ...(typeof h.url === "string" ? { u: h.url } : {}),
+          };
+        }
       }
       return JSON.stringify(tags).replaceAll('"', '\\"');
     } catch {

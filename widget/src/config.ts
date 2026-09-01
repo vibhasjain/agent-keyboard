@@ -11,16 +11,22 @@ export const SB_ANON = '__AK_SUPABASE_ANON_KEY__'
 // (dev builds) it matches no site — everything stays site-scoped.
 const PAGE_SCOPED_SITES = '__AK_PAGE_SCOPED_SITES__'
 
-// Fleet-agent handles → identity colors, substituted by the same mechanism from
-// the server's relay registry. Unsubstituted (dev builds) or malformed JSON
-// means no tags. These values are interpolated into HTML style attributes, so
-// only plain handles and 6-digit hex colors survive.
+// Fleet-agent handles → identity colors + page URLs, substituted by the same
+// mechanism from the server's relay registry. Unsubstituted (dev builds) or
+// malformed JSON means no tags. These values are interpolated into HTML, so
+// only plain handles, 6-digit hex colors, and narrow HTTPS URLs survive.
 const AGENT_TAGS_RAW = '__AK_AGENT_TAGS__'
-export const AGENT_TAGS: Record<string, string> = (() => {
-  const tags: Record<string, string> = {}
+type AgentTag = { c: string; u?: string }
+export const AGENT_TAGS: Record<string, AgentTag> = (() => {
+  const tags: Record<string, AgentTag> = {}
   try {
-    for (const [handle, color] of Object.entries(JSON.parse(AGENT_TAGS_RAW) as Record<string, unknown>)) {
-      if (/^[a-z0-9-]+$/.test(handle) && typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color)) tags[handle] = color
+    for (const [handle, value] of Object.entries(JSON.parse(AGENT_TAGS_RAW) as Record<string, unknown>)) {
+      if (!/^[a-z0-9-]+$/.test(handle) || typeof value !== 'object' || value === null) continue
+      const { c, u } = value as { c?: unknown; u?: unknown }
+      if (typeof c !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(c)) continue
+      const tag: AgentTag = { c }
+      if (typeof u === 'string' && /^https:\/\/[a-z0-9.-]+\/?[a-zA-Z0-9\/_-]*$/.test(u)) tag.u = u
+      tags[handle] = tag
     }
   } catch {
     /* unsubstituted placeholder or bad JSON: no tags */

@@ -23,7 +23,8 @@ const MENTION = HANDLES.length ? new RegExp(`(^|[\\s(>])@(${HANDLES.join('|')})(
 function agentTags(s: string): string {
   if (!MENTION) return s
   return s.replace(MENTION, (_m, pre: string, handle: string) => {
-    const c = AGENT_TAGS[handle]
+    const { c, u } = AGENT_TAGS[handle]
+    if (u) return `${pre}<a class="ak-at" href="${u}" target="_blank" rel="noopener noreferrer" style="color:${c};background:${c}1f;border-color:${c}4d">@${handle}</a>`
     return `${pre}<span class="ak-at" style="color:${c};background:${c}1f;border-color:${c}4d">@${handle}</span>`
   })
 }
