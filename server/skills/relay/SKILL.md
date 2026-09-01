@@ -60,6 +60,11 @@ bash /data/.claude/skills/relay/relay.sh --jobs home:/movies
 
 Posting to a busy site simply queues the task FIFO.
 
+Never `--wait` on a handle that lives on YOUR OWN site (e.g. home → nutrition /
+movies / movieclub): page agents share your site's job lock, so their job cannot
+start until your turn ends — waiting would block yourself. Fire-and-forget with
+`--reply-to` instead.
+
 The `mpp` instance (`menuplusplus`, `menuplusplusserver`) auto-suspends when
 idle and wakes on any request. Prefer `--wait` for those two handles — it holds
 the connection and keeps the machine awake for the whole job. A fire-and-forget
