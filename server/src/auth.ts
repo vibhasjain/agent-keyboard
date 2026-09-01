@@ -202,22 +202,53 @@ function bearer(req: Request): string {
   return h.replace(/^Bearer\s+/i, "").trim();
 }
 
-/** Verify a Supabase token → the allowed owner, or null. Cached 60s per token. */
-async function verify(token: string): Promise<AuthedUser | null> {
-  if (!JWT_RE.test(token)) return null; // not a JWT — reject before any I/O or caching
+/**
+ * Verify a Supabase token. Three outcomes, deliberately distinguished:
+ * - user:    /auth/v1/user confirmed the token and the identity is allowed.
+ * - invalid: Supabase answered definitively (401/403 — bad, expired, or
+ *            revoked-session token). Cached briefly per token.
+ * - unavailable: the verifier itself could not answer (network error or
+ *            Supabase 5xx). NEVER cached and NEVER reported to the caller as
+ *            401 — clients treat any 401 as "session dead" and sign the user
+ *            out, so a transient verifier blip would nuke a healthy session.
+ *            Callers answer 503 instead so the client retries.
+ */
+export type VerifyOutcome =
+  | { kind: "user"; user: AuthedUser }
+  | { kind: "invalid" }
+  | { kind: "unavailable" };
+
+async function verify(token: string): Promise<VerifyOutcome> {
+  if (!JWT_RE.test(token)) return { kind: "invalid" }; // not a JWT — reject before any I/O or caching
   const now = Date.now();
   const hit = cache.get(token);
-  if (hit && now - hit.at < CACHE_TTL_MS) return hit.user;
+  if (hit && now - hit.at < CACHE_TTL_MS) {
+    return hit.user ? { kind: "user", user: hit.user } : { kind: "invalid" };
+  }
 
   let user: AuthedUser | null = null;
-  try {
-    // A token belongs to exactly one project: the first /auth/v1/user that
-    // answers 200 decides; the rest are never asked.
-    for (const project of SUPABASE_PROJECTS) {
-      const res = await fetch(`${project.url.replace(/\/$/, "")}/auth/v1/user`, {
+  let unavailable = false;
+  // A token belongs to exactly one project: the first /auth/v1/user that
+  // answers 200 decides; the rest are never asked.
+  for (const project of SUPABASE_PROJECTS) {
+    let res: globalThis.Response;
+    try {
+      res = await fetch(`${project.url.replace(/\/$/, "")}/auth/v1/user`, {
         headers: { Authorization: `Bearer ${token}`, apikey: project.anon },
       });
-      if (!res.ok) continue;
+    } catch {
+      // Network failure talking to this project — the token's validity is
+      // unknown, not disproven.
+      unavailable = true;
+      continue;
+    }
+    if (res.status >= 500) {
+      // Supabase itself is erroring — again, validity unknown.
+      unavailable = true;
+      continue;
+    }
+    if (!res.ok) continue; // definitive rejection (bad/expired/revoked token) — try the next project
+    try {
       const body = (await res.json()) as { id?: string; email?: string };
       const scope = body?.email ? await allowedScope(body.email) : undefined;
       const idOk = ALLOWED_USER_IDS.size === 0 || (!!body?.id && ALLOWED_USER_IDS.has(body.id.toLowerCase()));
@@ -227,19 +258,18 @@ async function verify(token: string): Promise<AuthedUser | null> {
       if (scope !== undefined && idOk && ownerOk && body.id && body.email) {
         user = { id: body.id, email: body.email, ...(scope ? { scope } : {}) };
       }
-      break;
+    } catch {
+      unavailable = true;
     }
-  } catch {
-    // Network / Supabase down: treat as unauthenticated, but don't cache the
-    // failure (so a transient blip doesn't lock the owner out for 60s).
-    return null;
+    break;
   }
+  if (!user && unavailable) return { kind: "unavailable" };
   if (cache.size >= CACHE_MAX) {
     const oldest = cache.keys().next().value; // FIFO evict to bound memory
     if (oldest !== undefined) cache.delete(oldest);
   }
   cache.set(token, { user, at: now });
-  return user;
+  return user ? { kind: "user", user } : { kind: "invalid" };
 }
 
 async function refreshGoogleKeys(): Promise<void> {
@@ -417,6 +447,8 @@ interface OwnerAuth {
   user: AuthedUser | null;
   token: string;
   configured: boolean;
+  /** True when no project could answer — caller must 503, not 401. */
+  unavailable: boolean;
 }
 
 async function authenticateOwner(req: Request): Promise<OwnerAuth> {
@@ -426,6 +458,7 @@ async function authenticateOwner(req: Request): Promise<OwnerAuth> {
         user: { id: "internal", email: "cron@internal" },
         token: "",
         configured: true,
+        unavailable: false,
       };
     }
     console.warn(
@@ -437,14 +470,17 @@ async function authenticateOwner(req: Request): Promise<OwnerAuth> {
       user: { id: "relay", email: "relay@internal" },
       token: "",
       configured: true,
+      unavailable: false,
     };
   }
   const token = bearer(req);
   const configured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
+  const outcome = configured && token ? await verify(token) : null;
   return {
-    user: configured && token ? await verify(token) : null,
+    user: outcome?.kind === "user" ? outcome.user : null,
     token,
     configured,
+    unavailable: outcome?.kind === "unavailable",
   };
 }
 
@@ -467,6 +503,13 @@ export function requireOwner() {
     }
     if (!owner.token) {
       res.status(401).json({ error: "sign in required" });
+      return;
+    }
+    if (owner.unavailable) {
+      // Verifier outage is not an auth failure — clients sign the user out on
+      // any 401, which would destroy a healthy session over a network blip.
+      res.setHeader("Retry-After", "5");
+      res.status(503).json({ error: "auth verification temporarily unavailable" });
       return;
     }
     // We can't cheaply distinguish "invalid token" (401) from "valid but not
@@ -501,6 +544,11 @@ export function requireOwnerOrGoogle() {
     }
     if (!token) {
       res.status(401).json({ error: "sign in required" });
+      return;
+    }
+    if (owner.unavailable) {
+      res.setHeader("Retry-After", "5");
+      res.status(503).json({ error: "auth verification temporarily unavailable" });
       return;
     }
     const user = (await verifyGoogleSession(token)) ?? await verifyGoogle(token);
