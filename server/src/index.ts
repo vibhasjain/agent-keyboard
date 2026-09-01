@@ -338,6 +338,7 @@ function rowToSnapshot(row: JobRow): JobSnapshot {
   return {
     job_id: row.job_id,
     site_id: row.site_id,
+    priority: 0, // priority is live-queue state only; not persisted to the row
     kind: row.kind,
     status: row.status,
     status_line: row.status_line ?? {},
@@ -398,10 +399,15 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     page?: unknown;
     idemKey?: unknown;
     attachmentIds?: unknown;
+    priority?: unknown;
   };
   const text = typeof body.text === "string" ? body.text : "";
   const page = typeof body.page === "string" ? body.page : "/";
   const idemKey = typeof body.idemKey === "string" && body.idemKey ? body.idemKey : "";
+  // Priority lane: higher numbers jump the queue when a worker slot frees.
+  // Omitted/invalid = 0 = legacy FIFO behavior for existing clients.
+  const priority =
+    typeof body.priority === "number" && Number.isFinite(body.priority) ? Math.trunc(body.priority) : 0;
   const attachmentIds = Array.isArray(body.attachmentIds) ? body.attachmentIds.map(String) : [];
   if (!text.trim() && attachmentIds.length === 0) {
     res.status(400).json({ error: "text or attachmentIds required" });
@@ -431,9 +437,6 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   // job prompt stays the user's own words.
   const promptText = text + pathScopeNote(authedUser(req));
   const sender = authedUser(req)?.email;
-  const gen = input
-    ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths, sender }, input, ac.signal)
-    : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths, sender }, ac.signal);
   // Record which Claude session this job drives, so an auto-resume after a
   // self-triggered redeploy can pick the turn back up with --resume.
   const conversationId = await conversationIdFor(site.id, pageSlug);
@@ -443,9 +446,15 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     prompt: text,
     page,
     pageSlug,
-    gen,
+    // Built at admission, not at submit: the generator immediately takes the
+    // scheduler-held site lock instead of queueing on it with a slot in hand.
+    makeGen: (preLock) =>
+      input
+        ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths, sender, preLock }, input, ac.signal)
+        : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths, sender, preLock }, ac.signal),
     abort: () => ac.abort(),
     idemKey: idemKey || undefined,
+    priority,
     streaming: !!input,
     input,
     conversationId,

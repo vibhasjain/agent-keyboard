@@ -85,6 +85,27 @@ export function acquireSiteLock(siteId: string): Promise<() => void> {
   return prev.then(() => release);
 }
 
+/**
+ * Non-blocking acquire for the job scheduler (jobs.ts): returns release() only
+ * when the site's lock is free THIS instant — no holder and no FIFO waiters —
+ * else null. A queued job must never occupy a worker slot while blocked behind
+ * its own site's queue, so the scheduler admits only with the lock in hand.
+ * The chain entry outlives release() by a microtask, so a same-tick retry can
+ * see a false busy; the scheduler re-checks on a short timer.
+ */
+export function tryAcquireSiteLock(siteId: string): (() => void) | null {
+  if (siteQueues.has(siteId)) return null;
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  siteQueues.set(siteId, held);
+  void held.finally(() => {
+    if (siteQueues.get(siteId) === held) siteQueues.delete(siteId);
+  });
+  return release;
+}
+
 // The first clone must not race itself; memoize the in-flight (and resolved)
 // clone so concurrent callers await one checkout. On failure, drop it so a
 // later call can retry.

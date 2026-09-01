@@ -24,6 +24,9 @@ primary_region = "iad"
 
 [env]
   PORT = "8080"
+  # Job scheduler: max concurrent Claude CLI jobs. Same-site jobs serialize on
+  # the site lock regardless; this caps cross-site parallelism (memory-bound).
+  AK_MAX_WORKERS = "3"
   HOME = "/data"
   IS_SANDBOX = "1"
   NODE_ENV = "production"

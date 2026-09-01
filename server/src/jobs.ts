@@ -3,21 +3,35 @@
 // watching; the HTTP layer only ever TAILS a job. The in-memory registry is the
 // live truth (single machine, single process); the agent_keyboard_jobs table is
 // the durable record a reloaded client re-attaches to.
+//
+// Admission: a submitted job sits in the pending queue holding NO resources
+// until the scheduler admits it — admission requires a free worker slot
+// (MAX_WORKERS, env AK_MAX_WORKERS) AND its site's lock free right now
+// (tryAcquireSiteLock). Same-site jobs therefore serialize on the site lock
+// while different sites run in parallel, and a same-site backlog can never
+// starve other sites (the old global FIFO semaphore let queued jobs hold
+// pool permits while blocked on their site lock). Among admissible jobs the
+// scheduler picks the highest `priority` (submit-time flag, default 0 =
+// legacy behavior), FIFO on ties.
 
 import { randomBytes } from "node:crypto";
 import type { Frame, InputChannel } from "./claude.js";
 import { insertJob, updateJob, type JobStatus } from "./jobstore.js";
+import { tryAcquireSiteLock } from "./checkouts.js";
 
 const TERMINAL = new Set<JobStatus>(["done", "error", "interrupted"]);
 const DB_THROTTLE_MS = 2_000;
 const RETENTION_MS = 15 * 60_000; // finished jobs linger 15 min for cheap re-attach
 const IDEM_TTL_MS = 10 * 60_000;
-const MAX_CONCURRENT = 4; // each job is a Claude CLI subprocess
+// Each admitted job is a Claude CLI subprocess (~500MB); 3 fits the 2GB
+// machine + 512MB swap with headroom for headless chromium (cv-jobs worker).
+const MAX_WORKERS = Math.max(1, Number(process.env.AK_MAX_WORKERS ?? 3) || 3);
 
 export interface JobSnapshot {
   job_id: string;
   site_id: string;
   kind: string;
+  priority: number;
   status: JobStatus;
   status_line: Record<string, unknown>;
   result: Record<string, unknown> | null;
@@ -30,6 +44,8 @@ interface Job {
   jobId: string;
   kind: string;
   siteId: string;
+  priority: number; // submit-time lane: higher runs first among admissible jobs
+  admitted: boolean; // false while still in the pending queue (no lock, no CLI)
   pageSlug: string; // conversation dimension: "" = the site root
   status: JobStatus;
   statusLine: Record<string, unknown>;
@@ -65,27 +81,66 @@ class SubQueue {
   }
 }
 
-// ─── global concurrency: at most MAX_CONCURRENT drains at once ─────────────
-class Semaphore {
-  private permits: number;
-  private waiters: (() => void)[] = [];
-  constructor(n: number) {
-    this.permits = n;
+// ─── admission scheduler: at most MAX_WORKERS drains at once, never two on ───
+// ─── the same site. Queued jobs hold no slot, so cross-site work never waits ──
+// ─── behind one site's backlog. ─────────────────────────────────────────────
+interface QueuedJob {
+  job: Job;
+  makeGen: (preLock: () => void) => AsyncGenerator<Frame>;
+}
+const pending: QueuedJob[] = [];
+let activeWorkers = 0;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function schedule(): void {
+  // Reap jobs cancelled before admission (their generator was never created):
+  // deliver the terminal frame cancelJob published, persist, and retain.
+  for (let i = pending.length - 1; i >= 0; i--) {
+    if (!TERMINAL.has(pending[i]!.job.status)) continue;
+    const { job } = pending.splice(i, 1)[0]!;
+    closeSubscribers(job);
+    void flush(job);
+    const t = setTimeout(() => registry.delete(job.jobId), RETENTION_MS);
+    t.unref?.();
   }
-  async acquire(): Promise<() => void> {
-    if (this.permits > 0) this.permits--;
-    else await new Promise<void>((resolve) => this.waiters.push(resolve));
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      const w = this.waiters.shift();
-      if (w) w(); // hand the permit straight to the next waiter
-      else this.permits++;
-    };
+  let admitted = false;
+  while (activeWorkers < MAX_WORKERS && pending.length) {
+    // Highest priority first, FIFO among equal priorities (pending is already
+    // in submit order). Admission is atomic: the first candidate whose site
+    // lock is free takes it with the slot, so a same-site runner-up cleanly
+    // waits for the next schedule() pass.
+    const order = pending
+      .map((_, i) => i)
+      .sort(
+        (a, b) =>
+          pending[b]!.job.priority - pending[a]!.job.priority ||
+          pending[a]!.job.createdAt - pending[b]!.job.createdAt,
+      );
+    let picked = false;
+    for (const i of order) {
+      const preLock = tryAcquireSiteLock(pending[i]!.job.siteId);
+      if (!preLock) continue;
+      const { job, makeGen } = pending.splice(i, 1)[0]!;
+      job.admitted = true;
+      activeWorkers++;
+      admitted = true;
+      picked = true;
+      void drain(job, makeGen(preLock));
+      break;
+    }
+    if (!picked) break;
+  }
+  // tryAcquireSiteLock can lose to a lock released earlier in this same tick
+  // (its chain entry outlives release() by a microtask). One short re-check
+  // covers that transient; genuine busy-sites are re-driven by drain teardown.
+  if (!admitted && pending.length && !retryTimer) {
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      schedule();
+    }, 25);
+    retryTimer.unref?.();
   }
 }
-const sem = new Semaphore(MAX_CONCURRENT);
 
 const registry = new Map<string, Job>();
 const idem = new Map<string, { jobId: string; at: number }>();
@@ -95,6 +150,7 @@ function snapshot(job: Job): JobSnapshot {
     job_id: job.jobId,
     site_id: job.siteId,
     kind: job.kind,
+    priority: job.priority,
     status: job.status,
     status_line: job.statusLine,
     result: job.result,
@@ -136,7 +192,6 @@ async function maybeFlush(job: Job): Promise<void> {
 }
 
 async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
-  const releaseSem = await sem.acquire();
   try {
     for await (const [event, payload] of gen) {
       job.updatedAt = Date.now();
@@ -195,15 +250,17 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
     closeSubscribers(job);
     job.updatedAt = Date.now();
     await flush(job);
-    releaseSem();
+    activeWorkers--;
+    schedule(); // a freed slot (and possibly a freed site) admits the next job
     const t = setTimeout(() => registry.delete(job.jobId), RETENTION_MS);
     t.unref?.();
   }
 }
 
 /**
- * Register and launch a job. Inserts the DB row BEFORE the drain starts so a GET
- * right after this resolves finds the row; the drain then runs fire-and-forget.
+ * Register and queue a job. Inserts the DB row BEFORE admission so a GET right
+ * after this resolves finds the row (phase "queued"); the scheduler then admits
+ * it when a worker slot and its site lock are both free.
  */
 export async function startJob(opts: {
   siteId: string;
@@ -211,9 +268,12 @@ export async function startJob(opts: {
   prompt: string;
   page: string;
   pageSlug?: string;
-  gen: AsyncGenerator<Frame>;
+  /** Deferred generator construction: the run (and its site lock / CLI spawn)
+   *  only exists once the scheduler admits the job. */
+  makeGen: (preLock: () => void) => AsyncGenerator<Frame>;
   abort?: () => void;
   idemKey?: string;
+  priority?: number;
   streaming?: boolean;
   input?: InputChannel | null;
   conversationId?: string | null;
@@ -226,6 +286,8 @@ export async function startJob(opts: {
     jobId,
     kind: opts.kind ?? "message",
     siteId: opts.siteId,
+    priority: Math.max(-100, Math.min(100, Math.trunc(opts.priority ?? 0) || 0)),
+    admitted: false,
     pageSlug: opts.pageSlug ?? "",
     status: "running",
     statusLine: { phase: "queued", detail: "Waiting for a free slot" },
@@ -256,7 +318,8 @@ export async function startJob(opts: {
     page: opts.page,
   }).catch(() => {});
 
-  void drain(job, opts.gen);
+  pending.push({ job, makeGen: opts.makeGen });
+  schedule();
   return job;
 }
 
@@ -333,6 +396,7 @@ export function cancelJob(jobId: string): boolean {
   } catch {
     /* best-effort */
   }
+  schedule(); // if it was still queued, the reaper finalizes it now
   return true;
 }
 
@@ -378,6 +442,9 @@ export function runningResumeInputs(): {
   }[] = [];
   for (const job of registry.values()) {
     if (job.status !== "running") continue;
+    // Only admitted jobs have a live Claude session to resume; queued ones are
+    // re-entered verbatim by the boot sweep's requeue instead.
+    if (!job.admitted) continue;
     out.push({
       jobId: job.jobId,
       siteId: job.siteId,

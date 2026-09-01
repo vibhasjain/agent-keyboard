@@ -744,7 +744,8 @@ export type Frame = [string, unknown];
 
 /**
  * Run one message against a site as an async generator of [event, payload]
- * frames. jobs.ts drains it (holding the global job semaphore); the finally runs
+ * frames. jobs.ts admits it through the worker scheduler (site lock already
+ * in hand via opts.preLock) and drains it; the finally runs
  * on natural completion AND on gen.return() teardown, so the site lock is
  * always released and the child always killed.
  *
@@ -753,7 +754,15 @@ export type Frame = [string, unknown];
  */
 export async function* runMessageJob(
   site: Site,
-  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[]; sender?: string },
+  opts: {
+    text: string;
+    page: string;
+    pageSlug?: string;
+    attachmentPaths: string[];
+    sender?: string;
+    /** Scheduler-admitted jobs arrive with the site lock already held. */
+    preLock?: () => void;
+  },
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
   yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
@@ -773,7 +782,7 @@ export async function* runMessageJob(
   signal?.addEventListener("abort", onAbort, { once: true });
   try {
     if (signal?.aborted) return; // stopped before we even started
-    release = await acquireSiteLock(site.id);
+    release = opts.preLock ?? (await acquireSiteLock(site.id));
     if (signal?.aborted) return; // stopped while waiting for this site's checkout
 
     yield ["status", { phase: "syncing", detail: `Syncing ${site.domain}` }];
@@ -1035,7 +1044,15 @@ export async function* runMessageJob(
  */
 export async function* runStreamingSession(
   site: Site,
-  opts: { text: string; page: string; pageSlug?: string; attachmentPaths: string[]; sender?: string },
+  opts: {
+    text: string;
+    page: string;
+    pageSlug?: string;
+    attachmentPaths: string[];
+    sender?: string;
+    /** Scheduler-admitted jobs arrive with the site lock already held. */
+    preLock?: () => void;
+  },
   input: InputChannel,
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
@@ -1056,7 +1073,7 @@ export async function* runStreamingSession(
   signal?.addEventListener("abort", onAbort, { once: true });
   try {
     if (signal?.aborted) return;
-    release = await acquireSiteLock(site.id);
+    release = opts.preLock ?? (await acquireSiteLock(site.id));
     if (signal?.aborted) return;
 
     yield ["status", { phase: "syncing", detail: `Syncing ${site.domain}` }];

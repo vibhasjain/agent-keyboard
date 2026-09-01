@@ -162,15 +162,15 @@ export async function resumeAfterRedeploy(): Promise<void> {
       const pageSlug = marker.pageSlug ?? "";
       // ponytail: lossy page reconstruction; only feeds the "[Sent from]" prompt line
       const page = pageSlug ? `/${pageSlug}` : "/";
-      const gen = input
-        ? runStreamingSession(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [] }, input, ac.signal)
-        : runMessageJob(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [] }, ac.signal);
       await startJob({
         siteId: s.id,
         prompt: CONTINUATION,
         page,
         pageSlug,
-        gen,
+        makeGen: (preLock) =>
+          input
+            ? runStreamingSession(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [], preLock }, input, ac.signal)
+            : runMessageJob(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [], preLock }, ac.signal),
         abort: () => ac.abort(),
         streaming: !!input,
         input,
