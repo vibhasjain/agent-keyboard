@@ -50,6 +50,7 @@ import {
   getJob as dbGetJob,
   listJobs as dbListJobs,
   interruptRunningJobs,
+  listRequeueableJobs,
   type JobRow,
 } from "./jobstore.js";
 import { openSse, startKeepalive, writeFrame } from "./sse.js";
@@ -744,7 +745,31 @@ app.listen(port, () => {
   void purgeStaleUploads(SITES.map((s) => s.id)).catch((e) =>
     console.error("[boot] purge uploads failed", e),
   );
-  void interruptRunningJobs().catch((e) => console.error("[boot] job sweep failed", e));
+  // Sweep, but first rescue messages that never started (queued/syncing when
+  // the last process died — e.g. a burst of ring presses behind a deploy):
+  // their prompts re-enter the queue verbatim instead of dying as 'interrupted'.
+  void (async () => {
+    const requeue = await listRequeueableJobs().catch(() => [] as JobRow[]);
+    await interruptRunningJobs();
+    const secret = process.env.AK_INTERNAL_SECRET ?? "";
+    if (!secret) return;
+    for (const row of requeue) {
+      fetch(`http://127.0.0.1:${port}/sites/${encodeURIComponent(row.site_id)}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-ak-internal": secret },
+        body: JSON.stringify({
+          text: row.prompt,
+          page: row.page ?? "/",
+          idemKey: `requeue-${row.job_id}`,
+        }),
+      })
+        .then((r) => {
+          void r.body?.cancel();
+          console.log(`[boot] requeued ${row.job_id} -> ${row.site_id} (${r.status})`);
+        })
+        .catch((e) => console.error(`[boot] requeue ${row.job_id} failed`, String(e)));
+    }
+  })().catch((e) => console.error("[boot] job sweep failed", e));
   void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
 });

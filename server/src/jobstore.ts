@@ -132,6 +132,24 @@ export async function listJobs(siteId: string): Promise<JobRow[]> {
 }
 
 /**
+ * Rows still 'running' that provably did no work before the process died: never
+ * past the site-lock queue or the checkout sync, so the CLI never spawned and
+ * re-running the prompt verbatim cannot duplicate anything. ('starting' and
+ * later phases may have side effects — those stay interrupted.) Read BEFORE the
+ * boot sweep flips them to interrupted; the caller re-enqueues them.
+ */
+export async function listRequeueableJobs(): Promise<JobRow[]> {
+  const filter =
+    `status=eq.running&kind=eq.message` +
+    `&or=(status_line.is.null,status_line->>phase.eq.queued,status_line->>phase.eq.syncing)` +
+    `&order=created_at.asc&limit=50`;
+  const res = await req(`${TABLE}?${filter}`, { method: "GET", headers: headers() });
+  if (!res || !res.ok) return [];
+  const rows = (await res.json().catch(() => [])) as JobRow[];
+  return rows.filter((r) => r.prompt);
+}
+
+/**
  * Boot sweep: anything still 'running' predates this process (the machine slept
  * / restarted mid-job). Mark it interrupted so no client hangs on a dead job.
  * Tolerates an unreachable Supabase (logs and returns).
