@@ -1,6 +1,8 @@
 // Ring webhook — the smart ring's phone app POSTs a voice transcription here and
-// we email it to the owner, subject "[RING] …". Owner decision (2026-09-01): a
-// ring press is a note to self, not a task — nothing acts on the transcript.
+// we hand it to the owner: WhatsApp via the bridge, falling back to a "[RING] …"
+// email when the bridge errors or is slow, so a note is never lost. Owner
+// decision (2026-09-01): a ring press is a note to self, not a task — this is a
+// dumb pipe and nothing acts on the transcript.
 //
 // Three properties of the sender shape everything below:
 //   1. The upload is async on the phone and a FAILED one is re-sent alongside the
@@ -30,14 +32,20 @@ const PORT = Number(process.env.PORT ?? 8080);
 const FOCUS_FILE = "agent-keyboard/ring-focus.json";
 const FOCUS_TTL_MS = 2 * 60 * 60_000;
 const MASTER_HANDLE = "home";
+const WA_BRIDGE_URL = process.env.WA_BRIDGE_URL ?? "";
+const WA_API_TOKEN = process.env.WA_API_TOKEN ?? "";
+// The recipient is a personal phone number, so it lives in a Fly secret rather
+// than in this (public) repo.
+const WA_TO = process.env.RING_WA_TO ?? "";
+const WA_TIMEOUT_MS = 5_000;
 const RESEND_KEY = process.env.RESEND_API_KEY ?? "";
 const EMAIL_FROM = process.env.EMAIL_FROM ?? "Agent Keyboard <ring@agentkeyboard.com>";
 // Default recipient is the owner already on the auth allow-list, so forwarding
 // needs no new secret and no personal address checked into a public repo.
 const RING_EMAIL_TO = (process.env.RING_EMAIL_TO ?? process.env.ALLOWED_EMAIL ?? "").split(",")[0]?.trim() ?? "";
-// A failed upload is re-sent with the NEXT recording; only a delivered mail is
+// A failed upload is re-sent with the NEXT recording; only a delivered note is
 // remembered, so a retry after a failure still gets through (process-lifetime).
-const emailed = new Set<string>();
+const delivered = new Set<string>();
 
 function isRingSecret(got: string): boolean {
   const a = Buffer.from(got);
@@ -89,6 +97,29 @@ function registry(): Registry {
   return registryCache;
 }
 
+/** The WhatsApp bridge — the primary channel. Anything other than a 2xx inside
+ *  the timeout is a miss, and the caller falls back to email. */
+async function whatsapp(text: string): Promise<boolean> {
+  if (!WA_BRIDGE_URL || !WA_API_TOKEN || !WA_TO) {
+    console.error("[ring] whatsapp bridge not configured — falling back to email");
+    return false;
+  }
+  try {
+    const res = await fetch(WA_BRIDGE_URL, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${WA_API_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ to: WA_TO, text }),
+      signal: AbortSignal.timeout(WA_TIMEOUT_MS),
+    });
+    await res.body?.cancel();
+    if (!res.ok) console.error(`[ring] whatsapp bridge said ${res.status} ${res.statusText} — falling back to email`);
+    return res.ok;
+  } catch (err) {
+    console.error(`[ring] whatsapp bridge unreachable (${String(err)}) — falling back to email`);
+    return false;
+  }
+}
+
 /** Resend's HTTP API — the same channel the provision-user skill sends invites
  *  on (server/skills/provision-user/invite.mjs), so no new dependency or
  *  credential: RESEND_API_KEY + EMAIL_FROM are already in the server env. */
@@ -103,6 +134,14 @@ async function emailTranscript(text: string): Promise<boolean> {
   await res.body?.cancel();
   if (!res.ok) console.error(`[ring] email failed: ${res.status} ${res.statusText}`);
   return res.ok;
+}
+
+/** WhatsApp first, email as the permanent fallback. Null = both channels missed,
+ *  which answers non-2xx so the phone re-sends the note with the next press. */
+async function deliver(text: string): Promise<"whatsapp" | "email" | null> {
+  if (await whatsapp(text)) return "whatsapp";
+  if (await emailTranscript(text)) return "email";
+  return null;
 }
 
 // ─── focus ───────────────────────────────────────────────────────────────────
@@ -188,25 +227,23 @@ export function ringRouter(): express.Router {
         return;
       }
       void (async () => {
-        console.log(`[ring] trigger=${trigger} emailing len=${transcription.length}`);
-        if (!RESEND_KEY || !RING_EMAIL_TO) {
-          // Non-2xx: the phone re-sends this recording with the next one, so a
-          // misconfigured mailer loses nothing once it is fixed.
-          finish(503, { error: "ring email not configured" });
-          return;
-        }
-        // A retry arrives as the same recordedAt — don't email the same note twice.
+        console.log(`[ring] trigger=${trigger} len=${transcription.length}`);
+        // A retry arrives as the same recordedAt — don't send the same note twice.
         const idemKey = /^\d+$/.test(recordedAt) ? `ring-${recordedAt}` : randomUUID();
-        if (emailed.has(idemKey)) {
+        if (delivered.has(idemKey)) {
           finish(200, { ok: true, duplicate: true });
           return;
         }
-        if (!(await emailTranscript(transcription))) {
-          finish(502, { error: "email failed" });
+        const via = await deliver(transcription);
+        if (!via) {
+          // Non-2xx: the phone re-sends this recording with the next one, so
+          // both channels being down loses nothing once one is back.
+          finish(502, { error: "delivery failed" });
           return;
         }
-        emailed.add(idemKey);
-        finish(200, { ok: true, emailed: true });
+        delivered.add(idemKey);
+        console.log(`[ring] delivered via ${via}`);
+        finish(200, { ok: true, via });
       })().catch((err) => finish(500, { error: String(err).slice(0, 300) }));
     });
     req.pipe(bb);
