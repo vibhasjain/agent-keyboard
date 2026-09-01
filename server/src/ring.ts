@@ -1,21 +1,20 @@
 // Ring webhook — the smart ring's phone app POSTs a voice transcription here and
-// we forward it as a prompt to whichever fleet agent is currently "focused"
-// (default: the master, @home). One press of the ring in, one durable job out.
+// we email it to the owner, subject "[RING] …". Owner decision (2026-09-01): a
+// ring press is a note to self, not a task — nothing acts on the transcript.
 //
 // Three properties of the sender shape everything below:
 //   1. The upload is async on the phone and a FAILED one is re-sent alongside the
 //      NEXT recording. So anything we don't want repeated must answer 2xx — an
-//      empty transcription is a 200, not a 400 — and every dispatch carries an
-//      idemKey derived from recordedAt, so a genuine retry re-tails the original
-//      job (see jobForIdem in jobs.ts) instead of running the prompt twice.
+//      empty transcription is a 200, not a 400 — and a delivered mail is keyed by
+//      recordedAt, so a genuine retry is dropped instead of emailed twice.
 //   2. The POST is multipart and may carry an m4a of the recording. We never want
 //      the audio: the file part is drained and discarded, never buffered.
 //   3. Anyone on the internet can reach this route, so the shared secret is
 //      checked BEFORE the body is parsed — an unauthenticated caller must not be
 //      able to make us read 20MB off the wire.
 //
-// Focus lives in one small file on the volume and expires after two hours:
-// "point the ring at @pixels" must not still be in effect tomorrow morning.
+// Focus (/focus, /fleet) is kept for fleet inspection but no longer routes
+// anything: every press is emailed, whatever the focus says.
 
 import busboy from "busboy";
 import express, { type Request, type Response } from "express";
@@ -31,6 +30,14 @@ const PORT = Number(process.env.PORT ?? 8080);
 const FOCUS_FILE = "agent-keyboard/ring-focus.json";
 const FOCUS_TTL_MS = 2 * 60 * 60_000;
 const MASTER_HANDLE = "home";
+const RESEND_KEY = process.env.RESEND_API_KEY ?? "";
+const EMAIL_FROM = process.env.EMAIL_FROM ?? "Agent Keyboard <ring@agentkeyboard.com>";
+// Default recipient is the owner already on the auth allow-list, so forwarding
+// needs no new secret and no personal address checked into a public repo.
+const RING_EMAIL_TO = (process.env.RING_EMAIL_TO ?? process.env.ALLOWED_EMAIL ?? "").split(",")[0]?.trim() ?? "";
+// A failed upload is re-sent with the NEXT recording; only a delivered mail is
+// remembered, so a retry after a failure still gets through (process-lifetime).
+const emailed = new Set<string>();
 
 function isRingSecret(got: string): boolean {
   const a = Buffer.from(got);
@@ -82,56 +89,20 @@ function registry(): Registry {
   return registryCache;
 }
 
-interface Target {
-  site: string;
-  page: string;
-  url: string;
-  authHeader: string;
-  authSecret: string;
-}
-
-/** Where a handle's messages go: the loopback port when the handle lives on this
- *  instance, the peer's public URL otherwise (mirrors relay.sh's routing). */
-function targetFor(name: string): Target | null {
-  const reg = registry();
-  const handle = reg.handles[name];
-  const instance = handle ? reg.instances[handle.instance] : undefined;
-  if (!handle || !instance) return null;
-  const path = `/sites/${encodeURIComponent(handle.site)}/messages`;
-  const page = handle.page ?? "/";
-  // FLY_APP_NAME is unset in dev, where the instance we're standing in is "main".
-  const local = process.env.FLY_APP_NAME
-    ? instance.app === process.env.FLY_APP_NAME
-    : handle.instance === "main";
-  return local
-    ? {
-        site: handle.site,
-        page,
-        url: `http://127.0.0.1:${PORT}${path}`,
-        authHeader: "x-ak-internal",
-        authSecret: process.env.AK_INTERNAL_SECRET ?? "",
-      }
-    : {
-        site: handle.site,
-        page,
-        url: `${instance.url.replace(/\/$/, "")}${path}`,
-        authHeader: "x-ak-relay",
-        authSecret: process.env.AK_RELAY_SECRET ?? "",
-      };
-}
-
-/** Post the prompt and let go: the job is durable server-side, so holding the
- *  SSE stream open would only keep a socket alive for nobody (cf. cron.ts). */
-async function dispatch(target: Target, text: string, idemKey: string): Promise<void> {
-  const res = await fetch(target.url, {
+/** Resend's HTTP API — the same channel the provision-user skill sends invites
+ *  on (server/skills/provision-user/invite.mjs), so no new dependency or
+ *  credential: RESEND_API_KEY + EMAIL_FROM are already in the server env. */
+async function emailTranscript(text: string): Promise<boolean> {
+  const first = text.split("\n", 1)[0]?.trim() ?? "";
+  const subject = `[RING] ${first.length > 60 ? `${first.slice(0, 60)}…` : first}`;
+  const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
-    headers: { "Content-Type": "application/json", [target.authHeader]: target.authSecret },
-    body: JSON.stringify({ text, page: target.page, idemKey }),
+    headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ from: EMAIL_FROM, to: [RING_EMAIL_TO], subject, text }),
   });
   await res.body?.cancel();
-  if (!res.ok) {
-    console.error(`[ring] enqueue failed for ${target.site}: ${res.status} ${res.statusText}`);
-  }
+  if (!res.ok) console.error(`[ring] email failed: ${res.status} ${res.statusText}`);
+  return res.ok;
 }
 
 // ─── focus ───────────────────────────────────────────────────────────────────
@@ -217,22 +188,25 @@ export function ringRouter(): express.Router {
         return;
       }
       void (async () => {
-        const handle = await effectiveFocus(await readFocus());
-        const target = targetFor(handle);
-        console.log(`[ring] trigger=${trigger} routed=${handle} len=${transcription.length}`);
-        if (!target) {
-          // Only reachable with a broken registry; a non-2xx lets the phone
-          // re-send this recording with the next one, once we've fixed it.
-          finish(503, { error: `no route for handle ${handle}` });
+        console.log(`[ring] trigger=${trigger} emailing len=${transcription.length}`);
+        if (!RESEND_KEY || !RING_EMAIL_TO) {
+          // Non-2xx: the phone re-sends this recording with the next one, so a
+          // misconfigured mailer loses nothing once it is fixed.
+          finish(503, { error: "ring email not configured" });
           return;
         }
-        // A retry arrives as the same recordedAt, so the same idemKey — the
-        // messages route then re-tails the first job instead of re-running it.
+        // A retry arrives as the same recordedAt — don't email the same note twice.
         const idemKey = /^\d+$/.test(recordedAt) ? `ring-${recordedAt}` : randomUUID();
-        void dispatch(target, `[ring] ${transcription}`, idemKey).catch((err) =>
-          console.error(`[ring] dispatch to ${handle} failed`, String(err)),
-        );
-        finish(200, { ok: true, routed: handle });
+        if (emailed.has(idemKey)) {
+          finish(200, { ok: true, duplicate: true });
+          return;
+        }
+        if (!(await emailTranscript(transcription))) {
+          finish(502, { error: "email failed" });
+          return;
+        }
+        emailed.add(idemKey);
+        finish(200, { ok: true, emailed: true });
       })().catch((err) => finish(500, { error: String(err).slice(0, 300) }));
     });
     req.pipe(bb);
