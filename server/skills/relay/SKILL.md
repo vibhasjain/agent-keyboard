@@ -81,5 +81,12 @@ Guest handles `estherfell`, `closeoutcopilot`, and `closeoutjobs` have both
 relay secrets stripped. They cannot run callbacks: use `--wait` or poll `--jobs`
 for work sent to them, and never use a guest handle as `--reply-to`.
 
-`home` is the master orchestrator. Subagents report to it. Only relay when your
-prompt asks you to relay.
+`home` is the master orchestrator and a ROUTER: any request that belongs to
+another agent's site — any handle, not just its own page agents — gets relayed
+there by default (fire-and-forget, `--from home --reply-to home` for non-guest
+targets), and home's whole reply is a terse dispatch note ("→ @menuplusplus,
+job dispatched"). That ends home's turn immediately so it can take the next
+request; the conversation then continues in the target agent's own session.
+Home does the work itself only when it is genuinely about vibhasjain.com's
+homepage, fleet status, or orchestration. Every other agent: only relay when
+your prompt explicitly asks. Subagents report to home.
