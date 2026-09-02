@@ -557,7 +557,7 @@ function spawnClaude(
   opts: { env?: NodeJS.ProcessEnv; timeoutMs?: number; stdin?: string; keepStdinOpen?: boolean } = {},
 ): {
   child: ChildProcess;
-  done: Promise<{ result?: ClaudeResult; stderr: string }>;
+  done: Promise<{ result?: ClaudeResult; stderr: string; code: number | null }>;
   writeInput: (line: string) => void;
   closeInput: () => void;
 } {
@@ -594,7 +594,7 @@ function spawnClaude(
     if (!opts.keepStdinOpen) closeInput();
   }
   const rl = createInterface({ input: child.stdout! });
-  const done = new Promise<{ result?: ClaudeResult; stderr: string }>((resolve) => {
+  const done = new Promise<{ result?: ClaudeResult; stderr: string; code: number | null }>((resolve) => {
     let result: ClaudeResult | undefined;
     let stderr = "";
     let timedOut = false;
@@ -619,7 +619,9 @@ function spawnClaude(
       rl.close(); // no late frames for a run we've already reported as over
       activeChildren.delete(child);
       if (timedOut && !stderr) stderr = `agent run timed out after ${timeoutMs}ms`;
-      resolve({ result, stderr: extra ? `${stderr} ${extra}`.trim() : stderr });
+      // exitCode is null when a signal killed it (our SIGKILL, or the OOM
+      // killer) — either way it did not end on its own terms.
+      resolve({ result, stderr: extra ? `${stderr} ${extra}`.trim() : stderr, code: child.exitCode });
     };
     child.stderr?.on("data", (d) => {
       stderr += d.toString();
@@ -1116,12 +1118,15 @@ export async function* runStreamingSession(
         idleTimer = null;
       }
     };
+    // Worker sites pause between queue items; the interactive default (45s) ends
+    // their session mid-queue, so a site may set its own idle window.
+    const idleMs = site.sessionIdleMs ?? SESSION_IDLE_MS;
     const armIdle = () => {
       clearIdle();
       idleTimer = setTimeout(() => {
         queue.push(["status", { phase: "starting", detail: "Session idle — closing" }]);
         closeInput();
-      }, SESSION_IDLE_MS);
+      }, idleMs);
     };
 
     // A turn completed: summarize git for THIS turn, emit its result frame, then
@@ -1129,6 +1134,16 @@ export async function* runStreamingSession(
     // process stays alive (stdin open), so the queue is still open when it pushes.
     const onResult = (r: ClaudeResult) => {
       clearIdle();
+      // An errored turn carries no reply. Reporting it as a normal (empty)
+      // result made a dead run look like a clean finish — the session just went
+      // quiet mid-queue. Surface it and wind the session down, the way
+      // runMessageJob already does for single-turn runs.
+      if (r.is_error) {
+        const detail = ((r.result ?? "").toString().trim() || `the turn failed (${r.subtype ?? "error"})`).slice(0, 500);
+        queue.push(["error", { kind: isThrottle(detail) ? "rate_limited" : "agent_failed", detail }]);
+        closeInput();
+        return;
+      }
       void (async () => {
         const git = await gitSummary(site, turnStartSha, pushBranch).catch(
           () => ({}) as Awaited<ReturnType<typeof gitSummary>>,
@@ -1226,7 +1241,10 @@ export async function* runStreamingSession(
     for await (const frame of queue) yield frame;
     const out = await settled;
     if (signal?.aborted) return;
-    if (out.stderr && !out.result) {
+    // A session that dies after its first good turn used to end silently: the
+    // guard was `!out.result`, and out.result is set by ANY completed turn. A
+    // non-zero (or signalled — OOM) exit is a crash whatever came before it.
+    if (out.stderr && (!out.result || out.code !== 0)) {
       yield ["error", { kind: isThrottle(out.stderr) ? "rate_limited" : "agent_failed", detail: out.stderr.slice(0, 500) }];
     }
   } catch (err) {

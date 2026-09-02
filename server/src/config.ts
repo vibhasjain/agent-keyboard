@@ -21,6 +21,10 @@ export interface Site {
   /** Shared with invited guests: the owner's personal credentials and skills are
    *  withheld from this site's agent, and other sites' files are denied. */
   guest?: boolean;
+  /** Streaming-session idle window in ms (default AK_SESSION_IDLE_MS). A queue
+   *  worker pauses between items; the interactive default closes its session
+   *  mid-queue. */
+  sessionIdleMs?: number;
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/i;
@@ -80,7 +84,7 @@ export function loadSites(): Site[] {
     if (typeof entry !== "object" || entry === null) {
       throw new Error(`${at} must be an object, e.g. ${SITES_EXAMPLE}`);
     }
-    const { id, repo, branch, domain, pushBranch, sessionScope, guest } = entry as Record<string, unknown>;
+    const { id, repo, branch, domain, pushBranch, sessionScope, guest, sessionIdleMs } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !ID_RE.test(id)) {
       throw new Error(`${at}.id ${JSON.stringify(id)} must be a slug like "blog" (letters, digits, hyphens)`);
     }
@@ -102,6 +106,14 @@ export function loadSites(): Site[] {
     }
     if (guest !== undefined && typeof guest !== "boolean") {
       throw new Error(`${at}.guest, if set, must be true or false, got ${JSON.stringify(guest)}`);
+    }
+    if (
+      sessionIdleMs !== undefined &&
+      (typeof sessionIdleMs !== "number" || !Number.isInteger(sessionIdleMs) || sessionIdleMs < 1000)
+    ) {
+      throw new Error(
+        `${at}.sessionIdleMs, if set, must be a whole number of milliseconds >= 1000, got ${JSON.stringify(sessionIdleMs)}`,
+      );
     }
     if (sessionScope !== undefined && sessionScope !== "site" && sessionScope !== "page") {
       throw new Error(
@@ -136,6 +148,7 @@ export function loadSites(): Site[] {
       ...(pushBranchClean ? { pushBranch: pushBranchClean } : {}),
       ...(sessionScope === "page" ? { sessionScope } : {}),
       ...(guest === true ? { guest: true } : {}),
+      ...(typeof sessionIdleMs === "number" ? { sessionIdleMs } : {}),
     });
   });
   return sites;
