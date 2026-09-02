@@ -26,7 +26,7 @@ import {
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
 import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
-import { acquireSiteLock, ensureCheckout, resetCheckoutToOrigin } from "./checkouts.js";
+import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { startJobsCron } from "./cron.js";
@@ -93,6 +93,14 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" })); // attachments go via multipart, so 1mb is plenty
+// A body that isn't valid JSON is a 400 in JSON (express's default is an HTML page).
+app.use((err: Error, _req: Request, res: Response, next: (e?: unknown) => void) => {
+  if (err instanceof SyntaxError && "body" in err) {
+    res.status(400).json({ error: "body must be valid JSON" });
+    return;
+  }
+  next(err);
+});
 
 const authed = requireOwner();
 const authedOrGoogle = requireOwnerOrGoogle();
@@ -378,6 +386,47 @@ app.post("/sites/:siteId/session", async (req, res) => {
 });
 
 registerFeedRoutes(app, authedOrGoogle);
+
+// The todo page's data file, writable without a browser: the Instinct agent PUTs
+// the whole file with a Supabase access token and we commit + push it. Owner
+// Bearer only (`authed`, not authedOrGoogle) — Google viewers are read-only.
+// Deliberately narrow: one site, one path, no path input from the caller.
+app.post("/sites/cv/todo-data", authed, async (req, res) => {
+  const site = getSite("cv");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const body = req.body as unknown;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    res.status(400).json({ error: "body must be a JSON object" });
+    return;
+  }
+  // Non-blocking: an agent job can hold this checkout for a long time, and a
+  // request that hangs for minutes is worse than one that says "retry".
+  const release = tryAcquireSiteLock(site.id);
+  if (!release) {
+    res.status(409).json({ error: "cv is busy (an agent job holds the checkout) — retry shortly" });
+    return;
+  }
+  try {
+    const { headSha, changed } = await commitFile(
+      site,
+      "todo/data.json",
+      // Compact + trailing newline is exactly the shape todo/data.json already
+      // has, so an unchanged payload rewrites the same bytes and commits nothing.
+      `${JSON.stringify(body)}\n`,
+      "todo: update via api",
+    );
+    res.json({ ok: true, commit_sha: headSha, changed });
+  } catch (e) {
+    console.error("[todo-data] write failed", e);
+    res.status(500).json({ error: String((e as Error)?.message ?? e).slice(0, 300) });
+  } finally {
+    release();
+  }
+});
 
 app.get("/sites", authed, (req, res) => {
   const user = authedUser(req);

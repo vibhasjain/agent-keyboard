@@ -220,6 +220,34 @@ export async function gitSummary(
   };
 }
 
+/**
+ * Write one file in a site's checkout and push it to the site's deploy branch.
+ * Call it with the site lock HELD (tryAcquireSiteLock) so it can never race an
+ * agent job over the same working tree. `relPath` is a constant at every call
+ * site — never user input — so there is no traversal surface here. An unchanged
+ * file commits nothing and reports the sha it found.
+ */
+export async function commitFile(
+  site: Site,
+  relPath: string,
+  content: string,
+  message: string,
+): Promise<{ headSha: string; changed: boolean }> {
+  await syncCheckout(site);
+  const dir = checkoutPath(site.id);
+  const full = join(dir, relPath);
+  await mkdir(dirname(full), { recursive: true });
+  await writeFile(full, content);
+  const dirty = (await git(dir, ["status", "--porcelain", "--", relPath])).trim();
+  if (!dirty) {
+    return { headSha: (await git(dir, ["rev-parse", "HEAD"])).trim(), changed: false };
+  }
+  await git(dir, ["add", "--", relPath]);
+  await git(dir, ["commit", "-m", message, "--", relPath]);
+  await git(dir, ["push", "origin", `HEAD:${site.branch}`]);
+  return { headSha: (await git(dir, ["rev-parse", "HEAD"])).trim(), changed: true };
+}
+
 export interface CheckoutReset {
   headSha: string;
   branch: string;
