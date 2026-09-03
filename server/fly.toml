@@ -53,8 +53,9 @@ primary_region = "iad"
   EMAIL_FROM = "Agent Keyboard <invites@agentkeyboard.com>"
   # LinkedIn-only residential egress: the owner's office iPad is a Tailscale exit
   # node; tailscale-up.sh pins it at boot and exposes SOCKS5 127.0.0.1:1055 for
-  # the LinkedIn browsers. Pairs with the TS_AUTHKEY secret.
-  TS_EXIT_NODE = "ipad-pro-12-9-6th-gen-wifi"
+  # the LinkedIn browsers. Pairs with the TS_AUTHKEY secret. Its Tailscale IP,
+  # not its name: names can't resolve during the daemon's first startup.
+  TS_EXIT_NODE = "100.86.180.105"
   GIT_AUTHOR_NAME = "Agent Keyboard"
   GIT_COMMITTER_NAME = "Agent Keyboard"
   GIT_AUTHOR_EMAIL = "agent@agentkeyboard.com"

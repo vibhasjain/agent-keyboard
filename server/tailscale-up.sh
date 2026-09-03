@@ -15,8 +15,9 @@
 # node forever — TS_AUTHKEY is only consulted on that first join. Idempotent:
 # safe to re-run, exits fast when the daemon is already up.
 #
-# Env:  TS_AUTHKEY   Tailscale auth key (Fly secret; reusable, tagged, pre-approved).
-#       TS_EXIT_NODE Node name / IP of the exit node (fly.toml [env]).
+# Env:  TS_AUTHKEY   Tailscale auth key (Fly secret; reusable).
+#       TS_EXIT_NODE Tailscale IP of the exit node (fly.toml [env]). IP, not name:
+#                    names can't resolve during the daemon's first startup.
 # Unset TS_AUTHKEY = this deployment doesn't use Tailscale; nothing starts.
 set -eu
 
@@ -38,7 +39,9 @@ fi
 mkdir -p "$STATE"
 
 if ! { [ -S "$SOCK" ] && $TS status >/dev/null 2>&1; }; then
-  # A stale socket from a previous process would make tailscaled refuse to bind.
+  # A daemon we can't talk to still holds :1055 — replace it, don't race it.
+  for pid in $(pidof tailscaled 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
+  sleep 1
   rm -f "$SOCK"
   echo "tailscale: starting userspace daemon (socks5 127.0.0.1:$PORT)"
   tailscaled \
