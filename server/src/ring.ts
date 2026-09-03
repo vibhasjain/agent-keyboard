@@ -1,14 +1,16 @@
 // Ring webhook — the smart ring's phone app POSTs a voice transcription here and
-// we hand it to the owner: WhatsApp via the bridge, falling back to a "[RING] …"
-// email when the bridge errors or is slow, so a note is never lost. Owner
-// decision (2026-09-01): a ring press is a note to self, not a task — this is a
-// dumb pipe and nothing acts on the transcript.
+// we hand it to the owner over the WhatsApp bridge. WhatsApp is the ONLY
+// channel: an unreachable bridge logs and answers non-2xx, and the phone re-sends
+// the note with the next press. The server never emails the owner (owner
+// decision 2026-09-03, after intermittent 5s bridge timeouts quietly turned ring
+// notes into email). Owner decision (2026-09-01): a ring press is a note to
+// self, not a task — this is a dumb pipe and nothing acts on the transcript.
 //
 // Three properties of the sender shape everything below:
 //   1. The upload is async on the phone and a FAILED one is re-sent alongside the
 //      NEXT recording. So anything we don't want repeated must answer 2xx — an
 //      empty transcription is a 200, not a 400 — and a delivered mail is keyed by
-//      recordedAt, so a genuine retry is dropped instead of emailed twice.
+//      recordedAt, so a genuine retry is dropped instead of sent twice.
 //   2. The POST is multipart and may carry an m4a of the recording. We never want
 //      the audio: the file part is drained and discarded, never buffered.
 //   3. Anyone on the internet can reach this route, so the shared secret is
@@ -16,7 +18,7 @@
 //      able to make us read 20MB off the wire.
 //
 // Focus (/focus, /fleet) is kept for fleet inspection but no longer routes
-// anything: every press is emailed, whatever the focus says.
+// anything: every press goes to the bridge, whatever the focus says.
 
 import busboy from "busboy";
 import express, { type Request, type Response } from "express";
@@ -38,11 +40,6 @@ const WA_API_TOKEN = process.env.WA_API_TOKEN ?? "";
 // than in this (public) repo.
 const WA_TO = process.env.RING_WA_TO ?? "";
 const WA_TIMEOUT_MS = 5_000;
-const RESEND_KEY = process.env.RESEND_API_KEY ?? "";
-const EMAIL_FROM = process.env.EMAIL_FROM ?? "Agent Keyboard <ring@agentkeyboard.com>";
-// Default recipient is the owner already on the auth allow-list, so forwarding
-// needs no new secret and no personal address checked into a public repo.
-const RING_EMAIL_TO = (process.env.RING_EMAIL_TO ?? process.env.ALLOWED_EMAIL ?? "").split(",")[0]?.trim() ?? "";
 // A failed upload is re-sent with the NEXT recording; only a delivered note is
 // remembered, so a retry after a failure still gets through (process-lifetime).
 const delivered = new Set<string>();
@@ -97,11 +94,12 @@ function registry(): Registry {
   return registryCache;
 }
 
-/** The WhatsApp bridge — the primary channel. Anything other than a 2xx inside
- *  the timeout is a miss, and the caller falls back to email. */
+/** The WhatsApp bridge — the only delivery channel. Anything other than a 2xx
+ *  inside the timeout is a miss: we log it and drop this press (the phone
+ *  re-sends the recording alongside the next one). */
 async function whatsapp(text: string): Promise<boolean> {
   if (!WA_BRIDGE_URL || !WA_API_TOKEN || !WA_TO) {
-    console.error("[ring] whatsapp bridge not configured — falling back to email");
+    console.error("[ring] whatsapp bridge not configured — dropping this press");
     return false;
   }
   try {
@@ -112,36 +110,12 @@ async function whatsapp(text: string): Promise<boolean> {
       signal: AbortSignal.timeout(WA_TIMEOUT_MS),
     });
     await res.body?.cancel();
-    if (!res.ok) console.error(`[ring] whatsapp bridge said ${res.status} ${res.statusText} — falling back to email`);
+    if (!res.ok) console.error(`[ring] whatsapp bridge said ${res.status} ${res.statusText} — dropping this press`);
     return res.ok;
   } catch (err) {
-    console.error(`[ring] whatsapp bridge unreachable (${String(err)}) — falling back to email`);
+    console.error(`[ring] whatsapp bridge unreachable (${String(err)}) — dropping this press`);
     return false;
   }
-}
-
-/** Resend's HTTP API — the same channel the provision-user skill sends invites
- *  on (server/skills/provision-user/invite.mjs), so no new dependency or
- *  credential: RESEND_API_KEY + EMAIL_FROM are already in the server env. */
-async function emailTranscript(text: string): Promise<boolean> {
-  const first = text.split("\n", 1)[0]?.trim() ?? "";
-  const subject = `[RING] ${first.length > 60 ? `${first.slice(0, 60)}…` : first}`;
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: EMAIL_FROM, to: [RING_EMAIL_TO], subject, text }),
-  });
-  await res.body?.cancel();
-  if (!res.ok) console.error(`[ring] email failed: ${res.status} ${res.statusText}`);
-  return res.ok;
-}
-
-/** WhatsApp first, email as the permanent fallback. Null = both channels missed,
- *  which answers non-2xx so the phone re-sends the note with the next press. */
-async function deliver(text: string): Promise<"whatsapp" | "email" | null> {
-  if (await whatsapp(text)) return "whatsapp";
-  if (await emailTranscript(text)) return "email";
-  return null;
 }
 
 // ─── focus ───────────────────────────────────────────────────────────────────
@@ -234,16 +208,15 @@ export function ringRouter(): express.Router {
           finish(200, { ok: true, duplicate: true });
           return;
         }
-        const via = await deliver(transcription);
-        if (!via) {
-          // Non-2xx: the phone re-sends this recording with the next one, so
-          // both channels being down loses nothing once one is back.
-          finish(502, { error: "delivery failed" });
+        if (!(await whatsapp(transcription))) {
+          // Non-2xx: the phone re-sends this recording with the next one, so a
+          // bridge blip costs a delay, not the note — and never an email.
+          finish(502, { error: "whatsapp bridge unavailable" });
           return;
         }
         delivered.add(idemKey);
-        console.log(`[ring] delivered via ${via}`);
-        finish(200, { ok: true, via });
+        console.log("[ring] delivered via whatsapp");
+        finish(200, { ok: true, via: "whatsapp" });
       })().catch((err) => finish(500, { error: String(err).slice(0, 300) }));
     });
     req.pipe(bb);
