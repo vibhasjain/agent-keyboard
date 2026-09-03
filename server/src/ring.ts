@@ -39,7 +39,8 @@ const WA_API_TOKEN = process.env.WA_API_TOKEN ?? "";
 // The recipient is a personal phone number, so it lives in a Fly secret rather
 // than in this (public) repo.
 const WA_TO = process.env.RING_WA_TO ?? "";
-const WA_TIMEOUT_MS = 5_000;
+const WA_TIMEOUT_MS = 15_000; // the bridge intermittently took >5s and lost the note
+const WA_ATTEMPTS = 2; // one retry, then drop
 // A failed upload is re-sent with the NEXT recording; only a delivered note is
 // remembered, so a retry after a failure still gets through (process-lifetime).
 const delivered = new Set<string>();
@@ -94,14 +95,9 @@ function registry(): Registry {
   return registryCache;
 }
 
-/** The WhatsApp bridge — the only delivery channel. Anything other than a 2xx
- *  inside the timeout is a miss: we log it and drop this press (the phone
- *  re-sends the recording alongside the next one). */
-async function whatsapp(text: string): Promise<boolean> {
-  if (!WA_BRIDGE_URL || !WA_API_TOKEN || !WA_TO) {
-    console.error("[ring] whatsapp bridge not configured — dropping this press");
-    return false;
-  }
+/** One call to the bridge. Resolves with why it missed, so the caller can say
+ *  whether it is worth another go. The payload and routing are untouched. */
+async function whatsappOnce(text: string): Promise<string | null> {
   try {
     const res = await fetch(WA_BRIDGE_URL, {
       method: "POST",
@@ -110,12 +106,30 @@ async function whatsapp(text: string): Promise<boolean> {
       signal: AbortSignal.timeout(WA_TIMEOUT_MS),
     });
     await res.body?.cancel();
-    if (!res.ok) console.error(`[ring] whatsapp bridge said ${res.status} ${res.statusText} — dropping this press`);
-    return res.ok;
+    return res.ok ? null : `${res.status} ${res.statusText}`;
   } catch (err) {
-    console.error(`[ring] whatsapp bridge unreachable (${String(err)}) — dropping this press`);
+    return String(err);
+  }
+}
+
+/** The WhatsApp bridge — the only delivery channel. Two attempts (the bridge is
+ *  intermittently slow); if the retry misses too we log it and drop this press,
+ *  and the phone re-sends the recording alongside the next one. */
+async function whatsapp(text: string): Promise<boolean> {
+  if (!WA_BRIDGE_URL || !WA_API_TOKEN || !WA_TO) {
+    console.error("[ring] whatsapp bridge not configured — dropping this press");
     return false;
   }
+  for (let attempt = 1; attempt <= WA_ATTEMPTS; attempt++) {
+    const why = await whatsappOnce(text);
+    if (!why) return true;
+    if (attempt < WA_ATTEMPTS) {
+      console.warn(`[ring] whatsapp bridge miss on attempt ${attempt}/${WA_ATTEMPTS} (${why}) — retrying`);
+    } else {
+      console.error(`[ring] whatsapp bridge failed after ${WA_ATTEMPTS} attempts (${why}) — dropping this press`);
+    }
+  }
+  return false;
 }
 
 // ─── focus ───────────────────────────────────────────────────────────────────
