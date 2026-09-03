@@ -51,6 +51,10 @@ primary_region = "iad"
   # Branded-invite sender. Must be a verified Resend domain (the Fly host isn't
   # an email domain, so this can't be derived from AK_PUBLIC_URL).
   EMAIL_FROM = "Agent Keyboard <invites@agentkeyboard.com>"
+  # LinkedIn-only residential egress: the owner's office iPad is a Tailscale exit
+  # node; tailscale-up.sh pins it at boot and exposes SOCKS5 127.0.0.1:1055 for
+  # the LinkedIn browsers. Pairs with the TS_AUTHKEY secret.
+  TS_EXIT_NODE = "ipad-pro-12-9-6th-gen-wifi"
   GIT_AUTHOR_NAME = "Agent Keyboard"
   GIT_COMMITTER_NAME = "Agent Keyboard"
   GIT_AUTHOR_EMAIL = "agent@agentkeyboard.com"

@@ -8,6 +8,7 @@ import express, { type Request, type Response } from "express";
 import cors from "cors";
 import busboy from "busboy";
 import { existsSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -838,7 +839,23 @@ app.listen(port, () => {
   })().catch((e) => console.error("[boot] job sweep failed", e));
   void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
+  startTailscale();
 });
+
+// LinkedIn-only residential egress (see tailscale-up.sh): bring up the
+// userspace tailscaled + exit node in the background. Best-effort — the script
+// no-ops without TS_AUTHKEY, and a failure only means the LinkedIn browsers'
+// fail-closed egress gate stays red; it never blocks serving.
+function startTailscale(): void {
+  const script = process.env.TAILSCALE_UP ?? "/app/tailscale-up.sh";
+  if (!existsSync(script)) return;
+  const child = spawn("sh", [script], { stdio: ["ignore", "pipe", "pipe"] });
+  const log = (s: Buffer) => s.toString().trim().split("\n").forEach((l) => l && console.log(`[tailscale] ${l}`));
+  child.stdout.on("data", log);
+  child.stderr.on("data", log);
+  child.on("exit", (code) => code && console.error(`[tailscale] tailscale-up.sh exited ${code}`));
+  child.on("error", (e) => console.error("[tailscale] spawn failed", e));
+}
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {

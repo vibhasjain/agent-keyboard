@@ -35,6 +35,15 @@ RUN mkdir -p -m 755 /etc/apt/keyrings \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
 
+# Tailscale, for the LinkedIn-only residential egress (tailscale-up.sh, started
+# at boot). In the image, not the volume: Fly resets the root fs on restart.
+RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg \
+      -o /usr/share/keyrings/tailscale-archive-keyring.gpg \
+    && curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.tailscale-keyring.list \
+      -o /etc/apt/sources.list.d/tailscale.list \
+    && apt-get update && apt-get install -y --no-install-recommends tailscale \
+    && rm -rf /var/lib/apt/lists/*
+
 # The real Claude Code CLI (pinned).
 RUN npm install -g @anthropic-ai/claude-code@2.1.259
 
@@ -77,6 +86,7 @@ COPY server/src ./src
 # (see src/skills.ts). Below npm ci so a skill edit doesn't bust the dependency
 # layer (sharp's native build).
 COPY server/skills /app/skills
+COPY server/tailscale-up.sh /app/tailscale-up.sh
 
 # Branded invite/recovery email templates — the provision-user skill reads them
 # from /app/email-templates on every deployment (they aren't in a site's checkout,
