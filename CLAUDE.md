@@ -94,7 +94,8 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   "max effort", "plan mode", "compact your memory", "clear the context" (destructive — fresh
   session; confirm first), "how much context left?", "install skill X",
   "invite a@b.com"). Per-site `settings.json` on the volume, edited by the agent, validated/applied
-  per spawn by `server/src/harness.ts` (the KNOBS table — one entry per knob). Skills ship in
+  per spawn by `server/src/harness.ts` (the KNOBS table — one entry per knob). For multi-phase
+  schedules, `cron` is an array whose entries have unique `id` values. Skills ship in
   `server/skills/` (image-gen · verify-in-browser · provision-user · self-ops · frontend-design ·
   ponytail) — committed to the repo, baked into the image, and seeded to `/data/.claude/skills` at
   boot, so **every fork/clone inherits them**; skills the agent installs at runtime live only on that

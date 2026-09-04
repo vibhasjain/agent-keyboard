@@ -27,6 +27,7 @@ const PORT = Number(process.env.PORT ?? 8080);
 const startedAt = Date.now();
 
 interface CronJob {
+  id: string;
   site: string;
   prompt: string;
   hour: number;
@@ -54,6 +55,7 @@ function legacyCronJob(): CronJob {
     `Reply with: submitted today N/${target}, which ATS each, and anything that blocked you.`;
 
   return {
+    id: "cron",
     site: process.env.JOBS_CRON_SITE ?? "cv-jobs",
     prompt,
     hour: Number(process.env.JOBS_CRON_HOUR ?? 11),
@@ -135,6 +137,7 @@ export function loadCronJobs(): CronJob[] {
     }
 
     jobs.push({
+      id: "cron",
       site: entry.site,
       prompt: entry.prompt,
       hour,
@@ -156,40 +159,44 @@ export function loadCronJobs(): CronJob[] {
 const CRON_STATE_ROOT = join(DATA_DIR, "agent-keyboard");
 const knobLogCache = new Map<string, string>(); // site -> last-logged descriptor, so `fly logs` only sees changes
 
-/** One CronJob per site with an enabled cron knob; `null` for a site whose
- *  knob explicitly paused it (still occupies the site so it overrides env). */
-async function loadKnobJobs(): Promise<Map<string, CronJob | null>> {
-  const map = new Map<string, CronJob | null>();
+/** Enabled CronJobs per site with a cron knob. An empty array means every
+ *  entry is paused; the site key still exists so the knob overrides env. */
+async function loadKnobJobs(): Promise<Map<string, CronJob[]>> {
+  const map = new Map<string, CronJob[]>();
   for (const site of SITES) {
     try {
-      const cron = (await loadHarness(site.id)).settings.cron;
-      if (!cron) {
+      const cronSetting = (await loadHarness(site.id)).settings.cron;
+      if (!cronSetting) {
         knobLogCache.delete(site.id); // let a later re-add log as "seen" again
         continue;
       }
-      const desc = cron.disabled
-        ? "disabled"
-        : cron.everyHours !== undefined
-          ? `every ${cron.everyHours}h`
-          : `daily ${String(cron.hour).padStart(2, "0")}:00 ${cron.tz}`;
+      const crons = Array.isArray(cronSetting) ? cronSetting : [cronSetting];
+      const desc = crons.map((cron) =>
+        cron.disabled
+          ? `${cron.id} disabled`
+          : cron.everyHours !== undefined
+            ? `${cron.id} every ${cron.everyHours}h`
+            : `${cron.id} daily ${String(cron.hour).padStart(2, "0")}:00 ${cron.tz}`,
+      ).join(" · ");
       if (knobLogCache.get(site.id) !== desc) {
         knobLogCache.set(site.id, desc);
         console.log(`[jobs-cron] knob cron for ${site.id}: ${desc}`);
       }
-      if (cron.disabled) {
-        map.set(site.id, null);
-        continue;
-      }
-      map.set(site.id, {
-        site: site.id,
-        prompt: cron.prompt,
-        hour: cron.hour,
-        tz: cron.tz,
-        ...(cron.everyHours === undefined ? {} : { everyHours: cron.everyHours }),
-        state: join(CRON_STATE_ROOT, `cron-${site.id}.json`),
-        page: cron.page,
-        fresh: cron.fresh,
-      });
+      map.set(site.id, crons.flatMap((cron) => {
+        if (cron.disabled) return [];
+        const legacyState = !Array.isArray(cronSetting) && cron.id === "cron";
+        return [{
+          id: cron.id,
+          site: site.id,
+          prompt: cron.prompt,
+          hour: cron.hour,
+          tz: cron.tz,
+          ...(cron.everyHours === undefined ? {} : { everyHours: cron.everyHours }),
+          state: join(CRON_STATE_ROOT, legacyState ? `cron-${site.id}.json` : `cron-${site.id}-${cron.id}.json`),
+          page: cron.page,
+          fresh: cron.fresh,
+        }];
+      }));
     } catch (err) {
       // A bad knob on one site must never take down another site's jobs.
       console.error(`[jobs-cron] failed to load cron knob for site ${site.id}`, String(err));
@@ -200,10 +207,10 @@ async function loadKnobJobs(): Promise<Map<string, CronJob | null>> {
 
 /** env jobs (JOBS_CRONS, fixed at boot) + per-site knob jobs (re-read every
  *  tick); a site with a knob entry — even a paused one — overrides its env entry. */
-async function effectiveJobs(envJobs: CronJob[]): Promise<CronJob[]> {
+export async function effectiveJobs(envJobs: CronJob[]): Promise<CronJob[]> {
   const knobs = await loadKnobJobs();
   const jobs = envJobs.filter((j) => !knobs.has(j.site));
-  for (const job of knobs.values()) if (job) jobs.push(job);
+  for (const siteJobs of knobs.values()) jobs.push(...siteJobs);
   return jobs;
 }
 
@@ -268,7 +275,7 @@ async function fire(job: CronJob): Promise<boolean> {
   });
   await res.body?.cancel(); // durable job — don't hold the SSE stream open
   if (!res.ok) {
-    console.error(`[jobs-cron] enqueue failed for ${job.site}: ${res.status} ${res.statusText}`);
+    console.error(`[jobs-cron] enqueue failed for ${job.site}/${job.id}: ${res.status} ${res.statusText}`);
     return false;
   }
   return true;
@@ -302,16 +309,16 @@ async function tick(job: CronJob): Promise<void> {
       if (now - dueAt < overdueLimit) return;
       console.warn(
         intervalMs === undefined
-          ? `[jobs-cron] ${job.site} is still active but is a day overdue — firing anyway`
-          : `[jobs-cron] ${job.site} is still active but is over two intervals overdue — firing anyway`,
+          ? `[jobs-cron] ${job.site}/${job.id} is still active but is a day overdue — firing anyway`
+          : `[jobs-cron] ${job.site}/${job.id} is still active but is over two intervals overdue — firing anyway`,
       );
     }
 
     console.log(
       intervalMs === undefined
-        ? `[jobs-cron] firing ${job.site} for the ${String(job.hour).padStart(2, "0")}:00 ${job.tz} slot ` +
+        ? `[jobs-cron] firing ${job.site}/${job.id} for the ${String(job.hour).padStart(2, "0")}:00 ${job.tz} slot ` +
           `(${new Date(dueAt).toISOString()}); last run ${last ? new Date(last).toISOString() : "never"}`
-        : `[jobs-cron] firing ${job.site} on its ${job.everyHours}h interval; ` +
+        : `[jobs-cron] firing ${job.site}/${job.id} on its ${job.everyHours}h interval; ` +
           `last run ${last ? new Date(last).toISOString() : "never"}`,
     );
     const stampedAt = Date.now();
@@ -323,12 +330,20 @@ async function tick(job: CronJob): Promise<void> {
       throw err;
     }
   } catch (err) {
-    console.error(`[jobs-cron] tick error for ${job.site}`, String(err));
+    console.error(`[jobs-cron] tick error for ${job.site}/${job.id}`, String(err));
   }
 }
 
 async function tickAll(jobs: CronJob[]): Promise<void> {
-  await Promise.all(jobs.map((job) => tick(job)));
+  const bySite = new Map<string, CronJob[]>();
+  for (const job of jobs) {
+    const siteJobs = bySite.get(job.site) ?? [];
+    siteJobs.push(job);
+    bySite.set(job.site, siteJobs);
+  }
+  await Promise.all([...bySite.values()].map(async (siteJobs) => {
+    for (const job of siteJobs) await tick(job);
+  }));
 }
 
 export function startJobsCron(): void {
@@ -347,12 +362,12 @@ export function startJobsCron(): void {
       const today = scheduledInstant(job);
       const next = Date.now() < today ? today : scheduledInstant(job, 1);
       console.log(
-        `[jobs-cron] armed — site ${job.site}; daily at ${String(job.hour).padStart(2, "0")}:00 ${job.tz}; ` +
+        `[jobs-cron] armed — job ${job.site}/${job.id}; daily at ${String(job.hour).padStart(2, "0")}:00 ${job.tz}; ` +
         `next slot ${new Date(next).toISOString()}; state at ${job.state}`,
       );
     } else {
       console.log(
-        `[jobs-cron] armed — site ${job.site}; every ${job.everyHours} hours; state at ${job.state}`,
+        `[jobs-cron] armed — job ${job.site}/${job.id}; every ${job.everyHours} hours; state at ${job.state}`,
       );
     }
   }

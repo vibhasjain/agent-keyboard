@@ -17,6 +17,7 @@ import { DATA_DIR, readDataFile, writeDataFile } from "./checkouts.js";
 export type PermissionMode = "bypassPermissions" | "plan" | "acceptEdits" | "default";
 
 export interface CronSettings {
+  id: string;
   prompt: string;
   hour: number; // 0-23, default 11
   tz: string; // default America/New_York
@@ -33,7 +34,7 @@ export interface HarnessSettings {
   compactNow?: boolean;
   clearNow?: boolean;
   env?: Record<string, string>;
-  cron?: CronSettings;
+  cron?: CronSettings | CronSettings[];
 }
 
 export interface ResolvedHarness {
@@ -155,62 +156,105 @@ function isValidCronTz(v: unknown): v is string {
   }
 }
 
+const CRON_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+function validateCronEntry(
+  value: unknown,
+  label: string,
+  idRequired: boolean,
+  warn: (w: string) => void,
+): CronSettings | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    warn(`${label} must be an object — cron dropped`);
+    return undefined;
+  }
+  const c = value as Record<string, unknown>;
+  let id = c.id;
+  if (id === undefined && idRequired) {
+    warn(`${label}.id is required when cron has multiple entries — cron dropped`);
+    return undefined;
+  }
+  if (id === undefined) id = "cron";
+  if (typeof id !== "string" || !CRON_ID_RE.test(id)) {
+    warn(`${label}.id must be a lowercase slug — cron dropped`);
+    return undefined;
+  }
+  if (typeof c.prompt !== "string" || !c.prompt.trim()) {
+    warn(`${label}.prompt must be a non-empty string — cron dropped`);
+    return undefined;
+  }
+  const hour = c.hour === undefined ? 11 : c.hour;
+  if (!isValidCronHour(hour)) {
+    warn(`${label}.hour must be an integer 0-23 — cron dropped`);
+    return undefined;
+  }
+  const tz = c.tz === undefined ? "America/New_York" : c.tz;
+  if (!isValidCronTz(tz)) {
+    warn(`${label}.tz must be a valid time zone name — cron dropped`);
+    return undefined;
+  }
+  let everyHours: number | undefined;
+  if (c.everyHours !== undefined) {
+    if (typeof c.everyHours !== "number" || !Number.isFinite(c.everyHours) || c.everyHours <= 0) {
+      warn(`${label}.everyHours must be a finite number greater than 0 — cron dropped`);
+      return undefined;
+    }
+    everyHours = c.everyHours;
+  }
+  const page = c.page === undefined ? "/" : c.page;
+  if (typeof page !== "string" || !page.startsWith("/")) {
+    warn(`${label}.page must be a string starting with "/" — cron dropped`);
+    return undefined;
+  }
+  if (c.fresh !== undefined && typeof c.fresh !== "boolean") {
+    warn(`${label}.fresh must be a boolean — cron dropped`);
+    return undefined;
+  }
+  if (c.disabled !== undefined && typeof c.disabled !== "boolean") {
+    warn(`${label}.disabled must be a boolean — cron dropped`);
+    return undefined;
+  }
+  const cron: CronSettings = {
+    id,
+    prompt: c.prompt,
+    hour,
+    tz,
+    page,
+    fresh: c.fresh === true,
+    disabled: c.disabled === true,
+  };
+  if (everyHours !== undefined) cron.everyHours = everyHours;
+  return cron;
+}
+
 KNOBS.push({
   key: "cron",
   validate: (v, warn) => {
     if (v === undefined || v === null) return undefined;
-    if (typeof v !== "object" || Array.isArray(v)) {
-      warn(`cron must be an object — dropped`);
+    if (typeof v !== "object") {
+      warn(`cron must be an object or an array of objects — dropped`);
       return undefined;
     }
-    const c = v as Record<string, unknown>;
-    if (typeof c.prompt !== "string" || !c.prompt.trim()) {
-      warn(`cron.prompt must be a non-empty string — cron dropped`);
+    const values = Array.isArray(v) ? v : [v];
+    if (values.length === 0) {
+      warn(`cron array must contain at least one entry — cron dropped`);
       return undefined;
     }
-    const hour = c.hour === undefined ? 11 : c.hour;
-    if (!isValidCronHour(hour)) {
-      warn(`cron.hour must be an integer 0-23 — cron dropped`);
-      return undefined;
-    }
-    const tz = c.tz === undefined ? "America/New_York" : c.tz;
-    if (!isValidCronTz(tz)) {
-      warn(`cron.tz must be a valid time zone name — cron dropped`);
-      return undefined;
-    }
-    let everyHours: number | undefined;
-    if (c.everyHours !== undefined) {
-      if (typeof c.everyHours !== "number" || !Number.isFinite(c.everyHours) || c.everyHours <= 0) {
-        warn(`cron.everyHours must be a finite number greater than 0 — cron dropped`);
+    const cron: CronSettings[] = [];
+    const ids = new Set<string>();
+    for (const [index, value] of values.entries()) {
+      const entry = validateCronEntry(value, Array.isArray(v) ? `cron[${index}]` : "cron", values.length > 1, warn);
+      if (!entry) return undefined;
+      if (ids.has(entry.id)) {
+        warn(`cron has duplicate id ${JSON.stringify(entry.id)} — cron dropped`);
         return undefined;
       }
-      everyHours = c.everyHours;
+      ids.add(entry.id);
+      cron.push(entry);
     }
-    const page = c.page === undefined ? "/" : c.page;
-    if (typeof page !== "string" || !page.startsWith("/")) {
-      warn(`cron.page must be a string starting with "/" — cron dropped`);
-      return undefined;
-    }
-    if (c.fresh !== undefined && typeof c.fresh !== "boolean") {
-      warn(`cron.fresh must be a boolean — cron dropped`);
-      return undefined;
-    }
-    if (c.disabled !== undefined && typeof c.disabled !== "boolean") {
-      warn(`cron.disabled must be a boolean — cron dropped`);
-      return undefined;
-    }
-    const cron: CronSettings = {
-      prompt: c.prompt,
-      hour,
-      tz,
-      page,
-      fresh: c.fresh === true,
-      disabled: c.disabled === true,
-    };
-    if (everyHours !== undefined) cron.everyHours = everyHours;
-    return cron;
+    return Array.isArray(v) ? cron : cron[0];
   },
-  describe: `"cron": {"hour": 0-23, "tz": "America/New_York", "everyHours"?: n, "page": "/jobs", "fresh": true|false, "disabled": true|false, "prompt": "[scheduled] …"} — your own daily scheduled run: the server sends "prompt" to this site at hour:00 in tz (or every everyHours hours); "disabled": true pauses it; "fresh": true starts a new session before each run; changes apply from the next tick (≤5 min)`,
+  describe: `"cron": {"id"?: "cron", "hour": 0-23, "tz": "America/New_York", "everyHours"?: n, "page": "/jobs", "fresh": true|false, "disabled": true|false, "prompt": "[scheduled] …"} or an array of these entries — use the array form for phases and give each a unique slug "id" (required with multiple entries); the server sends "prompt" at hour:00 in tz (or every everyHours hours); "disabled": true pauses it; "fresh": true starts a new session before each run; changes apply from the next tick (≤5 min)`,
 });
 
 function siteRel(siteId: string, file: string): string {
@@ -330,13 +374,30 @@ export async function readLastUsage(siteId: string): Promise<TurnUsage | null> {
 
 // ─── the harness note (appended to the system prompt every turn) ─────────────
 
+function cronEntries(cron: CronSettings | CronSettings[]): CronSettings[] {
+  return Array.isArray(cron) ? cron : [cron];
+}
+
+function cronTzLabel(tz: string): string {
+  return new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortGeneric" })
+    .formatToParts(new Date())
+    .find((part) => part.type === "timeZoneName")?.value ?? tz;
+}
+
+function describeCron(cron: CronSettings): string {
+  const schedule = cron.everyHours === undefined
+    ? `@${String(cron.hour).padStart(2, "0")} ${cronTzLabel(cron.tz)}`
+    : ` every ${cron.everyHours}h`;
+  return `${cron.id}${schedule}${cron.fresh ? " fresh" : ""}${cron.disabled ? " paused" : ""}`;
+}
+
 export function harnessNote(siteId: string, h: ResolvedHarness, usage: TurnUsage | null): string {
   const s = h.settings;
   const model = s.model ?? DEFAULT_MODEL;
   const effort = s.effort ?? "default";
   const mode = s.permissionMode ?? "bypassPermissions";
   const cron = s.cron
-    ? `, cron ${s.cron.everyHours ? `every ${s.cron.everyHours}h` : `daily ${s.cron.hour}:00 ${s.cron.tz}`}${s.cron.disabled ? " (paused)" : ""}`
+    ? `, cron ${cronEntries(s.cron).map(describeCron).join(" · ")}`
     : "";
   const lines = [
     `Harness: model ${model}, effort ${effort}, permissions ${mode}${cron}${s.env && Object.keys(s.env).length ? `, env ${Object.keys(s.env).join(",")}` : ""}.` +
