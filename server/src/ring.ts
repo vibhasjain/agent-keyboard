@@ -209,13 +209,15 @@ export function ringRouter(): express.Router {
     bb.on("close", () => {
       const transcription = (fields.get("transcription") ?? "").trim();
       const recordedAt = fields.get("recordedAt") ?? "";
+      // Seconds from ring release to this webhook landing — the ring+phone share of the latency.
+      const age = /^\d+$/.test(recordedAt) ? `${((Date.now() - Number(recordedAt)) / 1000).toFixed(1)}s` : "?";
       if (isTest || !transcription) {
-        console.log(`[ring] trigger=${trigger} routed=${isTest ? "-(test)" : "-(empty)"} len=${transcription.length}`);
+        console.log(`[ring] trigger=${trigger} routed=${isTest ? "-(test)" : "-(empty)"} len=${transcription.length} age=${age}`);
         finish(200, isTest ? { ok: true, test: true } : { ok: true, ignored: "empty" });
         return;
       }
       void (async () => {
-        console.log(`[ring] trigger=${trigger} len=${transcription.length}`);
+        console.log(`[ring] trigger=${trigger} len=${transcription.length} age=${age}`);
         // A retry arrives as the same recordedAt — don't send the same note twice.
         const idemKey = /^\d+$/.test(recordedAt) ? `ring-${recordedAt}` : randomUUID();
         if (delivered.has(idemKey)) {
@@ -229,7 +231,7 @@ export function ringRouter(): express.Router {
           return;
         }
         delivered.add(idemKey);
-        console.log("[ring] delivered via whatsapp");
+        console.log(`[ring] delivered via whatsapp age=${age}`);
         finish(200, { ok: true, via: "whatsapp" });
       })().catch((err) => finish(500, { error: String(err).slice(0, 300) }));
     });
