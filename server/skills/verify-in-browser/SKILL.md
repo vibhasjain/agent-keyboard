@@ -15,9 +15,25 @@ python3 -m http.server 4173 &
 SERVER_PID=$!
 trap 'kill $SERVER_PID 2>/dev/null' EXIT
 
-# 2. screenshot the page you changed (mobile-ish viewport; adjust as needed)
-npx playwright screenshot --viewport-size=390,844 --full-page \
-  "http://localhost:4173/index.html" /tmp/verify.png
+# 2. screenshot the page you changed (mobile-ish viewport; adjust as needed).
+#    NODE_PATH exposes the Playwright package installed globally in the image.
+AK_PAGE_URL="http://localhost:4173/index.html" AK_SCREENSHOT="/tmp/verify.png" \
+NODE_PATH="$(npm root -g)" node <<'NODE'
+const { chromium } = require('playwright')
+;(async () => {
+  const browser = await chromium.launch({
+    headless: true,
+    args: process.env.AK_CDP_PORT ? ['--remote-debugging-port=' + process.env.AK_CDP_PORT] : [],
+  })
+  try {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } })
+    await page.goto(process.env.AK_PAGE_URL, { waitUntil: 'networkidle' })
+    await page.screenshot({ path: process.env.AK_SCREENSHOT, fullPage: true })
+  } finally {
+    await browser.close()
+  }
+})().catch((error) => { console.error(error); process.exit(1) })
+NODE
 ```
 
 Then use the Read tool on `/tmp/verify.png` to inspect the render, and describe

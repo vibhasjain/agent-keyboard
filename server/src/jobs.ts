@@ -18,6 +18,7 @@ import { randomBytes } from "node:crypto";
 import type { Frame, InputChannel } from "./claude.js";
 import { insertJob, updateJob, type JobStatus } from "./jobstore.js";
 import { tryAcquireSiteLock } from "./checkouts.js";
+import { withBrowserStatus } from "./screen.js";
 
 const TERMINAL = new Set<JobStatus>(["done", "error", "interrupted"]);
 const DB_THROTTLE_MS = 2_000;
@@ -56,6 +57,7 @@ interface Job {
   createdAt: number;
   updatedAt: number;
   subscribers: Set<SubQueue>;
+  dbWrites: Promise<void>; // serialize PATCHes so an old write never lands last
   lastDbWrite: number;
   abort: () => void; // signals runMessageJob to kill its CLI child (used by cancelJob)
   streaming: boolean; // long-lived session: a `result` marks a turn boundary, not the end
@@ -122,9 +124,18 @@ function schedule(): void {
       if (!preLock) continue;
       const { job, makeGen } = pending.splice(i, 1)[0]!;
       job.admitted = true;
+      job.status = "running";
+      // Admission has begun but no agent-side work has happened yet. `syncing`
+      // is both non-queued for API adoption and safe for boot requeue.
+      job.statusLine = { phase: "syncing", detail: "Preparing the site" };
+      job.updatedAt = Date.now();
       activeWorkers++;
       admitted = true;
       picked = true;
+      // The durable row was inserted as queued. Admission is the exact point at
+      // which both live and persisted status become running.
+      publish(job, "status", withBrowserStatus(job.siteId, job.statusLine));
+      void flush(job);
       void drain(job, makeGen(preLock));
       break;
     }
@@ -152,7 +163,7 @@ function snapshot(job: Job): JobSnapshot {
     kind: job.kind,
     priority: job.priority,
     status: job.status,
-    status_line: job.statusLine,
+    status_line: withBrowserStatus(job.siteId, job.statusLine),
     result: job.result,
     error: job.error,
     created_at: new Date(job.createdAt).toISOString(),
@@ -178,12 +189,18 @@ function closeSubscribers(job: Job): void {
 }
 
 async function flush(job: Job): Promise<void> {
-  await updateJob(job.jobId, {
+  const fields = {
     status: job.status,
     statusLine: job.statusLine,
     result: job.result,
     error: job.error,
-  }).catch(() => {});
+  };
+  const write = job.dbWrites
+    .catch(() => {})
+    .then(() => updateJob(job.jobId, fields))
+    .catch(() => {});
+  job.dbWrites = write;
+  await write;
   job.lastDbWrite = Date.now();
 }
 
@@ -197,7 +214,7 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
       job.updatedAt = Date.now();
       if (event === "status") {
         job.statusLine = payload as Record<string, unknown>;
-        publish(job, event, payload);
+        publish(job, event, withBrowserStatus(job.siteId, job.statusLine));
         await maybeFlush(job);
       } else if (event === "assistant") {
         job.lastAssistant = payload as Record<string, unknown>;
@@ -289,7 +306,7 @@ export async function startJob(opts: {
     priority: Math.max(-100, Math.min(100, Math.trunc(opts.priority ?? 0) || 0)),
     admitted: false,
     pageSlug: opts.pageSlug ?? "",
-    status: "running",
+    status: "queued",
     statusLine: { phase: "queued", detail: "Waiting for a free slot" },
     lastAssistant: null,
     lastTodos: null,
@@ -298,6 +315,7 @@ export async function startJob(opts: {
     createdAt: now,
     updatedAt: now,
     subscribers: new Set(),
+    dbWrites: Promise.resolve(),
     lastDbWrite: 0,
     abort: opts.abort ?? (() => {}),
     streaming: opts.streaming ?? false,
@@ -332,7 +350,7 @@ export async function startJob(opts: {
 export async function* tail(job: Job): AsyncGenerator<Frame> {
   yield ["job", { job_id: job.jobId, target: job.siteId, status: job.status, streaming: job.streaming }];
   if (TERMINAL.has(job.status)) {
-    if (Object.keys(job.statusLine).length) yield ["status", job.statusLine];
+    if (Object.keys(job.statusLine).length) yield ["status", withBrowserStatus(job.siteId, job.statusLine)];
     if (job.lastAssistant) yield ["assistant", job.lastAssistant];
     yield terminalFrame(job);
     return;
@@ -340,7 +358,7 @@ export async function* tail(job: Job): AsyncGenerator<Frame> {
   const q = new SubQueue();
   job.subscribers.add(q);
   try {
-    if (Object.keys(job.statusLine).length) yield ["status", job.statusLine];
+    if (Object.keys(job.statusLine).length) yield ["status", withBrowserStatus(job.siteId, job.statusLine)];
     if (job.lastAssistant) yield ["assistant", job.lastAssistant];
     if (job.lastTodos) yield ["todos", job.lastTodos];
     for (;;) {
@@ -413,6 +431,15 @@ export function listActive(siteId?: string, pageSlug?: string): JobSnapshot[] {
     out.push(snapshot(job));
   }
   return out;
+}
+
+/** Republish the current status line when a site's browser reachability flips.
+ *  The detector calls this only on boolean changes. */
+export function publishBrowserStatus(siteId: string): void {
+  for (const job of registry.values()) {
+    if (job.siteId !== siteId || TERMINAL.has(job.status)) continue;
+    publish(job, "status", withBrowserStatus(siteId, job.statusLine));
+  }
 }
 
 /**

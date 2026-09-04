@@ -103,13 +103,14 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 // -- Protocol types -----------------------------------------------------------
-export type JobStatus = 'running' | 'done' | 'error' | 'interrupted'
+export type JobStatus = 'queued' | 'running' | 'done' | 'error' | 'interrupted'
 
 export interface JobRow {
   job_id: string
   site_id: string
+  priority?: number
   status: JobStatus
-  status_line?: string
+  status_line?: Record<string, unknown> | string | null
   result?: unknown
   error?: string
   created_at?: string
@@ -223,6 +224,14 @@ export const api = {
 
   realtimeToken: (): Promise<RealtimeToken> => jsonFetch(`/realtime/token`, { method: 'POST' }),
 }
+
+/** Authenticated view-only browser stream. Abort tears down the server viewer. */
+export const screenStream = (
+  siteId: string,
+  onFrame: SseFrameHandler,
+  signal: AbortSignal,
+): Promise<void> =>
+  readSse(`/sites/${encodeURIComponent(siteId)}/screen`, { method: 'GET', signal }, onFrame)
 
 // XHR (not fetch) so we get upload progress events for the chip's progress ring.
 async function xhrUpload(

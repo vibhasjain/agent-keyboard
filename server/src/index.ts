@@ -44,6 +44,7 @@ import {
   listActive,
   jobForIdem,
   runningResumeInputs,
+  publishBrowserStatus,
   type JobSnapshot,
 } from "./jobs.js";
 import { writePendingResume, resumeAfterRedeploy } from "./resume.js";
@@ -56,6 +57,7 @@ import {
   type JobRow,
 } from "./jobstore.js";
 import { openSse, startKeepalive, writeFrame } from "./sse.js";
+import { startBrowserDetection, streamScreen, withBrowserStatus } from "./screen.js";
 
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -351,7 +353,7 @@ function rowToSnapshot(row: JobRow): JobSnapshot {
     priority: 0, // priority is live-queue state only; not persisted to the row
     kind: row.kind,
     status: row.status,
-    status_line: row.status_line ?? {},
+    status_line: withBrowserStatus(row.site_id, row.status_line ?? {}),
     result: row.result ?? null,
     error: row.error ?? null,
     created_at: row.created_at ?? new Date().toISOString(),
@@ -632,8 +634,10 @@ app.post("/sites/:siteId/restart", authed, async (req, res) => {
   // conversation; the checkout is shared across pages, so only a site-root
   // restart hard-resets it.
   const pageSlug = pageSlugFor(site, (req.body as { page?: unknown } | undefined)?.page);
-  const running = listActive(site.id, pageSlug).filter((j) => j.status === "running");
-  for (const job of running) cancelJob(job.job_id);
+  const active = listActive(site.id, pageSlug).filter(
+    (job) => job.status === "queued" || job.status === "running",
+  );
+  for (const job of active) cancelJob(job.job_id);
 
   let release: (() => void) | undefined;
   try {
@@ -642,7 +646,7 @@ app.post("/sites/:siteId/restart", authed, async (req, res) => {
     const conversationId = await rotateConversation(site.id, pageSlug);
     res.json({
       ok: true,
-      cancelled: running.length,
+      cancelled: active.length,
       cleared: true,
       conversation_id: conversationId,
       reset,
@@ -665,7 +669,9 @@ app.post("/sites/:siteId/compact", authed, async (req, res) => {
   // Close any open session so the lock frees promptly; compaction summarizes the
   // session's memory anyway, and the next message resumes it compacted.
   const pageSlug = pageSlugFor(site, (req.body as { page?: unknown } | undefined)?.page);
-  for (const job of listActive(site.id, pageSlug).filter((j) => j.status === "running")) cancelJob(job.job_id);
+  for (const job of listActive(site.id, pageSlug)) {
+    if (job.status === "queued" || job.status === "running") cancelJob(job.job_id);
+  }
   try {
     const compacted = await compactSession(site.id, pageSlug);
     res.json({ compacted });
@@ -693,19 +699,19 @@ app.get("/jobs/:jobId/stream", authed, async (req, res) => {
     return;
   }
   writeFrame(res, "job", { job_id: row.job_id, target: row.site_id, status: row.status });
-  if (row.status_line) writeFrame(res, "status", row.status_line);
+  if (row.status_line) writeFrame(res, "status", withBrowserStatus(row.site_id, row.status_line));
   if (row.status === "done") {
     // A done streaming session's stored result is its last TURN payload
     // (open: true). Replaying that verbatim makes the widget re-open the
     // session and reconnect forever — the session is over, so say so.
     if ((row.result as { open?: unknown } | null)?.open === true) writeFrame(res, "closed", {});
     else writeFrame(res, "result", row.result ?? {});
-  } else if (row.status === "running") {
+  } else if (row.status === "running" || row.status === "queued") {
     // In the DB but not the registry: the machine restarted mid-job (an orphan
     // the boot sweep hasn't reconciled). Report it honestly.
     writeFrame(res, "error", {
       kind: "interrupted",
-      detail: "The server restarted while this job was running.",
+      detail: "The server restarted before this job finished.",
     });
   } else {
     writeFrame(res, "error", row.error ?? { kind: "job_failed", detail: "The job failed." });
@@ -713,7 +719,18 @@ app.get("/jobs/:jobId/stream", authed, async (req, res) => {
   res.end();
 });
 
-/** List running jobs + a 10-minute finished window for a site (registry ∪ DB). */
+/** View-only live Chromium screencast for one allow-listed site. */
+app.get("/sites/:siteId/screen", authedOrGoogle, (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  streamScreen(req, res, site.id);
+});
+
+/** List active jobs + a 10-minute finished window for a site (registry ∪ DB). */
 app.get("/jobs", authed, async (req, res) => {
   const siteId = typeof req.query.siteId === "string" ? req.query.siteId : "";
   if (siteId && denySite(req, res, siteId)) return;
@@ -803,6 +820,10 @@ app.use(ringRouter());
 const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
   console.log(`agent-keyboard listening on :${port}`);
+  startBrowserDetection(
+    () => listActive().filter((job) => job.status === "running").map((job) => job.site_id),
+    publishBrowserStatus,
+  );
   if (process.env.JOBS_CRON_DISABLED !== "1") startJobsCron();
   // Purge stale staged uploads, then reconcile any jobs the last process left
   // "running" (machine slept / crashed mid-job). Both tolerate an unreachable
@@ -861,7 +882,7 @@ let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
-  console.log(`[shutdown] ${signal} — marking running jobs interrupted, killing children`);
+  console.log(`[shutdown] ${signal} — marking active jobs interrupted, killing children`);
   try {
     writePendingResume(runningResumeInputs());
   } catch {

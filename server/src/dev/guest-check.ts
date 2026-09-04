@@ -11,17 +11,21 @@ process.env.GH_TOKEN = "keep-me";
 
 const { SITES } = await import("../sites.js");
 const { checkoutPath } = await import("../checkouts.js");
-const { spawnEnv, guestArgs, PERSONAL_ENV } = await import("../claude.js");
+const { spawnEnv, guestArgs, PERSONAL_ENV, cdpPortFor } = await import("../claude.js");
 const [mine, shared] = SITES;
 assert.ok(mine && shared && shared.guest === true && mine.guest === undefined, "guest flag parses");
 
 const own = spawnEnv(mine, { CLAUDE_X: "1" });
 assert.equal(own.GMAIL_APP_PASSWORD, "hunter2");
 assert.equal(own.CLAUDE_X, "1");
+assert.equal(own.AK_CDP_PORT, "9300");
 const guest = spawnEnv(shared, { CLAUDE_X: "1" });
 for (const k of PERSONAL_ENV) assert.equal(guest[k], undefined, `${k} must be stripped`);
 assert.equal(guest.GH_TOKEN, "keep-me");
 assert.equal(guest.CLAUDE_X, "1");
+assert.equal(guest.AK_CDP_PORT, "9301");
+assert.equal(cdpPortFor("mine"), 9300);
+assert.equal(cdpPortFor("shared"), 9301);
 
 assert.deepEqual(guestArgs(mine), []);
 const args = guestArgs(shared);

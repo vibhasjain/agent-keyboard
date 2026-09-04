@@ -35,18 +35,25 @@ function assert(cond: boolean, label: string) {
 async function main() {
   // 1) same-site serializes, cross-site parallel (pool=2)
   await startJob({ siteId: "siteA", prompt: "a1", page: "/", makeGen: fakeGen("A1", 300) });
-  await startJob({ siteId: "siteA", prompt: "a2", page: "/", makeGen: fakeGen("A2", 50) });
+  await startJob({ siteId: "siteA", prompt: "a2", page: "/", makeGen: fakeGen("A2", 120) });
   await startJob({ siteId: "siteB", prompt: "b1", page: "/", makeGen: fakeGen("B1", 60) });
   assert(log.filter((l) => l.includes("ADMIT")).length === 2, "two admitted at once (pool=2)");
   assert(log.some((l) => l.includes("ADMIT A1")) && log.some((l) => l.includes("ADMIT B1")), "A1+B1 admitted, A2 queued");
+  const firstStatuses = listActive().filter((j) => j.site_id === "siteA").map((j) => j.status);
+  assert(firstStatuses.filter((s) => s === "running").length === 1, "executing same-site job reports running");
+  assert(firstStatuses.filter((s) => s === "queued").length === 1, "waiting same-site job reports queued");
 
   await sleep(120); // B1 done -> slot free, but A2 blocked on site A lock
   assert(!log.some((l) => l.includes("ADMIT A2")), "A2 NOT admitted after B1 frees slot (site A lock held)");
 
-  await sleep(300); // A1 done -> A2 admits
+  await sleep(200); // A1 done -> A2 admits and is still running
   assert(log.some((l) => l.includes("ADMIT A2")), "A2 admitted after A1 finished");
+  assert(
+    listActive("siteA").some((j) => j.status === "running" && (j.status_line as { phase?: string }).phase === "syncing"),
+    "queued job becomes running on admission",
+  );
 
-  await sleep(150);
+  await sleep(150); // A2 done
   // 2) priority lane: fill pool with C1/D1, queue E(pri 0) then F(pri 10)
   await startJob({ siteId: "siteC", prompt: "c1", page: "/", makeGen: fakeGen("C1", 350) });
   await startJob({ siteId: "siteD", prompt: "d1", page: "/", makeGen: fakeGen("D1", 350) });

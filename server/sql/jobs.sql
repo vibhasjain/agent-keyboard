@@ -9,7 +9,7 @@ create table if not exists agent_keyboard_jobs (
   job_id      text primary key,
   site_id     text        not null,
   kind        text        not null default 'message',
-  status      text        not null default 'running', -- running | done | error | interrupted
+  status      text        not null default 'queued',  -- queued | running | done | error | interrupted
   status_line jsonb,
   result      jsonb,
   error       jsonb,

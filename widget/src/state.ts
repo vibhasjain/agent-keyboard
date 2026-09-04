@@ -33,6 +33,7 @@ export type JobState =
       fullText: string
       todos?: TodoItem[]
       subagents?: Subagent[]
+      browser?: boolean
       idle?: boolean // session open but between turns — render as resting, not "working"
       disconnected?: boolean
     }

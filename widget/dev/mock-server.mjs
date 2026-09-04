@@ -44,7 +44,7 @@ function makeJob(siteId, text) {
     status: 'running',
     frames: [], // replayable history
     writers: new Set(),
-    statusLine: 'queued',
+    statusLine: { phase: 'starting', detail: 'Starting up', browser: false },
     result: null,
     error: null,
   }
@@ -52,6 +52,7 @@ function makeJob(siteId, text) {
   jobsBySite.set(siteId, job)
 
   const push = (name, data) => {
+    if (name === 'status') job.statusLine = data
     const f = frame(name, data)
     job.frames.push(f)
     for (const w of job.writers) {
@@ -82,11 +83,11 @@ function makeJob(siteId, text) {
 
   const timeline = [
     [200, () => push('job', { job_id: id, target: '/index.html', status: 'running' })],
-    [500, () => push('status', { phase: 'queued', detail: 'Queued behind 0 jobs' })],
-    [1200, () => push('status', { phase: 'syncing', detail: 'Syncing the repo' })],
-    [2200, () => push('status', { phase: 'starting', detail: 'Booting the agent' })],
-    [3000, () => push('status', { phase: 'thinking', detail: 'Reading the current layout…' })],
-    [4200, () => push('status', { phase: 'tool', detail: 'Editing index.html' })],
+    [500, () => push('status', { phase: 'starting', detail: 'Starting up', browser: false })],
+    [1200, () => push('status', { phase: 'syncing', detail: 'Syncing the repo', browser: true })],
+    [2200, () => push('status', { phase: 'starting', detail: 'Booting the agent', browser: true })],
+    [3000, () => push('status', { phase: 'thinking', detail: 'Reading the current layout…', browser: true })],
+    [4200, () => push('status', { phase: 'tool', detail: 'Editing index.html', browser: true })],
   ]
   // stream assistant tokens (FULL accumulated text each frame)
   let acc = ''
@@ -96,6 +97,9 @@ function makeJob(siteId, text) {
     timeline.push([5000 + i * 120, () => push('assistant', { text: snapshot })])
   })
   const endAt = 5000 + words.length * 120 + 600
+  // A browser-only transition repeats the current status line, like production.
+  // The widget must hide the indicators without rewinding its assistant ticker.
+  timeline.push([6200, () => push('status', { phase: 'tool', detail: 'Editing index.html', browser: false })])
   timeline.push([
     endAt,
     () => {
@@ -209,6 +213,36 @@ const server = createServer(async (req, res) => {
   if (p === '/demo.js') return serveStatic(res, 'dist/demo.js', 'text/javascript; charset=utf-8')
   if (p === '/demo.js.map') return serveStatic(res, 'dist/demo.js.map', 'application/json')
 
+  // GET /sites/:id/screen -> repeat one real JPEG frame until the viewer closes.
+  let m = p.match(/^\/sites\/([^/]+)\/screen$/)
+  if (m && req.method === 'GET') {
+    const site = decodeURIComponent(m[1])
+    const jpeg = await readFile(join(ROOT, '../site/og.jpg')).then((buf) => buf.toString('base64'))
+    const payload = {
+      jpeg,
+      w: 1200,
+      h: 630,
+      url: 'https://agentkeyboard.com/live-browser-check',
+      title: 'Agent Keyboard live browser',
+    }
+    sseHead(res)
+    const send = () => {
+      try {
+        res.write(frame('screen', payload))
+      } catch {
+        /* viewer gone */
+      }
+    }
+    send()
+    const timer = setInterval(send, 300)
+    console.log(`[mock] screen connected for ${site}`)
+    res.on('close', () => {
+      clearInterval(timer)
+      console.log(`[mock] screen disconnected for ${site}`)
+    })
+    return
+  }
+
   // GET /demo/:scene -> minimal noindex host page that loads /demo.js for one
   // scene (the marketing site embeds these in iframes). Allowlisted ids only.
   const dm = p.match(/^\/demo\/([a-z]+)$/)
@@ -238,7 +272,7 @@ const server = createServer(async (req, res) => {
   }
 
   // POST /sites/:id/messages -> SSE stream (duplicate idemKey re-tails, like prod)
-  let m = p.match(/^\/sites\/([^/]+)\/messages$/)
+  m = p.match(/^\/sites\/([^/]+)\/messages$/)
   if (m && req.method === 'POST') {
     let body = ''
     req.on('data', (c) => (body += c))

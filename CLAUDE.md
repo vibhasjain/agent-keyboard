@@ -65,7 +65,8 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 - **SSE protocol** — the contract the widget speaks: `POST /sites/:id/messages` (response IS the
   stream), `GET /jobs/:id/stream` (re-attach), `GET /jobs?siteId=`, `POST /sites/:id/uploads`
   (multipart `photo`), `GET /sites/:id/conversation`, `POST /realtime/token` (OpenAI ephemeral for
-  voice dictation). Frames: `job` · `status{phase,detail}` · `assistant{text}` (full replace) ·
+  voice dictation), and `GET /sites/:id/screen` (view-only live browser). Frames: `job` ·
+  `status{phase,detail,browser}` · `screen{jpeg,w,h,url,title}` · `assistant{text}` (full replace) ·
   `result{reply,git,…}` · `error`. Full spec lives in `widget/README.md`.
 
 ## Deploy

@@ -4,12 +4,14 @@
 // unless there is a persisted active job AND a stored session to re-attach with.
 
 import { consumeInviteToken, getPendingInvite, initAuth } from './auth'
+import { screenStream } from './api'
 import { mountBar } from './bar'
 import { CONFIG, initConfig, shouldMountHere } from './config'
+import { el, icon, on, show } from './dom'
 import { injectFonts } from './fonts'
 import { isGuestDemo, loadGuestDemo } from './guest-demo'
 import { bootRehydrate } from './jobstore'
-import { getState, patchUi } from './state'
+import { getState, patchUi, subscribe } from './state'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
 
@@ -44,6 +46,161 @@ function blockZoomGestures(el: HTMLElement): void {
   )
 }
 
+/** Main-bundle-only live browser viewer. The scripted demo mounts bar.ts
+ * directly, so it never opens a network stream or exposes these controls. */
+function mountLiveBrowser(shadow: ShadowRoot): { close: () => void } {
+  const zone = shadow.querySelector<HTMLElement>('.ak-zone')
+  const transcript = shadow.querySelector<HTMLElement>('.ak-overlay')
+  const mini = shadow.querySelector<HTMLElement>('.ak-mini')
+  const pill = shadow.querySelector<HTMLElement>('.ak-pill')
+  if (!zone || !transcript || !mini || !pill) return { close: () => {} }
+
+  const indicator = (cls: string): HTMLButtonElement => {
+    const button = el('button', `ak-browser-indicator ${cls}`, (node) => {
+      node.type = 'button'
+      node.setAttribute('aria-label', 'View live browser')
+    })
+    button.append(
+      el('span', 'ak-browser-dot', (node) => node.setAttribute('aria-hidden', 'true')),
+      el('span', 'ak-browser-label', (node) => (node.textContent = 'browser')),
+    )
+    return button
+  }
+  const cornerIndicator = indicator('ak-browser-corner')
+  const headerIndicator = indicator('ak-browser-header')
+  zone.appendChild(cornerIndicator)
+  transcript.appendChild(headerIndicator)
+
+  const lightbox = el('div', 'ak-screen-lightbox', (node) => {
+    node.setAttribute('role', 'dialog')
+    node.setAttribute('aria-modal', 'true')
+    node.setAttribute('aria-label', 'Live browser view')
+  })
+  const closeButton = el('button', 'ak-screen-close', (node) => {
+    node.type = 'button'
+    node.setAttribute('aria-label', 'Close live browser')
+    node.appendChild(icon('x', 18))
+  })
+  const card = el('div', 'ak-screen-card')
+  const image = el('img', 'ak-screen-image', (node) => {
+    node.alt = 'Live browser view'
+    node.draggable = false
+  })
+  const waiting = el('div', 'ak-screen-wait', (node) => {
+    node.textContent = 'waiting for a browser…'
+    node.setAttribute('aria-live', 'polite')
+  })
+  const metadata = el('div', 'ak-screen-meta')
+  card.append(image, waiting, metadata)
+  lightbox.append(closeButton, card)
+  shadow.appendChild(lightbox)
+  show(lightbox, false)
+  show(image, false)
+  show(metadata, false)
+
+  let stream: AbortController | null = null
+  let opener: HTMLElement | null = null
+  const showWaiting = () => {
+    image.removeAttribute('src')
+    show(image, false)
+    show(waiting, true)
+    metadata.textContent = ''
+    show(metadata, false)
+  }
+  const close = () => {
+    stream?.abort()
+    stream = null
+    image.removeAttribute('src')
+    show(lightbox, false)
+    if (opener?.isConnected) opener.focus()
+    opener = null
+  }
+  const open = () => {
+    stream?.abort()
+    opener = shadow.activeElement as HTMLElement | null
+    const controller = new AbortController()
+    stream = controller
+    showWaiting()
+    show(lightbox, true)
+    closeButton.focus()
+    void screenStream(
+      CONFIG.site,
+      (name, data) => {
+        if (stream !== controller || name !== 'screen') return
+        const jpeg = typeof data.jpeg === 'string' ? data.jpeg : ''
+        if (!jpeg) {
+          showWaiting()
+          return
+        }
+        const w = Number(data.w) || 0
+        const h = Number(data.h) || 0
+        if (w > 0 && h > 0) {
+          image.width = w
+          image.height = h
+        }
+        image.src = `data:image/jpeg;base64,${jpeg}`
+        show(image, true)
+        show(waiting, false)
+        let hostname = ''
+        try {
+          hostname = new URL(String(data.url ?? '')).hostname
+        } catch {
+          /* a navigating page can briefly report an incomplete URL */
+        }
+        metadata.textContent = [String(data.title ?? '').trim(), hostname].filter(Boolean).join(' · ')
+        show(metadata, !!metadata.textContent)
+      },
+      controller.signal,
+    ).then(
+      () => {
+        if (stream === controller && !controller.signal.aborted) showWaiting()
+      },
+      () => {
+        if (stream === controller && !controller.signal.aborted) showWaiting()
+      },
+    )
+  }
+
+  on(cornerIndicator, 'click', open)
+  on(headerIndicator, 'click', open)
+  on(closeButton, 'click', close)
+  on(lightbox, 'click', (event) => {
+    if (event.target === lightbox) close()
+  })
+  on(lightbox, 'touchend', (event) => {
+    if (event.target === lightbox) close()
+  })
+  for (const event of ['touchmove', 'wheel']) {
+    lightbox.addEventListener(event, (e) => e.preventDefault(), { passive: false })
+  }
+  // chat.ts owns the normal bubble-lightbox/transcript Escape stack on bubble.
+  // Capture first so this lightbox peels without collapsing the transcript too.
+  on(window, 'keydown', (event) => {
+    if (lightbox.style.display === 'none') return
+    if ((event as KeyboardEvent).key === 'Tab') {
+      event.preventDefault()
+      closeButton.focus()
+      return
+    }
+    if ((event as KeyboardEvent).key !== 'Escape') return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    close()
+  }, true)
+
+  const render = () => {
+    const state = getState()
+    const live = state.job.phase === 'streaming' && state.job.browser === true
+    show(cornerIndicator, live && state.ui.mode !== 'expanded')
+    show(headerIndicator, live && state.ui.mode === 'expanded')
+    mini.classList.toggle('browser-live', live)
+    pill.classList.toggle('browser-live', live)
+  }
+  subscribe(render)
+  render()
+  return { close }
+}
+
 function mount(): void {
   const host = document.createElement('div')
   host.id = 'agent-keyboard-host'
@@ -61,6 +218,7 @@ function mount(): void {
   initAuth() // synchronous: sets auth slice from localStorage, no network
   if (isGuestDemo()) void loadGuestDemo()
   mountBar(shadow)
+  const liveBrowser = mountLiveBrowser(shadow)
   // If we arrived from an invite/recovery link, open the transcript — its footer
   // holds the set-a-password form. Otherwise rest as the corner rectangle.
   if (getPendingInvite()) patchUi({ mode: 'expanded' })
@@ -77,6 +235,7 @@ function mount(): void {
       host.style.display = ''
     },
     hide: (): void => {
+      liveBrowser.close()
       if (getState().ui.mode === 'expanded') patchUi({ mode: 'mini' })
       host.style.display = 'none'
     },

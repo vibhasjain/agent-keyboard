@@ -296,14 +296,14 @@ async function tick(job: CronJob): Promise<void> {
       if (now - last < intervalMs) return;
     }
 
-    // Never stack cycles — but a job wedged "running" must not silence the schedule forever.
-    if (listActive(job.site).some((active) => active.status === "running")) {
+    // Never stack cycles — but an active job must not silence the schedule forever.
+    if (listActive(job.site).some((active) => active.status === "queued" || active.status === "running")) {
       const overdueLimit = intervalMs === undefined ? 86_400_000 : 2 * intervalMs;
       if (now - dueAt < overdueLimit) return;
       console.warn(
         intervalMs === undefined
-          ? `[jobs-cron] ${job.site} is still running but is a day overdue — firing anyway`
-          : `[jobs-cron] ${job.site} is still running but is over two intervals overdue — firing anyway`,
+          ? `[jobs-cron] ${job.site} is still active but is a day overdue — firing anyway`
+          : `[jobs-cron] ${job.site} is still active but is over two intervals overdue — firing anyway`,
       );
     }
 

@@ -74,6 +74,16 @@ site is a durable git checkout on a Fly volume (`HOME=/data`), so the Claude Cod
 and compaction — persists between runs. The CLI runs headless (`claude -p`) with permissions bypassed
 inside the VM, edits the checkout, commits, and pushes with a repo-scoped token.
 
+**Live browser view.** If a site's agent launches Chromium on its injected CDP port, the bar shows a
+small `browser` indicator; tap it to watch a view-only JPEG screencast in a lightbox. The server does
+no screencasting until someone opens that view and costs approximately nothing while idle. Site
+pipelines can make any Playwright launch discoverable with this one line (only one browser can own a
+site's port at a time):
+
+```js
+args: process.env.AK_CDP_PORT ? ['--remote-debugging-port=' + process.env.AK_CDP_PORT] : []
+```
+
 ## Self-host quickstart
 
 Full walkthrough with time estimates in **[SELF_HOSTING.md](./SELF_HOSTING.md)**.

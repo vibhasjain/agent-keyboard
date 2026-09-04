@@ -98,11 +98,20 @@ export const PERSONAL_ENV = [
 ];
 export const PERSONAL_SKILLS = ["google-calendar"];
 
+/** Stable Chromium DevTools port for one allow-listed site. */
+export function cdpPortFor(siteId: string): number {
+  const index = SITES.findIndex((site) => site.id === siteId);
+  if (index < 0) throw new Error(`unknown site ${JSON.stringify(siteId)}`);
+  return 9300 + index;
+}
+
 /** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites) + harness overrides. */
 export function spawnEnv(site: Site, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env };
   if (site.guest) for (const k of PERSONAL_ENV) delete env[k];
-  return { ...env, ...extra };
+  // Forced after harness env so every browser launched for this site is
+  // discoverable on its one stable port.
+  return { ...env, ...extra, AK_CDP_PORT: String(cdpPortFor(site.id)) };
 }
 
 /** Extra CLI args for a guest site: a --settings blob of deny rules. */
@@ -751,7 +760,7 @@ export type Frame = [string, unknown];
  * on natural completion AND on gen.return() teardown, so the site lock is
  * always released and the child always killed.
  *
- * Frames: status(queued|syncing|starting|thinking|tool|retrying) →
+ * Frames after scheduler admission: status(syncing|starting|thinking|tool|retrying) →
  * assistant(full-replace text) → terminal result | error.
  */
 export async function* runMessageJob(
@@ -767,8 +776,6 @@ export async function* runMessageJob(
   },
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
-  yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
-
   let release: (() => void) | undefined;
   let child: ChildProcess | null = null;
   // Stop (cancelJob) aborts the signal → SIGKILL the current child. Killing it
@@ -1058,8 +1065,6 @@ export async function* runStreamingSession(
   input: InputChannel,
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
-  yield ["status", { phase: "queued", detail: "Waiting for a free slot" }];
-
   let release: (() => void) | undefined;
   let child: ChildProcess | null = null;
   let idleTimer: ReturnType<typeof setTimeout> | null = null;

@@ -10,7 +10,7 @@ const SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY ?? "";
 const TABLE = "agent_keyboard_jobs";
 const MAX_JSONB = 400_000; // cap a pathological status_line/result/error before persisting
 
-export type JobStatus = "running" | "done" | "error" | "interrupted";
+export type JobStatus = "queued" | "running" | "done" | "error" | "interrupted";
 
 export interface JobRow {
   job_id: string;
@@ -79,7 +79,8 @@ export async function insertJob(row: {
       job_id: row.jobId,
       site_id: row.siteId,
       kind: row.kind,
-      status: "running",
+      status: "queued",
+      status_line: { phase: "queued", detail: "Waiting for a free slot" },
       prompt: row.prompt.slice(0, 20_000),
       page: row.page,
     }),
@@ -119,12 +120,12 @@ export async function getJob(jobId: string): Promise<JobRow | null> {
   return rows[0] ?? null;
 }
 
-/** Running jobs + a 10-minute catch-up window of finished ones, for one site. */
+/** Active jobs + a 10-minute catch-up window of finished ones, for one site. */
 export async function listJobs(siteId: string): Promise<JobRow[]> {
   const since = new Date(Date.now() - 10 * 60_000).toISOString();
   const filter =
     `site_id=eq.${encodeURIComponent(siteId)}` +
-    `&or=(status.eq.running,updated_at.gt.${encodeURIComponent(since)})` +
+    `&or=(status.eq.queued,status.eq.running,updated_at.gt.${encodeURIComponent(since)})` +
     `&order=created_at.desc&limit=50`;
   const res = await req(`${TABLE}?${filter}`, { method: "GET", headers: headers() });
   if (!res || !res.ok) return [];
@@ -132,7 +133,7 @@ export async function listJobs(siteId: string): Promise<JobRow[]> {
 }
 
 /**
- * Rows still 'running' that provably did no work before the process died: never
+ * Rows still queued/running that provably did no work before the process died: never
  * past the site-lock queue or the checkout sync, so the CLI never spawned and
  * re-running the prompt verbatim cannot duplicate anything. ('starting' and
  * later phases may have side effects — those stay interrupted.) Read BEFORE the
@@ -140,8 +141,9 @@ export async function listJobs(siteId: string): Promise<JobRow[]> {
  */
 export async function listRequeueableJobs(): Promise<JobRow[]> {
   const phases = `or=(status_line.is.null,status_line->>phase.eq.queued,status_line->>phase.eq.syncing)`;
-  // Rows a dead process left 'running' (crash / sleep — never got a terminal write).
-  const live = `status=eq.running&kind=eq.message&${phases}&order=created_at.asc&limit=50`;
+  // Rows a dead process left active (crash / sleep — never got a terminal write).
+  // `running` covers rows written by older server versions too.
+  const live = `status=in.(queued,running)&kind=eq.message&${phases}&order=created_at.asc&limit=50`;
   // Rows a GRACEFUL shutdown interrupted before they ever started: a deploy
   // marks every running row interrupted, which would silently orphan queued
   // work, so the sweep also rescues recent never-started interrupted rows —
@@ -173,18 +175,18 @@ export async function markRequeued(jobId: string): Promise<void> {
 }
 
 /**
- * Boot sweep: anything still 'running' predates this process (the machine slept
- * / restarted mid-job). Mark it interrupted so no client hangs on a dead job.
+ * Boot sweep: anything still queued/running predates this process (the machine
+ * slept / restarted mid-job). Mark it interrupted so no client hangs on it.
  * Tolerates an unreachable Supabase (logs and returns).
  */
 export async function interruptRunningJobs(): Promise<void> {
-  const res = await req(`${TABLE}?status=eq.running`, {
+  const res = await req(`${TABLE}?status=in.(queued,running)`, {
     method: "PATCH",
     headers: headers({ Prefer: "return=minimal" }),
     body: JSON.stringify({
       status: "interrupted",
       updated_at: new Date().toISOString(),
-      error: { kind: "interrupted", detail: "The server restarted while this job was running." },
+      error: { kind: "interrupted", detail: "The server restarted before this job finished." },
     }),
   });
   if (res && !res.ok) console.error("[jobstore] interruptRunningJobs", res.status);

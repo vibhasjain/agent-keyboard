@@ -68,6 +68,7 @@ headers).
 | `POST /sites/:id/messages` | Send a prompt (`{text, page, idemKey, attachmentIds?}`). **The response IS the SSE stream.** A duplicate `idemKey` re-tails the original job. |
 | `GET /jobs/:jobId/stream` | Re-attach to a running or finished job; replays current state, then live frames. |
 | `GET /jobs?siteId=` | List active jobs plus a short finished window for a site. |
+| `GET /sites/:id/screen` | View-only live browser screencast. The authenticated SSE stream stays open while Chromium is absent and is torn down when the viewer closes. |
 | `POST /sites/:id/restart` | Clean slate: stop active work, discard local checkout changes, reset to latest `origin/<branch>`, and rotate to a fresh conversation. |
 | `POST /sites/:id/uploads` | Upload one attachment (multipart, field `photo` or `file`, ≤15 MB) → `{id, path}` to attach. |
 | `GET /sites/:id/conversation` | Chat history (`?limit`, `?before`) from the agent's durable session. User turns carry `sender` (the email that typed them, parsed from the server's `[Sent from … by <email>]` prompt header); the widget renders it as a color-coded name tag. |
@@ -81,7 +82,8 @@ Over one job's stream you'll see:
 | Frame | Payload | Meaning |
 |-------|---------|---------|
 | `job` | `{job_id, target, status}` | Job opened; carries its id for re-attach. |
-| `status` | `{phase, detail}` | Progress line: syncing → thinking → editing (→ compacting). Rendered in the ticker. |
+| `status` | `{phase, detail, browser}` | Progress line plus current CDP browser reachability. `browser` is always boolean; changes are emitted without disturbing the current phase/detail. |
+| `screen` | `{jpeg, w, h, url, title}` or `{jpeg:null, reason}` | A throttled JPEG browser frame (base64), or the waiting state while no browser is reachable. |
 | `assistant` | `{text}` | The streaming reply. **Full replace** — each frame is the complete text so far, not a delta. |
 | `result` | `{reply, git, usage, …}` | Terminal success: the final reply plus git info (`changed`, `pushed`, `headSha`, `branch`) and `usage` (`cost_usd`, `duration_ms`, `context_tokens`, `context_pct` — approximate — and `model`). |
 | `error` | `{kind, detail}` | Terminal failure (`server_error`, `not_found`, `interrupted`, …). |
@@ -98,9 +100,16 @@ Over one job's stream you'll see:
   by normalized user-turn text, and the tail is refetched on re-expand, so a turn never renders twice
   and ordering stays canonical.
 
+Any site pipeline that launches Playwright can opt into the live view with the port the server injects
+into every agent spawn:
+
+```js
+args: process.env.AK_CDP_PORT ? ['--remote-debugging-port=' + process.env.AK_CDP_PORT] : []
+```
+
 ## Size budget
 
-The bar is meant to be a nearly-free addition to a page — currently ~21 KB gzip, with a hard 30 KB
+The bar is meant to be a nearly-free addition to a page — currently ~29.6 KB gzip, with a hard 30 KB
 gzip budget enforced by `build.mjs`: no runtime dependencies, no framework. Check the size `npm run
 build` prints if you add anything heavy.
 

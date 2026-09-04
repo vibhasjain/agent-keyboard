@@ -29,6 +29,7 @@ button::-moz-focus-inner{ border:0; }
 /* ---- bottom zone (keyboard-avoiding) ---- */
 .ak-zone, .ak-overlay{ font-family:var(--ak-mono); }
 .ak-zone{
+  position:relative;
   width:100%;
   display:block;
   padding:0 14px calc(10px + env(safe-area-inset-bottom,0px)) 14px;
@@ -37,7 +38,8 @@ button::-moz-focus-inner{ border:0; }
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
 .ak-zone{ pointer-events:none; }
-.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox, .ak-mini{ pointer-events:auto; }
+.ak-pill, .ak-composer, .ak-overlay, .ak-lightbox, .ak-mini,
+.ak-browser-indicator, .ak-screen-lightbox{ pointer-events:auto; }
 /* The corner box: whichever of the rectangle / streaming pill is showing, parked
    bottom-right. Nothing focusable lives down here any more — the composer and the
    auth forms are both in the transcript footer — so the zone never needs lifting
@@ -63,6 +65,8 @@ button::-moz-focus-inner{ border:0; }
 .ak-mini:active{ transform:scale(.98); }
 .ak-mini.done{ color:var(--ak-ok); border-color:rgba(109,211,150,.4); }
 .ak-mini.error{ color:var(--ak-err); border-color:rgba(249,112,102,.4); }
+.ak-mini.browser-live{ max-width:274px; padding-right:78px; }
+.ak-mini.browser-live .ak-mini-arrow{ display:none; }
 .ak-mini-glyph{
   flex:none; font-size:15px; line-height:1;
   filter:drop-shadow(0 0 6px rgba(255,184,107,.5));
@@ -91,6 +95,33 @@ button::-moz-focus-inner{ border:0; }
 }
 @keyframes ak-pop{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
 .ak-pill.thinking{ border-color:rgba(183,148,246,.5); box-shadow:0 8px 30px rgba(149,113,233,.18); }
+.ak-pill.browser-live{ width:274px; padding-right:78px; }
+
+/* ---- live browser indicator: inset into the corner surface + transcript top ---- */
+.ak-browser-indicator{
+  height:24px; padding:0 7px; border:0; border-radius:7px; background:rgba(10,10,10,.72);
+  color:var(--ak-ink3); cursor:pointer; display:flex; align-items:center; gap:6px;
+  font-family:var(--ak-mono); font-size:9.5px; line-height:1; letter-spacing:.035em;
+  transition:color .16s ease, background .16s ease;
+}
+.ak-browser-indicator:hover{ color:var(--ak-ink2); background:rgba(255,184,107,.08); }
+.ak-browser-indicator:focus-visible{ outline:1px solid rgba(255,184,107,.72); outline-offset:2px; }
+.ak-browser-dot{
+  flex:none; width:6px; height:6px; border-radius:50%; background:var(--ak-amber);
+  box-shadow:0 0 8px rgba(255,184,107,.7); animation:ak-browser-pulse 1.6s ease-in-out infinite;
+}
+@keyframes ak-browser-pulse{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:.45; transform:scale(.78); } }
+.ak-browser-label{ white-space:nowrap; }
+.ak-browser-corner{
+  position:absolute; z-index:2;
+  right:21px; bottom:calc(20px + env(safe-area-inset-bottom,0px));
+}
+.ak-browser-header{
+  position:absolute; z-index:3; left:50%; transform:translateX(-50%);
+  top:calc(13px + env(safe-area-inset-top,0px) + var(--ak-vvt,0px));
+  border:1px solid var(--ak-rule); background:rgba(10,10,10,.78);
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+}
 
 /* shimmer sweep on the streaming pill */
 .ak-shimmer{
@@ -401,6 +432,31 @@ button::-moz-focus-inner{ border:0; }
   touch-action:none; overscroll-behavior:contain; /* tap-to-dismiss is the ONLY gesture */
 }
 .ak-lightbox img{ max-width:94vw; max-height:90vh; border-radius:8px; display:block; }
+.ak-screen-lightbox{
+  position:fixed; inset:0; z-index:7; background:rgba(0,0,0,.88); color:var(--ak-ink);
+  display:flex; align-items:center; justify-content:center;
+  touch-action:none; overscroll-behavior:contain; animation:ak-fade .15s ease;
+}
+.ak-screen-card{ display:flex; flex-direction:column; align-items:center; max-width:90vw; }
+.ak-screen-image{
+  display:block; max-width:90vw; max-height:80vh; width:auto; height:auto; object-fit:contain;
+  border:1px solid var(--ak-rule); border-radius:8px; background:var(--ak-bg2);
+  box-shadow:0 18px 70px rgba(0,0,0,.65); pointer-events:none; user-select:none;
+  -webkit-user-drag:none;
+}
+.ak-screen-meta, .ak-screen-wait{
+  max-width:90vw; margin-top:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  font-family:var(--ak-mono); font-size:10.5px; line-height:1.4; color:var(--ak-ink3);
+}
+.ak-screen-wait{ margin-top:0; color:var(--ak-ink2); }
+.ak-screen-close{
+  position:absolute; top:calc(12px + env(safe-area-inset-top,0px) + var(--ak-vvt,0px)); right:14px;
+  width:36px; height:36px; border:1px solid var(--ak-rule); border-radius:50%;
+  background:rgba(10,10,10,.72); color:var(--ak-ink2); cursor:pointer;
+  display:flex; align-items:center; justify-content:center; line-height:0;
+}
+.ak-screen-close:hover{ color:var(--ak-amber); }
+.ak-screen-close:focus-visible{ outline:1px solid rgba(255,184,107,.72); outline-offset:2px; }
 .ak-t-attach{ display:flex; align-items:center; gap:5px; color:var(--ak-ink3); font-size:11px; margin:1px 0 5px; }
 .ak-divider{ color:var(--ak-ink3); font-size:11px; letter-spacing:.06em; margin:16px 0 16px 22px; }
 .ak-empty{
@@ -461,7 +517,7 @@ button::-moz-focus-inner{ border:0; }
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
-  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph{ animation:none !important; }
+  .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph, .ak-browser-dot{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
   /* Zero durations make the panel cut instead of slide, and setPanelOpen reads
      --panel-close-dur back, so it also stops deferring the display:none. */

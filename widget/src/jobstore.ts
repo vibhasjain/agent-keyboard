@@ -23,10 +23,16 @@ const MAX_SESSION_MS = 70 * 60_000 // server session cap (1h) + buffer
 const MAX_REATTACH_FAILS = 12
 let totalReattachFails = 0
 
-interface Persisted {
+interface PersistedJob {
   jobId: string
   startedAt: number
   prompt: string
+}
+
+interface Persisted extends PersistedJob {
+  // Already-submitted server jobs waiting behind the active executor. They stay
+  // visible in the existing queue and are attached later, never POSTed twice.
+  queued?: PersistedJob[]
 }
 
 // -- controller state (module singleton) --------------------------------------
@@ -47,6 +53,8 @@ let doneTimer: ReturnType<typeof setTimeout> | null = null
 // Bumped every start / rehydrate; stale async handlers compare against it and bail.
 let generation = 0
 let restartInFlight = false
+let discovering = false
+let lastStatusSignature = ''
 
 // Streaming session (M2/M3): when the active job is a long-lived session, a
 // `result` frame is a TURN boundary (not the end), and follow-ups are injected
@@ -169,7 +177,15 @@ export async function stop(): Promise<void> {
 
 // Messages sent while a job is running queue client-side (like Claude Code)
 // and dispatch as soon as the current job reaches a terminal state.
-type QueuedInput = { text: string; attachmentIds?: string[]; page?: string; thumbs?: string[]; files?: string[]; idemKey?: string }
+type QueuedInput = {
+  text: string
+  attachmentIds?: string[]
+  page?: string
+  thumbs?: string[]
+  files?: string[]
+  idemKey?: string
+  serverJob?: PersistedJob
+}
 const queue: QueuedInput[] = []
 
 export function getQueued(): readonly QueuedInput[] {
@@ -179,7 +195,14 @@ export function getQueued(): readonly QueuedInput[] {
 function dispatchQueue(): void {
   if (restartInFlight) return
   const next = queue.shift()
-  if (next) setTimeout(() => start(next), 50)
+  if (!next) return
+  if (next.serverJob) {
+    // This job already exists server-side. Attach in this same turn so there is
+    // no reload-sized gap between clearing the finished executor and persisting it.
+    attachToRunningJob(next.serverJob)
+    return
+  }
+  setTimeout(() => start(next), 50)
 }
 
 // -- durable outbox -------------------------------------------------------------
@@ -272,7 +295,11 @@ const PHASE_LABEL: Record<string, string> = {
 function persist(): void {
   if (!jobId) return
   try {
-    localStorage.setItem(lsKey('active-job'), JSON.stringify({ jobId, startedAt, prompt } satisfies Persisted))
+    const queued = queue.flatMap((item) => (item.serverJob ? [item.serverJob] : []))
+    localStorage.setItem(
+      lsKey('active-job'),
+      JSON.stringify({ jobId, startedAt, prompt, ...(queued.length ? { queued } : {}) } satisfies Persisted),
+    )
     localStorage.setItem(lsKey('last-job-at'), String(Date.now())) // activity flag for boot-time discovery
   } catch {
     /* storage blocked */
@@ -341,6 +368,7 @@ interface StreamPatch {
   fullText?: string
   todos?: TodoItem[]
   subagents?: Subagent[]
+  browser?: boolean
   idle?: boolean
   disconnected?: boolean
 }
@@ -358,6 +386,7 @@ function setStreaming(patch: StreamPatch): void {
     fullText: patch.fullText ?? prev?.fullText ?? '',
     todos: patch.todos ?? prev?.todos,
     subagents: patch.subagents ?? prev?.subagents,
+    browser: patch.browser ?? prev?.browser,
     // Any streaming frame that isn't a turn-complete means work is happening, so
     // idle defaults false — only onTurnComplete (nothing queued) sets it true.
     idle: patch.idle ?? false,
@@ -389,6 +418,7 @@ function onFrame(name: string, data: Record<string, unknown>): void {
       jobId = data.job_id
       sessionStreaming = data.streaming === true
       jobFinished = data.status === 'done' || data.status === 'error' || data.status === 'interrupted'
+      lastStatusSignature = ''
       if (!startedAt) startedAt = Date.now()
       persist() // fire-and-forget guarantee: persist BEFORE we show streaming
       outboxRemove(activeIdemKey) // the durable active-job key owns recovery now
@@ -401,7 +431,31 @@ function onFrame(name: string, data: Record<string, unknown>): void {
     case 'status': {
       const phase = String(data.phase ?? '')
       const detail = String(data.detail ?? '') || PHASE_LABEL[phase] || 'Working'
-      setStreaming({ line: detail, lineState: lineStateFor(phase) })
+      const signature = `${phase}\u0000${detail}`
+      const browser = typeof data.browser === 'boolean' ? data.browser : undefined
+      const cur = getState().job
+      // Browser reachability changes republish the current server status line.
+      // If that line is unchanged, update the orthogonal flag without rewinding
+      // a newer assistant ticker or waking an idle streaming session.
+      if (
+        signature === lastStatusSignature &&
+        cur.phase === 'streaming' &&
+        browser !== undefined &&
+        browser !== cur.browser
+      ) {
+        setStreaming({
+          line: cur.line,
+          lineState: cur.lineState,
+          fullText: cur.fullText,
+          todos: cur.todos,
+          subagents: cur.subagents,
+          idle: cur.idle,
+          browser,
+        })
+      } else {
+        lastStatusSignature = signature
+        setStreaming({ line: detail, lineState: lineStateFor(phase), browser })
+      }
       break
     }
     case 'assistant': {
@@ -586,6 +640,7 @@ function reset(): void {
   attempt = 0
   totalReattachFails = 0
   sessionStreaming = false
+  lastStatusSignature = ''
   pendingUserTexts = []
   subagentStartedAt.clear()
   clearTimers()
@@ -769,7 +824,7 @@ export function start(input: {
   idemKey?: string
 }): void {
   sendEpoch++ // let the transcript force-scroll to this send
-  if (isBusy()) {
+  if (discovering || isBusy()) {
     // Live streaming session → inject the follow-up into the running job rather
     // than queuing a fresh one. Text-only (the append endpoint takes no files).
     if (sessionStreaming && jobId && input.text.trim() && !input.attachmentIds?.length) {
@@ -800,7 +855,7 @@ export function start(input: {
       ts: Date.now(),
     })
     const j = getState().job
-    if (j.phase === 'streaming' || j.phase === 'sending') setJob({ ...j }) // nudge subscribers to render the queue
+    setJob({ ...j }) // nudge subscribers to render the queue, including during boot discovery
     return
   }
   bindWake()
@@ -887,6 +942,7 @@ function restoreOutbox(): void {
   if (!items.length) return
   items.sort((a, b) => Number(!!b.inFlight) - Number(!!a.inFlight) || a.ts - b.ts)
   for (const it of items) {
+    if (queue.some((queued) => queued.idemKey === it.idemKey)) continue
     start({ text: it.text, attachmentIds: it.attachmentIds, page: it.page, idemKey: it.idemKey })
   }
 }
@@ -915,37 +971,114 @@ function attachToRunningJob(job: { jobId: string; startedAt: number; prompt: str
   reattach(gen, true)
 }
 
-/** Attach to a running job this device doesn't know about (cleared storage,
+function rowPhase(row: { status_line?: Record<string, unknown> | string | null }): string {
+  if (typeof row.status_line === 'string') return row.status_line
+  return String(row.status_line?.phase ?? '')
+}
+
+function queuedLike(row: Awaited<ReturnType<typeof api.listJobs>>['jobs'][number]): boolean {
+  return row.status === 'queued' || (row.status === 'running' && rowPhase(row) === 'queued')
+}
+
+function preferredActiveJob(
+  jobs: Awaited<ReturnType<typeof api.listJobs>>['jobs'],
+  handled: Set<string>,
+): Awaited<ReturnType<typeof api.listJobs>>['jobs'][number] | undefined {
+  const active = jobs.filter((row) =>
+    (row.status === 'running' || row.status === 'queued') &&
+    !!row.job_id &&
+    !handled.has(row.job_id),
+  )
+  const running = active
+    .filter((row) => row.status === 'running' && rowPhase(row) !== 'queued')
+    .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
+  const queued = active
+    .filter(queuedLike)
+    .sort((a, b) =>
+      (Number(b.priority) || 0) - (Number(a.priority) || 0) ||
+      String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')),
+    )
+  return running[0] ?? queued[0]
+}
+
+function queueServerJob(saved: PersistedJob): void {
+  if (saved.jobId === jobId || queue.some((item) => item.serverJob?.jobId === saved.jobId)) return
+  queue.push({ text: saved.prompt || 'Queued request', page: location.pathname, serverJob: saved })
+}
+
+function savedJobs(saved: Persisted): PersistedJob[] {
+  return [saved, ...(Array.isArray(saved.queued) ? saved.queued : [])].filter(
+    (item) => item && typeof item.jobId === 'string' && !!item.jobId,
+  )
+}
+
+/** Attach to an active job this device doesn't know about (cleared storage,
  *  another device, a lost active-job key). Registry + a 10-min finished window
  *  come back from GET /jobs; the handled ledger filters out jobs this device
  *  already saw complete. No-ops unless idle. Errors are swallowed — discovery
  *  is best-effort. */
-export async function discoverJobs(): Promise<void> {
-  if (getState().job.phase !== 'idle') return
+export async function discoverJobs(saved?: Persisted): Promise<void> {
+  if (getState().job.phase !== 'idle' || discovering) return
   if (!hasStoredSession()) return
-  let jobs: Awaited<ReturnType<typeof api.listJobs>>['jobs']
+  discovering = true
   try {
-    jobs = (await api.listJobs(CONFIG.site)).jobs || []
-  } catch {
-    return
+    let jobs: Awaited<ReturnType<typeof api.listJobs>>['jobs']
+    try {
+      jobs = (await api.listJobs(CONFIG.site)).jobs || []
+    } catch {
+      // The list probe is best-effort. A persisted id can still re-attach directly
+      // when job persistence is unavailable or the probe had a network blip.
+      if (saved && getState().job.phase === 'idle') {
+        for (const queued of saved.queued ?? []) queueServerJob(queued)
+        attachToRunningJob(saved)
+      }
+      return
+    }
+    if (getState().job.phase !== 'idle') return
+    const handled = readHandled()
+    const row = preferredActiveJob(jobs, handled)
+    if (!row) {
+      if (saved) clearPersist()
+      return
+    }
+    const persisted = saved ? savedJobs(saved) : []
+    const persistedById = new Map(persisted.map((item) => [item.jobId, item]))
+    const queuedRows = jobs
+      .filter((candidate) =>
+        candidate.job_id !== row.job_id &&
+        !!candidate.job_id &&
+        !handled.has(candidate.job_id) &&
+        queuedLike(candidate),
+      )
+      .sort((a, b) =>
+        (Number(b.priority) || 0) - (Number(a.priority) || 0) ||
+        String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')),
+      )
+    for (const serverRow of queuedRows) {
+      queueServerJob(persistedById.get(serverRow.job_id) ?? {
+        jobId: serverRow.job_id,
+        startedAt: (serverRow.created_at && Date.parse(serverRow.created_at)) || Date.now(),
+        prompt: '',
+      })
+    }
+    // Note: if this device also holds an in-flight outbox entry for the SAME job
+    // (job frame lost pre-persist, then reload), the entry re-queues and later
+    // re-POSTs its idemKey — the server re-tails the finished job rather than
+    // re-running it, and the transcript reconciles the duplicate. Redundant but
+    // harmless; matching the entry to the discovered job isn't possible client-side.
+    attachToRunningJob({
+      jobId: row.job_id,
+      startedAt: (row.created_at && Date.parse(row.created_at)) || Date.now(),
+      prompt: persistedById.get(row.job_id)?.prompt ?? '',
+    })
+  } finally {
+    discovering = false
+    // A send that arrived during the adoption probe was queued, not raced into
+    // a second POST. Reconcile durable sends first; if no server job won, release
+    // the first queued input now and let normal terminal handling drain the rest.
+    restoreOutbox()
+    if (!isBusy()) dispatchQueue()
   }
-  if (getState().job.phase !== 'idle') return // a send raced the fetch
-  const handled = readHandled()
-  const running = jobs
-    .filter((j) => j.status === 'running' && j.job_id && !handled.has(j.job_id))
-    .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? '')))
-  const row = running[0]
-  if (!row) return
-  // Note: if this device also holds an in-flight outbox entry for the SAME job
-  // (job frame lost pre-persist, then reload), the entry re-queues and later
-  // re-POSTs its idemKey — the server re-tails the finished job rather than
-  // re-running it, and the transcript reconciles the duplicate. Redundant but
-  // harmless; matching the entry to the discovered job isn't possible client-side.
-  attachToRunningJob({
-    jobId: row.job_id,
-    startedAt: (row.created_at && Date.parse(row.created_at)) || Date.now(),
-    prompt: '', // unknown here — finishDone skips the live turn; history renders it
-  })
 }
 
 /** Boot policy: zero network unless there's evidence of prior activity — a
@@ -955,8 +1088,9 @@ export function bootRehydrate(): void {
   if (!hasStoredSession()) return
   const saved = readPersist()
   if (saved) {
-    attachToRunningJob({ jobId: saved.jobId, startedAt: saved.startedAt, prompt: saved.prompt || '' })
-    restoreOutbox()
+    // The saved id may be a queued placeholder. Probe all active rows first so
+    // the true executor wins, while retaining the submitted queued job below it.
+    void discoverJobs(saved)
     return
   }
   let lastJobAt = 0
@@ -969,7 +1103,7 @@ export function bootRehydrate(): void {
     // Discovery must settle BEFORE the outbox restore: restore's start() would
     // see phase idle mid-fetch, fire as a fresh send, and make discovery bail —
     // losing the re-attach to the genuinely running job.
-    void discoverJobs().finally(() => restoreOutbox())
+    void discoverJobs()
   } else {
     restoreOutbox()
   }
