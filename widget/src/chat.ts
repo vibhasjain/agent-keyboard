@@ -293,12 +293,47 @@ function markAnsweredOptions(node: HTMLElement, answer: string | undefined): voi
   }
 }
 
+function toolLine(text: string, detail = false): HTMLElement {
+  return lineEl(`tool${detail ? ' ak-tool-detail' : ''}`, '●', el('div', undefined, (n) => (n.textContent = text)))
+}
+
+function toolRun(raw: unknown[]): HTMLElement {
+  const tools = raw.map(String).filter(Boolean)
+  const wrap = el('div')
+  if (tools.length < 3) {
+    for (const tool of tools) wrap.appendChild(toolLine(tool))
+    return wrap
+  }
+
+  const group = el('details', 'ak-tool-group')
+  const summary = el('summary', 'ak-t tool ak-tool-summary')
+  const chevron = el('span', 'ak-t-mark ak-tool-chevron')
+  chevron.appendChild(icon('chevron-down', 11))
+  const label = el('div', 'ak-t-body ak-tool-summary-label', (n) => {
+    n.textContent = `ran ${tools.length} commands · last: ${tools[tools.length - 1]}`
+  })
+  summary.append(chevron, label)
+  group.appendChild(summary)
+  for (const tool of tools) group.appendChild(toolLine(tool, true))
+  wrap.appendChild(group)
+  return wrap
+}
+
 function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
   if (m.role === 'system') return dividerEl(m.text)
   const tools = Array.isArray(m.tools) ? (m.tools as unknown[]).map(String).filter(Boolean) : []
+  if (m.role === 'assistant' && m.parts?.length) {
+    const wrap = el('div')
+    for (const part of m.parts) {
+      if (part.type === 'tools' && part.tools.length) wrap.appendChild(toolRun(part.tools))
+      else if (part.type === 'text' && part.text) wrap.appendChild(msgEl('assistant', part.text))
+    }
+    markAnsweredOptions(wrap, m.chosenOption ?? answer)
+    return wrap
+  }
   if (m.role === 'assistant' && tools.length) {
     const wrap = el('div')
-    for (const t of tools) wrap.appendChild(lineEl('tool', '●', el('div', undefined, (n) => (n.textContent = t))))
+    wrap.appendChild(toolRun(tools))
     if (m.text) wrap.appendChild(msgEl('assistant', m.text))
     markAnsweredOptions(wrap, m.chosenOption ?? answer)
     return wrap

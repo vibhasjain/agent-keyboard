@@ -193,6 +193,7 @@ const server = createServer(async (req, res) => {
       html = html.replace('data-api="http://localhost:8098"', `data-api="http://localhost:${PORT}"`)
       // ?guest arms the signed-out scripted tour without a second host page.
       if (u.searchParams.has('guest')) html = html.replace('data-site="halo"', 'data-site="halo" data-guest-demo')
+      if (u.searchParams.has('transcript-qa')) html = html.replace('data-site="halo"', 'data-site="transcript-qa"')
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Access-Control-Allow-Origin': '*' })
       res.end(html)
     } catch {
@@ -316,6 +317,30 @@ const server = createServer(async (req, res) => {
   if (m && req.method === 'GET') {
     const site = decodeURIComponent(m[1])
     if (clearedSites.has(site)) return json(res, 200, { messages: [], cursor: null })
+    if (site === 'transcript-qa') {
+      const commands = Array.from({ length: 59 }, (_, i) => `$ node cloud/feed.mjs --page ${i + 1}`)
+      commands.push('$ node cloud/feed.mjs')
+      return json(res, 200, {
+        messages: [
+          { id: 'qa1', role: 'user', text: 'run the full feed', ts: Date.now() - 5000 },
+          { id: 'qa2', role: 'assistant', text: 'Bulk command run finished.', tools: commands, ts: Date.now() - 4000 },
+          { id: 'qa3', role: 'user', text: 'check the mixed sequence', ts: Date.now() - 3000 },
+          {
+            id: 'qa4',
+            role: 'assistant',
+            text: 'Mixed sequence marker.',
+            tools: ['$ git status --short', 'edited widget/src/chat.ts', '$ npm run check', '$ npm run build'],
+            parts: [
+              { type: 'tools', tools: ['$ git status --short', 'edited widget/src/chat.ts'] },
+              { type: 'text', text: 'Mixed sequence marker.' },
+              { type: 'tools', tools: ['$ npm run check', '$ npm run build'] },
+            ],
+            ts: Date.now() - 2000,
+          },
+        ],
+        cursor: null,
+      })
+    }
     return json(res, 200, {
       messages: [
         { id: 'h1', role: 'user', text: 'make the footer say 2026', ts: Date.now() - 90000 },

@@ -395,6 +395,16 @@ button::-moz-focus-inner{ border:0; }
 .ak-t.error .ak-t-mark{ color:var(--ak-err); }
 .ak-t.tool{ color:var(--ak-ink2); margin-bottom:4px; }
 .ak-t.tool .ak-t-mark{ color:var(--ak-ok); }
+.ak-tool-summary{
+  list-style:none; cursor:pointer; color:var(--ak-ink3) !important;
+}
+.ak-tool-summary::-webkit-details-marker{ display:none; }
+.ak-tool-summary .ak-t-mark{ color:var(--ak-ink3); }
+.ak-tool-summary:focus-visible{ outline:1px solid rgba(255,184,107,.72); outline-offset:2px; }
+.ak-tool-chevron{ display:flex; align-items:center; justify-content:center; }
+.ak-tool-chevron svg{ transform:rotate(-90deg); transition:transform .16s ease; }
+.ak-tool-group:not([open]) > .ak-tool-detail{ display:none; }
+.ak-tool-group[open] .ak-tool-chevron svg{ transform:none; }
 .ak-t.live{ color:var(--ak-amber); }
 .ak-t.live .ak-t-body{ color:var(--ak-amber); }
 .ak-t-star{ color:var(--ak-amber); animation:ak-star 1.2s ease-in-out infinite; }
@@ -513,12 +523,14 @@ button::-moz-focus-inner{ border:0; }
 @media (pointer:coarse){
   .ak-opt{ min-height:44px; padding:10px 12px; }
   .ak-menu-item{ min-height:44px; }
+  .ak-tool-summary{ min-height:44px; align-items:center; }
 }
 
 /* ---- reduced motion ---- */
 @media (prefers-reduced-motion: reduce){
   .ak-shimmer, .ak-mic.live::after, .ak-mini-glyph, .ak-browser-dot{ animation:none !important; }
   .ak-line{ transition:opacity .2s ease !important; }
+  .ak-tool-chevron svg{ transition:none; }
   /* Zero durations make the panel cut instead of slide, and setPanelOpen reads
      --panel-close-dur back, so it also stops deferring the display:none. */
   :host{ --panel-open-dur:0ms; --panel-close-dur:0ms; --panel-translate-y:0px; --panel-blur:0px; }

@@ -9,12 +9,18 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { sessionIdFor, conversationIdFor, CLAUDE_HOME } from "./claude.js";
 import { checkoutPath } from "./checkouts.js";
+import { toolLabel } from "./tool-label.js";
+
+export type ChatPart = { type: "text"; text: string } | { type: "tools"; tools: string[] };
 
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant" | "system";
   text: string;
   tools: string[];
+  // Ordered assistant content. `text` + `tools` stay above for older widgets;
+  // this preserves tool → text → tool boundaries for current ones.
+  parts?: ChatPart[];
   ts: string | null;
   // Only set on system dividers (e.g. "compact") so the widget can render them
   // specially; user/assistant messages omit it.
@@ -98,39 +104,33 @@ function userText(content: unknown): string | null {
   return null;
 }
 
-function friendlyTool(b: any): string {
-  if (b.name === "Bash") return "ran a command";
-  if (b.name === "Read") return "read a file";
-  if (b.name === "Write" || b.name === "Edit" || b.name === "MultiEdit") return "edited a file";
-  if (b.name === "Grep" || b.name === "Glob") return "searched the code";
-  return String(b.name ?? "tool");
+function pushPart(parts: ChatPart[], part: ChatPart, textSeparator = ""): void {
+  const prev = parts[parts.length - 1];
+  if (prev?.type === "text" && part.type === "text") {
+    prev.text += textSeparator + part.text;
+  } else if (prev?.type === "tools" && part.type === "tools") {
+    prev.tools.push(...part.tools);
+  } else {
+    parts.push(part.type === "text" ? { ...part } : { type: "tools", tools: [...part.tools] });
+  }
 }
 
-/**
- * Parse the session into normalized chat messages, oldest→newest. Returns the
- * newest `limit` messages plus a `cursor` (count of older messages not yet
- * returned) for scroll-to-top lazy loading. `before` = how many newest messages
- * to skip (the cursor handed back last time), so paging walks backward.
- */
-export async function readConversation(
-  siteId: string,
-  opts: { limit?: number; before?: number; pageSlug?: string } = {},
-): Promise<{ messages: ChatMessage[]; cursor: number }> {
-  const limit = Math.max(1, Math.min(opts.limit ?? 40, 200));
-  const before = Math.max(0, opts.before ?? 0);
-
-  const conversationId = await conversationIdFor(siteId, opts.pageSlug ?? "");
-  const sessionId = sessionIdFor(conversationId);
-  const path = await sessionFilePath(sessionId, checkoutPath(siteId));
-  if (!path) return { messages: [], cursor: 0 };
-
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf8");
-  } catch {
-    return { messages: [], cursor: 0 };
+function assistantParts(content: any[], checkoutRoot: string): ChatPart[] {
+  const parts: ChatPart[] = [];
+  for (const block of content) {
+    if (block?.type === "text") {
+      const text = String(block.text ?? "");
+      if (text.trim()) pushPart(parts, { type: "text", text });
+    } else if (block?.type === "tool_use") {
+      pushPart(parts, { type: "tools", tools: [toolLabel(block, checkoutRoot)] });
+    }
   }
+  for (const part of parts) if (part.type === "text") part.text = part.text.trim();
+  return parts;
+}
 
+/** Normalize one durable session JSONL into ordered transcript messages. */
+export function parseConversation(raw: string, checkoutRoot: string): ChatMessage[] {
   const all: ChatMessage[] = [];
   let idx = 0;
   for (const line of raw.split("\n")) {
@@ -172,26 +172,26 @@ export async function readConversation(
         idx++;
         continue;
       }
+      const parts = assistantParts(content, checkoutRoot);
       const text = content
-        .filter((b: any) => b?.type === "text")
-        .map((b: any) => String(b.text ?? ""))
+        .filter((block: any) => block?.type === "text")
+        .map((block: any) => String(block.text ?? ""))
         .join("")
         .trim();
-      const tools = content
-        .filter((b: any) => b?.type === "tool_use")
-        .map((b: any) => friendlyTool(b));
-      if (!text && tools.length === 0) {
+      const tools = parts.flatMap((part) => (part.type === "tools" ? part.tools : []));
+      if (!parts.length) {
         idx++;
         continue;
       }
-      // Coalesce consecutive assistant events (tool_use → text → …) into one bubble.
+      // Coalesce one assistant turn without throwing away tool/text order.
       const prev = all[all.length - 1];
       if (prev && prev.role === "assistant") {
         prev.text = [prev.text, text].filter(Boolean).join("\n\n");
         prev.tools.push(...tools);
+        for (const part of parts) pushPart(prev.parts ??= [], part, "\n\n");
         prev.ts = ts ?? prev.ts;
       } else {
-        all.push({ id: o.uuid ?? `a${idx}`, role: "assistant", text, tools, ts });
+        all.push({ id: o.uuid ?? `a${idx}`, role: "assistant", text, tools, parts, ts });
       }
     } else if (o.type === "system" && o.subtype === "compact_boundary") {
       // Expose the compaction boundary — the widget renders it as a divider.
@@ -199,6 +199,36 @@ export async function readConversation(
     }
     idx++;
   }
+  return all;
+}
+
+/**
+ * Parse the session into normalized chat messages, oldest→newest. Returns the
+ * newest `limit` messages plus a `cursor` (count of older messages not yet
+ * returned) for scroll-to-top lazy loading. `before` = how many newest messages
+ * to skip (the cursor handed back last time), so paging walks backward.
+ */
+export async function readConversation(
+  siteId: string,
+  opts: { limit?: number; before?: number; pageSlug?: string } = {},
+): Promise<{ messages: ChatMessage[]; cursor: number }> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 40, 200));
+  const before = Math.max(0, opts.before ?? 0);
+
+  const conversationId = await conversationIdFor(siteId, opts.pageSlug ?? "");
+  const sessionId = sessionIdFor(conversationId);
+  const checkoutRoot = checkoutPath(siteId);
+  const path = await sessionFilePath(sessionId, checkoutRoot);
+  if (!path) return { messages: [], cursor: 0 };
+
+  let raw: string;
+  try {
+    raw = await readFile(path, "utf8");
+  } catch {
+    return { messages: [], cursor: 0 };
+  }
+
+  const all = parseConversation(raw, checkoutRoot);
 
   // Newest-last array. Page from the end: skip `before` newest, take `limit`.
   const end = all.length - before;

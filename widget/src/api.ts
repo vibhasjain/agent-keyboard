@@ -125,6 +125,8 @@ export interface GitInfo {
   dirty?: boolean
 }
 
+export type ConversationPart = { type: 'text'; text: string } | { type: 'tools'; tools: string[] }
+
 export interface ConversationMessage {
   id: string
   // 'system' + kind:'compact' marks an auto-compaction point (the Claude session
@@ -133,6 +135,8 @@ export interface ConversationMessage {
   kind?: 'compact'
   text: string
   tools?: unknown
+  /** Ordered assistant content; absent on older servers and client-only demo turns. */
+  parts?: ConversationPart[]
   attachments?: number
   photos?: number
   // Who typed a user turn (email). Absent on turns from before sender tagging

@@ -45,6 +45,7 @@ import {
   type TurnUsage,
 } from "./harness.js";
 import { sessionFilePath } from "./conversation.js";
+import { toolLabel } from "./tool-label.js";
 import { readFile } from "node:fs/promises";
 
 // NaN-guarded env int: a malformed value must not become setTimeout(fn, NaN)
@@ -345,50 +346,6 @@ interface ClaudeResult {
   duration_ms?: number;
 }
 
-/** Compact one-line label for a tool_use block (the live activity line). */
-function condenseToolUse(b: any): string {
-  const name = String(b?.name ?? "working");
-  const inp = b?.input ?? {};
-  const base = (p: unknown) => {
-    const s = String(p ?? "");
-    return s.split("/").pop() || s;
-  };
-  switch (name) {
-    case "Bash": {
-      const cmd = String(inp.command ?? "").replace(/\s+/g, " ").trim();
-      return "$ " + (cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd);
-    }
-    case "Edit":
-    case "MultiEdit":
-    case "Write":
-      return "editing " + base(inp.file_path);
-    case "Read":
-      return "reading " + base(inp.file_path);
-    case "Grep":
-      return "searching for " + String(inp.pattern ?? "").slice(0, 40);
-    case "Glob":
-      return "finding " + String(inp.pattern ?? "");
-    case "WebFetch":
-      return "fetching " + base(inp.url);
-    case "WebSearch":
-      return "searching the web";
-    // This CLI's task-list tools (2.1.205). Legacy TodoWrite kept for older CLIs.
-    case "TodoWrite":
-    case "TaskCreate":
-    case "TaskUpdate":
-    case "TaskList":
-      return "planning";
-    // Sub-agents spawn via `Agent` on this CLI (`Task` on older ones).
-    case "Task":
-    case "Agent": {
-      const desc = String(inp.description ?? inp.subagent_type ?? "a subagent").replace(/\s+/g, " ").trim();
-      return "delegating: " + (desc.length > 60 ? desc.slice(0, 60) + "…" : desc);
-    }
-    default:
-      return name.toLowerCase();
-  }
-}
-
 // Every live CLI child, so SIGTERM/SIGINT can hard-kill them on shutdown.
 const activeChildren = new Set<ChildProcess>();
 export function killAllChildren(): void {
@@ -469,7 +426,7 @@ function makeSubagentTracker(): (e: LowEvent) => { id: string; desc: string }[] 
  *  - assistant snapshot: tool_use blocks → { tool }, text blocks → { snapshotText }
  *  - result line → result
  */
-export function parseStreamLine(line: string): { events: LowEvent[]; result?: ClaudeResult } {
+export function parseStreamLine(line: string, checkoutRoot?: string): { events: LowEvent[]; result?: ClaudeResult } {
   const out: { events: LowEvent[]; result?: ClaudeResult } = { events: [] };
   const t = line.trim();
   if (!t) return out;
@@ -520,7 +477,7 @@ export function parseStreamLine(line: string): { events: LowEvent[]; result?: Cl
           const desc = String(b.input?.description ?? b.input?.subagent_type ?? "sub-agent").replace(/\s+/g, " ").trim().slice(0, 80);
           taskOps.push({ t: "subagentStart", id: String(b.id), desc });
         }
-        tools.push(condenseToolUse(b));
+        tools.push(toolLabel(b, checkoutRoot));
       } else if (b?.type === "text") msgText += String(b.text ?? "");
     }
     // Emit this message's text BEFORE its tool_use(s), so the spawn loop can
@@ -636,7 +593,7 @@ function spawnClaude(
       stderr += d.toString();
     });
     rl.on("line", (line) => {
-      const { events, result: r } = parseStreamLine(line);
+      const { events, result: r } = parseStreamLine(line, cwd);
       if (r) result = r;
       for (const e of events) onEvent(e);
     });

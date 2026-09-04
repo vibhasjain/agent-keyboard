@@ -10,6 +10,9 @@
 
 import assert from "node:assert/strict";
 import { parseStreamLine, type LowEvent } from "../claude.js";
+import { parseConversation } from "../conversation.js";
+
+const CHECKOUT = "/data/checkouts/blog";
 
 // ── synthesize a realistic stream-json transcript (one turn) ──────────────
 const delta = (text: string) =>
@@ -48,7 +51,7 @@ let result: { result?: string; is_error?: boolean; total_cost_usd?: number; dura
 const best = () => (streamed.length >= snapshot.length ? streamed : snapshot);
 
 for (const line of lines) {
-  const { events, result: r } = parseStreamLine(line);
+  const { events, result: r } = parseStreamLine(line, CHECKOUT);
   if (r) result = r;
   for (const e of events as LowEvent[]) {
     if (e.t === "delta") streamed += e.text;
@@ -66,7 +69,7 @@ assert.equal(best(), "Done — changed the header accent to navy and pushed.", "
 
 assert.deepEqual(
   tools,
-  ["$ git status --porcelain", "editing index.html", "reading styles.css", "searching for --accent"],
+  ["$ git status --porcelain", "edited site/index.html", "read site/styles.css", "Grep --accent"],
   "tool_use blocks should condense to compact activity lines",
 );
 
@@ -106,14 +109,14 @@ assert.equal(parseStreamLine("{oops").result, undefined);
     ],
     "todos carry content+status; blank entries are dropped",
   );
-  assert.ok(events.some((e) => e.t === "tool" && e.detail === "planning"), "TodoWrite still emits the planning status");
+  assert.ok(events.some((e) => e.t === "tool" && e.detail === "TodoWrite"), "TodoWrite still emits a tool status");
 }
 
-// Task (subagent) → a compact "delegating: <description>" activity line.
+// Other tools keep their name and lead with the most useful scalar argument.
 {
   const { events } = parseStreamLine(assistantTool("Task", { description: "audit the styles", subagent_type: "Explore" }));
   assert.ok(
-    events.some((e) => e.t === "tool" && e.detail === "delegating: audit the styles"),
+    events.some((e) => e.t === "tool" && e.detail === "Task audit the styles"),
     "Task condenses to a delegating line",
   );
 }
@@ -128,7 +131,7 @@ assert.equal(parseStreamLine("{oops").result, undefined);
     created.events.some((e) => e.t === "taskCreate" && e.subject === "Do the thing"),
     "TaskCreate → taskCreate event",
   );
-  assert.ok(created.events.some((e) => e.t === "tool" && e.detail === "planning"), "TaskCreate → planning status");
+  assert.ok(created.events.some((e) => e.t === "tool" && e.detail === "TaskCreate Do the thing"), "TaskCreate → useful status");
 
   const updated = parseStreamLine(assistantTool("TaskUpdate", { taskId: "1", status: "in_progress" }));
   assert.ok(
@@ -138,9 +141,60 @@ assert.equal(parseStreamLine("{oops").result, undefined);
 
   const agent = parseStreamLine(assistantTool("Agent", { description: "audit the styles", subagent_type: "general-purpose" }));
   assert.ok(
-    agent.events.some((e) => e.t === "tool" && e.detail === "delegating: audit the styles"),
+    agent.events.some((e) => e.t === "tool" && e.detail === "Agent audit the styles"),
     "Agent → delegating line",
   );
+}
+
+// Bash labels expose only a bounded first line, and scan the full command before
+// exposing any of it so a secret-bearing second line cannot leak the safe first.
+{
+  const safe = parseStreamLine(assistantTool("Bash", { command: "node cloud/feed.mjs\necho ignored" }), CHECKOUT);
+  assert.ok(safe.events.some((e) => e.t === "tool" && e.detail === "$ node cloud/feed.mjs"), "Bash → first line");
+  const sensitive = parseStreamLine(assistantTool("Bash", { command: "echo safe\nexport API_KEY=fake" }), CHECKOUT);
+  assert.ok(sensitive.events.some((e) => e.t === "tool" && e.detail === "ran a command"), "secret-bearing Bash is generic");
+  const fetch = parseStreamLine(assistantTool("WebFetch", { url: "https://example.com/?token=fake" }), CHECKOUT);
+  assert.ok(fetch.events.some((e) => e.t === "tool" && e.detail === "WebFetch"), "secret-bearing tool args are generic");
+  const escaped = parseStreamLine(assistantTool("Read", { file_path: "..\\private\\credentials.txt" }), CHECKOUT);
+  assert.ok(escaped.events.some((e) => e.t === "tool" && e.detail === "read credentials.txt"), "outside paths show basename only");
+  const secretPath = parseStreamLine(assistantTool("Edit", { file_path: "cloud/token=fake.json" }), CHECKOUT);
+  assert.ok(secretPath.events.some((e) => e.t === "tool" && e.detail === "edited a file"), "secret-bearing paths are generic");
+}
+
+// Durable history keeps tool/text boundaries while retaining the legacy flat
+// fields. The widget uses these parts to collapse only truly consecutive tools.
+{
+  const history = parseConversation(
+    [
+      assistantTool("Bash", { command: "git status --short" }),
+      assistantTool("Edit", { file_path: `${CHECKOUT}/widget/src/chat.ts` }),
+      assistantText("Mixed sequence marker."),
+      assistantTool("Bash", { command: "npm run check" }),
+      assistantTool("Bash", { command: "npm run build" }),
+    ].join("\n"),
+    CHECKOUT,
+  );
+  assert.equal(history.length, 1, "one assistant turn stays one paged message");
+  assert.deepEqual(history[0]?.parts, [
+    { type: "tools", tools: ["$ git status --short", "edited widget/src/chat.ts"] },
+    { type: "text", text: "Mixed sequence marker." },
+    { type: "tools", tools: ["$ npm run check", "$ npm run build"] },
+  ]);
+
+  const compat = parseConversation(
+    JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "Before " },
+          { type: "tool_use", name: "Read", input: { file_path: "README.md" } },
+          { type: "text", text: " after" },
+        ],
+      },
+    }),
+    CHECKOUT,
+  );
+  assert.equal(compat[0]?.text, "Before  after", "legacy flat text keeps its original spacing");
 }
 
 // Sub-agent tracking: an Agent tool_use (with id) → subagentStart; the matching
