@@ -401,6 +401,7 @@ export function harnessNote(siteId: string, h: ResolvedHarness, usage: TurnUsage
     : "";
   const lines = [
     `Harness: model ${model}, effort ${effort}, permissions ${mode}${cron}${s.env && Object.keys(s.env).length ? `, env ${Object.keys(s.env).join(",")}` : ""}.` +
+      (cron ? " You OWN this schedule: to add, move, pause or remove a phase, edit the \"cron\" array in your settings.json (path above) — never say you can only change the runbook." : "") +
       (usage
         ? ` Context window: ~${usage.contextPct}% used as of the last turn (~${usage.contextTokens.toLocaleString("en-US")} of ${CONTEXT_WINDOW_TOKENS.toLocaleString("en-US")} tokens, approximate).`
         : ""),

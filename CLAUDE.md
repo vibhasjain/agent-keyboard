@@ -97,7 +97,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   per spawn by `server/src/harness.ts` (the KNOBS table — one entry per knob). For multi-phase
   schedules, `cron` is an array whose entries have unique `id` values. Skills ship in
   `server/skills/` (image-gen · verify-in-browser · provision-user · self-ops · frontend-design ·
-  ponytail) — committed to the repo, baked into the image, and seeded to `/data/.claude/skills` at
+  ponytail · tailscale) — committed to the repo, baked into the image, and seeded to `/data/.claude/skills` at
   boot, so **every fork/clone inherits them**; skills the agent installs at runtime live only on that
   instance's volume. Headless Chromium is baked into the image (`PLAYWRIGHT_BROWSERS_PATH=/ms-playwright`).
 
