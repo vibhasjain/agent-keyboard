@@ -31,5 +31,6 @@ async function bundle(entry, outfile, gzipBudgetKB) {
 // The shipped widget, and the marketing-site demo bundle (real components,
 // scripted fakes). The demo carries scene scripts + timeline so its budget is
 // looser; it never ships to a customer's page.
-await bundle('src/index.ts', 'dist/widget.js', 30)
+// 32: transcript tool lines (2026-09-04); Docker's zlib measures ~0.2 KB heavier than local.
+await bundle('src/index.ts', 'dist/widget.js', 32)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)

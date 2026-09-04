@@ -844,7 +844,12 @@ app.listen(port, () => {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-ak-internal": secret },
         body: JSON.stringify({
-          text: row.prompt,
+          // A scheduled phase that had already started gets told so: it must
+          // crash-recover (Gmail first) rather than assume a clean slate.
+          text:
+            /^\[scheduled/.test(row.prompt ?? "") && !["", "queued", "syncing"].includes(String(row.status_line?.phase ?? ""))
+              ? `[resumed after a server restart at ${new Date().toISOString()} — this phase was already running; crash-recover per the runbook before continuing]\n${row.prompt}`
+              : row.prompt,
           page: row.page ?? "/",
           idemKey: `requeue-${row.job_id}`,
         }),

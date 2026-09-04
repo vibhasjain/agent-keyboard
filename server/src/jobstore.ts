@@ -155,13 +155,28 @@ export async function listRequeueableJobs(): Promise<JobRow[]> {
     `&updated_at=gte.${encodeURIComponent(since)}` +
     `&or=(error.is.null,error->>kind.neq.requeued)` +
     `&order=created_at.asc&limit=50`;
-  const [liveRes, deadRes] = await Promise.all([
+  // Scheduled phases ("[scheduled…" prompts) are idempotent by design: they drive
+  // off the ledger and crash-recover via Gmail, so a deploy must never drop one
+  // mid-run — rescue them whatever phase they reached (owner, 2026-09-04).
+  const sched =
+    `status=in.(queued,running,interrupted)&kind=eq.message&prompt=like.%5Bscheduled*` +
+    `&updated_at=gte.${encodeURIComponent(since)}` +
+    `&or=(error.is.null,error->>kind.neq.requeued)` +
+    `&order=created_at.asc&limit=50`;
+  const [liveRes, deadRes, schedRes] = await Promise.all([
     req(`${TABLE}?${live}`, { method: "GET", headers: headers() }),
     req(`${TABLE}?${dead}`, { method: "GET", headers: headers() }),
+    req(`${TABLE}?${sched}`, { method: "GET", headers: headers() }),
   ]);
   const rows: JobRow[] = [];
-  for (const res of [liveRes, deadRes]) {
-    if (res && res.ok) rows.push(...((await res.json().catch(() => [])) as JobRow[]));
+  const seen = new Set<string>();
+  for (const res of [liveRes, deadRes, schedRes]) {
+    if (!res || !res.ok) continue;
+    for (const r of (await res.json().catch(() => [])) as JobRow[]) {
+      if (seen.has(r.job_id)) continue;
+      seen.add(r.job_id);
+      rows.push(r);
+    }
   }
   return rows.filter((r) => r.prompt);
 }
