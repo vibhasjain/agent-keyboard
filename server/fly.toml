@@ -14,6 +14,10 @@
 # to viewer routes, and GOOGLE_HD_SITES optionally confines Workspace viewers to listed site IDs.
 app = "agent-keyboard"
 primary_region = "iad"
+# Swap must be a TOP-LEVEL key (before the first [table]). It used to sit below
+# [[vm]], which TOML reads as vm[0].swap_size_mb — flyctl silently ignored it, so
+# the machine ran with no swap at all (2026-07-04 → 2026-09-05).
+swap_size_mb = 512
 
 # Build runs with the repo root as context (so the widget/ dir is available to
 # the Dockerfile's widget stage):
@@ -76,11 +80,9 @@ primary_region = "iad"
   source = "agent_data"
   destination = "/data"
 
+# 4 GB: on 2026-09-05 two CLI jobs (estherfell easy-apply loops = headed Chromium
+# under Xvfb, cv-jobs inbox phase) exhausted 2 GB with no swap; the VM never
+# OOM-killed, it livelocked for ~2.5 h until a manual restart.
 [[vm]]
   size = "shared-cpu-2x"
-  memory = "2gb"
-
-# Safety valve for the occasional 2-CLI-jobs + headless-chromium overlap
-# (worst realistic case ~1.2-1.4 GB of 2 GB). Bump memory to 4gb if OOM kills
-# ever show up in `fly logs`.
-swap_size_mb = 512
+  memory = "4gb"
