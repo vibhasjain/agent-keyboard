@@ -45,7 +45,7 @@ RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # The real Claude Code CLI (pinned).
-RUN npm install -g @anthropic-ai/claude-code@2.1.260
+RUN npm install -g @anthropic-ai/claude-code@2.1.261
 
 # OpenAI Codex CLI (pinned) — the GPT lane for the fable-subagents skill and the
 # codex plugin (/codex:rescue). Login lives on the volume: /data/.codex/auth.json.
