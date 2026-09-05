@@ -1,6 +1,6 @@
 ---
 name: fable-subagents
-description: Fable-as-orchestrator workflow — one main Fable agent thinks and plans at task-appropriate effort while all execution fans out to explicitly-routed subagents (Sonnet for routine work, Opus for hard execution, GPT 5.6-sol at ultra effort via Codex for all design and coding work). Use whenever running on Fable 5 and the task involves execution work that subagents can do — implementation, drafting, content batches, UI passes, refactors — and especially when the user mentions "fable subagents", "fable-gpt", routing models, conserving Fable tokens, the 5-hour limit, or fanning work out. Replaces the retired fable-gpt skill.
+description: Fable-as-orchestrator workflow — one main Fable agent thinks and plans at task-appropriate effort while all execution fans out to explicitly-routed subagents (Sonnet for routine work, Opus for hard execution, GPT-6 Astra at ultra effort via Codex for all design and coding work). Use whenever running on Fable 5 and the task involves execution work that subagents can do — implementation, drafting, content batches, UI passes, refactors — and especially when the user mentions "fable subagents", "fable-gpt", routing models, conserving Fable tokens, the 5-hour limit, or fanning work out. Replaces the retired fable-gpt skill.
 ---
 
 # Fable + Subagents: one main agent thinks, everything below it executes
@@ -31,10 +31,10 @@ is the wrong model for almost every execution task.
 |------|-------------|------|
 | **Sonnet** | `Agent` tool, `model: "sonnet"` | Routine execution: drafts, formatting, high-volume, cheap per call |
 | **Opus** | `Agent` tool, `model: "opus"` | Harder execution: debugging, edge cases — only when it earns the cost |
-| **GPT 5.6 sol** | `/codex:rescue` → `--model gpt-5.6-sol --effort ultra`, fast service tier | ALL Codex work — design/UI passes AND coding: implementation, refactors, the codebase itself |
+| **GPT-6 Astra** | `/codex:rescue` → `--model gpt-6-astra --effort ultra`, fast service tier | ALL Codex work — design/UI passes AND coding: implementation, refactors, the codebase itself |
 
-Codex lane: **only ever `gpt-5.6-sol` at `--effort ultra`** — no other Codex
-model or effort (owner decision 2026-08-18: ultra = max reasoning depth plus automatic task delegation, meaning Codex may spawn its own subagents. Full tier ladder is low/medium/high/xhigh/max/ultra per ~/.codex/models_cache.json). The plugin wrapper's --effort flag may cap below ultra; pass it via `-c model_reasoning_effort=ultra` on codex exec. Speed: always the fast service tier (1.5x speed, burns usage faster — owner decision 2026-08-18): pass `-c service_tier=fast` on codex exec (accepted values are "default"/"fast"; "fast" maps to the priority tier). The global defaults in ~/.codex/config.toml are also ultra + fast now, but keep passing both explicitly. Use `--background` for long tasks; fan
+Codex lane: **only ever `gpt-6-astra` at `--effort ultra`** — no other Codex
+model or effort (owner decisions: GPT-6 Astra replaced gpt-5.6-sol on 2026-09-05 — the slug is `gpt-6-astra` (NOT gpt-5.6-astra; check `~/.codex/models_cache.json` slugs before probing) and the ChatGPT-account Codex API accepts it; 2026-08-18: ultra = max reasoning depth plus automatic task delegation, meaning Codex may spawn its own subagents. Full tier ladder is low/medium/high/xhigh/max/ultra per ~/.codex/models_cache.json). The plugin wrapper's --effort flag may cap below ultra; pass it via `-c model_reasoning_effort=ultra` on codex exec. Speed: always the fast service tier (1.5x speed, burns usage faster — owner decision 2026-08-18): pass `-c service_tier=fast` on codex exec (accepted values are "default"/"fast"; "fast" maps to the priority tier). The global defaults in ~/.codex/config.toml are also ultra + fast now, but keep passing both explicitly. Use `--background` for long tasks; fan
 out only across disjoint files. Codex has no conversation context — name the
 files, the expected behavior, and how to verify.
 
@@ -57,7 +57,7 @@ Sonnet researches, Sonnet drafts the batch, Opus rewrites the one piece that
 can't afford a generic pass, Sonnet schedules. Zero manual work once the brief
 is set.
 
-A code task: Fable scopes, GPT 5.6-sol (max) handles both the UI pass and
+A code task: Fable scopes, GPT-6 Astra (max) handles both the UI pass and
 the implementation. Design and code never run on the Claude lanes when the
 Codex lane fits.
 
@@ -68,7 +68,7 @@ Watch which lane is actually running:
 - Sonnet: many calls, cheap each — the volume lane.
 - Opus: few calls, only when it earns it. **Opus creeping up the bar is the
   tell that Fable is over-routing** — demote work back to Sonnet.
-- GPT 5.6-sol: steady design and code passes on the separate Codex budget.
+- GPT-6 Astra: steady design and code passes on the separate Codex budget.
 
 ## Review before accepting
 
@@ -84,4 +84,4 @@ the work itself: just do it inline. Orchestration has overhead; it pays for
 itself only on real tasks.
 
 Summary: Fable thinks at whatever effort the task earns; Sonnet, Opus, and
-GPT 5.6-sol (max) do the executing under it.
+GPT-6 Astra (max) do the executing under it.

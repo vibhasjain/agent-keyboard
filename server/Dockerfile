@@ -49,7 +49,7 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.261
 
 # OpenAI Codex CLI (pinned) — the GPT lane for the fable-subagents skill and the
 # codex plugin (/codex:rescue). Login lives on the volume: /data/.codex/auth.json.
-RUN npm install -g @openai/codex@0.149.0
+RUN npm install -g @openai/codex@0.153.4
 
 # Supabase CLI (pinned). Logged in per site via SUPABASE_ACCESS_TOKEN in that
 # site's settings.json "env" knob (harness.ts) — each site's own Supabase account.
@@ -87,6 +87,11 @@ COPY server/src ./src
 # layer (sharp's native build).
 COPY server/skills /app/skills
 COPY server/tailscale-up.sh /app/tailscale-up.sh
+
+# Headless Codex CLI defaults — written to $HOME/.codex/config.toml on every
+# boot (src/skills.ts seedCodexConfig), so the GPT lane's model/effort/tier
+# track the repo like the skills do.
+COPY server/codex-config.toml /app/codex-config.toml
 
 # Branded invite/recovery email templates — the provision-user skill reads them
 # from /app/email-templates on every deployment (they aren't in a site's checkout,

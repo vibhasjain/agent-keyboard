@@ -33,7 +33,7 @@ import { readConversation } from "./conversation.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { ringRouter } from "./ring.js";
-import { seedSkills } from "./skills.js";
+import { seedCodexConfig, seedSkills } from "./skills.js";
 import {
   startJob,
   tail,
@@ -865,6 +865,7 @@ app.listen(port, () => {
   })().catch((e) => console.error("[boot] job sweep failed", e));
   void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
+  void seedCodexConfig().catch((e) => console.error("[boot] codex config seed failed", e));
   startTailscale();
 });
 
