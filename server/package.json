@@ -15,7 +15,8 @@
     "page-slug-check": "tsx src/dev/page-slug-check.ts",
     "scope-check": "tsx src/dev/scope-check.ts",
     "sender-check": "tsx src/dev/sender-check.ts",
-    "guest-check": "tsx src/dev/guest-check.ts"
+    "guest-check": "tsx src/dev/guest-check.ts",
+    "page-model-check": "tsx src/dev/page-model-check.ts"
   },
   "dependencies": {
     "busboy": "^1.6.0",

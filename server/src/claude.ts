@@ -758,7 +758,8 @@ export async function* runMessageJob(
     // the prompt, retries, and gitSummary. Equals site.branch unless pushBranch is set.
     const pushBranch = resolvePushBranch(site);
 
-    const conversationId = await conversationIdFor(site.id, opts.pageSlug ?? "");
+    const pageSlug = opts.pageSlug ?? "";
+    const conversationId = await conversationIdFor(site.id, pageSlug);
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
@@ -767,10 +768,10 @@ export async function* runMessageJob(
 
     // Per-site harness settings (model / effort / permission mode — see
     // harness.ts). Loaded inside the site lock, once per job.
-    const [initialHarness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
+    const [initialHarness, lastUsage] = await Promise.all([loadHarness(site.id, pageSlug), readLastUsage(site.id)]);
     let harness = initialHarness;
     console.log(
-      `[harness] site=${site.id} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${site.guest ? " guest" : ""}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
+      `[harness] site=${site.id}${pageSlug ? `/${pageSlug}` : ""} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${site.guest ? " guest" : ""}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
     );
 
     // Fresh slate for images the agent shows this turn (see collectOutputs).
@@ -954,7 +955,7 @@ export async function* runMessageJob(
       if (post.settings.clearNow) {
         const consumed = await saveSettings(site.id, { clearNow: undefined }).then(() => true, () => false);
         if (consumed) {
-          contextCleared = await rotateConversation(site.id, opts.pageSlug ?? "").then(() => true, () => false);
+          contextCleared = await rotateConversation(site.id, pageSlug).then(() => true, () => false);
           if (contextCleared) reply = `${reply}\n\n_Context cleared — fresh session, chat history wiped._`.trim();
         }
       }
@@ -1044,15 +1045,16 @@ export async function* runStreamingSession(
     let turnStartSha = await syncCheckout(site);
     const dir = checkoutPath(site.id);
     const pushBranch = resolvePushBranch(site);
-    const conversationId = await conversationIdFor(site.id, opts.pageSlug ?? "");
+    const pageSlug = opts.pageSlug ?? "";
+    const conversationId = await conversationIdFor(site.id, pageSlug);
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
     const resume = existsSync(marker) || sessionFileExists(dir, sessionId);
     const prompt = buildPrompt(site, opts);
-    const [harness, lastUsage] = await Promise.all([loadHarness(site.id), readLastUsage(site.id)]);
+    const [harness, lastUsage] = await Promise.all([loadHarness(site.id, pageSlug), readLastUsage(site.id)]);
     console.log(
-      `[harness] site=${site.id} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}${site.guest ? " guest" : ""}`,
+      `[harness] site=${site.id}${pageSlug ? `/${pageSlug}` : ""} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}${site.guest ? " guest" : ""}`,
     );
     await resetOutputs(site.id).catch(() => {});
 

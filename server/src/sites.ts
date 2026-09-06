@@ -39,6 +39,12 @@ export function listSitesPublic(): { id: string; domain: string }[] {
  *  Filename-safe by construction: output is [a-z0-9-] only, capped at 80. */
 export function pageSlugFor(site: Site, page: unknown): string {
   if (site.sessionScope !== "page" || typeof page !== "string") return "";
+  return slugifyPage(page);
+}
+
+/** The slug half of pageSlugFor, without the site gate — so a settings key like
+ *  "/jobs" can be matched against the slug a request produced ("jobs"). */
+export function slugifyPage(page: string): string {
   let p = (page.split(/[?#]/)[0] ?? "").toLowerCase();
   p = p.replace(/\/+/g, "/").replace(/^\/+|\/+$/g, "");
   p = p.replace(/\/index\.html?$/, "").replace(/^index\.html?$/, "").replace(/\.html?$/, "");

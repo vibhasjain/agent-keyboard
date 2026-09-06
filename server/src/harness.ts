@@ -13,6 +13,7 @@
 
 import { join } from "node:path";
 import { DATA_DIR, readDataFile, writeDataFile } from "./checkouts.js";
+import { slugifyPage } from "./sites.js";
 
 export type PermissionMode = "bypassPermissions" | "plan" | "acceptEdits" | "default";
 
@@ -27,9 +28,16 @@ export interface CronSettings {
   disabled: boolean; // default false
 }
 
+/** Per-page override of the site-wide knobs (page-scoped sites). */
+export interface PageSettings {
+  model?: string;
+  effort?: string;
+}
+
 export interface HarnessSettings {
   model?: string;
   effort?: string;
+  pages?: Record<string, PageSettings>;
   permissionMode?: PermissionMode;
   compactNow?: boolean;
   clearNow?: boolean;
@@ -119,6 +127,44 @@ const KNOBS: Knob[] = [
     describe: `"clearNow": true — DESTRUCTIVE: right after this turn the server starts a fresh session (wipes the agent's memory of this conversation) AND clears the chat history, then clears the flag. Unlike compact this keeps nothing. Because it can't be undone, confirm with the owner once before you set it`,
   },
 ];
+
+// The page knob reuses the site-level validators verbatim, so an override can
+// never accept a model or effort the site knob would reject.
+function knobValidate(key: "model" | "effort", v: unknown, warn: (w: string) => void): unknown {
+  return KNOBS.find((k) => k.key === key)!.validate(v, warn);
+}
+
+KNOBS.push({
+  key: "pages",
+  validate: (v, warn) => {
+    if (v === undefined || v === null) return undefined;
+    if (typeof v !== "object" || Array.isArray(v)) {
+      warn(`pages must be an object keyed by page path, got ${JSON.stringify(v)} — ignored`);
+      return undefined;
+    }
+    const out: Record<string, PageSettings> = {};
+    for (const [page, raw] of Object.entries(v as Record<string, unknown>)) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        warn(`pages[${JSON.stringify(page)}] must be an object like {"model": "opus"} — dropped`);
+        continue;
+      }
+      const entry = raw as Record<string, unknown>;
+      for (const k of Object.keys(entry)) {
+        if (k !== "model" && k !== "effort") warn(`pages[${JSON.stringify(page)}].${k} is not overridable — ignored; valid keys: model, effort`);
+      }
+      const model = knobValidate("model", entry.model, warn);
+      const effort = knobValidate("effort", entry.effort, warn);
+      if (model === undefined && effort === undefined) continue;
+      // Keyed by slug, so "/jobs", "jobs" and "/jobs/" are the same page.
+      out[slugifyPage(page)] = {
+        ...(typeof model === "string" ? { model } : {}),
+        ...(typeof effort === "string" ? { effort } : {}),
+      };
+    }
+    return Object.keys(out).length ? out : undefined;
+  },
+  describe: `"pages": {"/jobs": {"model": "opus", "effort": "high"}} — per-page overrides for a page-scoped site: that page's session runs with these instead of the site-wide "model"/"effort" (only those two are overridable; "/" is the site root, and every other page keeps the site values)`,
+});
 
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 KNOBS.push({
@@ -309,8 +355,17 @@ export function fallbackHarness(prev: HarnessSettings): ResolvedHarness {
   return resolve(prev.permissionMode ? { permissionMode: prev.permissionMode } : {}, []);
 }
 
-/** Load + validate a site's harness settings. No file → today's exact defaults. */
-export async function loadHarness(siteId: string): Promise<ResolvedHarness> {
+/** Fold a page's override onto the site-wide settings. The result is what the
+ *  turn actually runs with, so the banner and the harness note both show the
+ *  effective model rather than the site default the page isn't using. */
+function forPage(settings: HarnessSettings, pageSlug: string): HarnessSettings {
+  const override = settings.pages?.[pageSlug];
+  return override ? { ...settings, ...override } : settings;
+}
+
+/** Load + validate a site's harness settings. No file → today's exact defaults.
+ *  `pageSlug` (from pageSlugFor) selects a per-page override when one is set. */
+export async function loadHarness(siteId: string, pageSlug = ""): Promise<ResolvedHarness> {
   const warnings: string[] = [];
   const raw = await readDataFile(siteRel(siteId, "settings.json"));
   if (!raw) return resolve({}, warnings);
@@ -321,7 +376,7 @@ export async function loadHarness(siteId: string): Promise<ResolvedHarness> {
     warnings.push("your settings file is invalid JSON and was ignored — rewrite it as a valid JSON object");
     return resolve({}, warnings);
   }
-  return resolve(validateSettings(parsed, warnings), warnings);
+  return resolve(forPage(validateSettings(parsed, warnings), pageSlug), warnings);
 }
 
 /** Merge a validated patch into the settings file (used by reply directives). */
