@@ -21,6 +21,10 @@ import { getSite, pageSlugFor, SITES } from "./sites.js";
 
 const TICK_MS = 5 * 60_000;
 const BOOT_GRACE_MS = 2 * 60_000;
+// How overdue a DAILY slot may get while the site is busy before we fire anyway.
+// It used to be a full day, so one long catch-up run silently cost that phase a
+// whole day (owner decision 2026-09-09: two hours).
+const DAILY_OVERDUE_MS = 2 * 3_600_000;
 const SECRET = process.env.AK_INTERNAL_SECRET ?? "";
 const PORT = Number(process.env.PORT ?? 8080);
 
@@ -311,13 +315,15 @@ async function tick(job: CronJob): Promise<void> {
       if (now - last < intervalMs) return;
     }
 
-    // Never stack cycles — but an active job must not silence the schedule forever.
+    // Never stack cycles — but an active job must not silence the schedule for
+    // long: a daily slot waits at most DAILY_OVERDUE_MS, an interval one two
+    // intervals, and then fires regardless of what else the site is doing.
     if (listActive(job.site).some((active) => active.status === "queued" || active.status === "running")) {
-      const overdueLimit = intervalMs === undefined ? 86_400_000 : 2 * intervalMs;
+      const overdueLimit = intervalMs === undefined ? DAILY_OVERDUE_MS : 2 * intervalMs;
       if (now - dueAt < overdueLimit) return;
       console.warn(
         intervalMs === undefined
-          ? `[jobs-cron] ${job.site}/${job.id} is still active but is a day overdue — firing anyway`
+          ? `[jobs-cron] ${job.site}/${job.id} is still active but is over two hours overdue — firing anyway`
           : `[jobs-cron] ${job.site}/${job.id} is still active but is over two intervals overdue — firing anyway`,
       );
     }

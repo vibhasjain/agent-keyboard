@@ -18,6 +18,10 @@ Date.now = () => now; // cron.ts reads startedAt at import, so patch first
 const root = await mkdtemp(join(tmpdir(), "agent-keyboard-cron-boot-"));
 process.env.AGENT_DATA_DIR = root;
 process.env.AK_INTERNAL_SECRET = "test-secret";
+// This check starts a real (fake-generator) job in §7; keep the durable job
+// store out of it so it can never write rows to the live Supabase table.
+delete process.env.SUPABASE_URL;
+delete process.env.SUPABASE_SERVICE_KEY;
 process.env.JOBS_CRONS = "[]"; // no env schedules: the knob is the schedule
 process.env.SITES = JSON.stringify([
   { id: "cv-jobs", repo: "https://github.com/example/cv-jobs.git", branch: "main", domain: "jobs.example.com" },
@@ -26,8 +30,11 @@ process.env.SITES = JSON.stringify([
 // Capture enqueues instead of POSTing to the server.
 const fired: { site: string; page: string; at: string }[] = [];
 globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
-  const body = JSON.parse(String(init?.body ?? "{}")) as { page?: string };
-  fired.push({ site: String(url).split("/sites/")[1]?.split("/")[0] ?? "", page: body.page ?? "", at: new Date(now).toISOString() });
+  const href = String(url);
+  if (href.includes("/sites/") && href.endsWith("/messages")) {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { page?: string };
+    fired.push({ site: href.split("/sites/")[1]?.split("/")[0] ?? "", page: body.page ?? "", at: new Date(now).toISOString() });
+  }
   return { ok: true, status: 200, statusText: "OK", body: null } as unknown as Response;
 }) as typeof fetch;
 
@@ -98,6 +105,41 @@ assert.deepEqual(
   fired.map((f) => f.at),
   ["2026-09-09T10:00:30.000Z", "2026-09-09T16:00:30.000Z", "2026-09-09T23:30:00.000Z"],
 );
+
+// 7. A busy site defers a due slot — but only for two hours, not the day it
+//    used to wait (a long catch-up run cost that phase its whole day).
+const { startJob, cancelJob } = await import("../jobs.js");
+let releaseFake = () => {};
+const held = new Promise<void>((r) => { releaseFake = r; });
+const fakeJob = await startJob({
+  siteId: "cv-jobs",
+  prompt: "a long catch-up run",
+  page: "/jobs",
+  makeGen: () =>
+    (async function* () {
+      yield ["status", { phase: "tool", detail: "still working" }] as const;
+      await held;
+      yield ["result", { reply: "done" }] as const;
+    })(),
+});
+
+fired.length = 0;
+await writeFile(
+  join(root, "agent-keyboard", "cron-cv-jobs-apply.json"),
+  `${JSON.stringify({ lastRunAt: "2026-09-08T10:04:02.519Z" }, null, 1)}\n`,
+  "utf8",
+);
+await new Promise((r) => setTimeout(r, 50)); // let the job reach "running"
+
+await cycle("2026-09-09T10:00:30Z");
+assert.equal(fired.length, 0, "a due slot waits while the site is busy");
+await cycle("2026-09-09T11:30:00Z");
+assert.equal(fired.length, 0, "…still waiting 90 minutes in");
+await cycle("2026-09-09T12:00:30Z");
+assert.equal(fired.length, 1, "…but fires by two hours overdue, busy or not");
+
+releaseFake();
+cancelJob(fakeJob.jobId);
 
 Date.now = realNow;
 console.log("cron-boot-check OK");
