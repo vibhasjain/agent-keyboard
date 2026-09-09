@@ -176,7 +176,7 @@ async function loadKnobJobs(): Promise<Map<string, CronJob[]>> {
           ? `${cron.id} disabled`
           : cron.everyHours !== undefined
             ? `${cron.id} every ${cron.everyHours}h`
-            : `${cron.id} daily ${String(cron.hour).padStart(2, "0")}:00 ${cron.tz}`,
+            : `${cron.id} daily ${String(cron.hour).padStart(2, "0")}:00 ${cron.tz} (next ${new Date(nextSlot(cron)).toISOString()})`,
       ).join(" · ");
       if (knobLogCache.get(site.id) !== desc) {
         knobLogCache.set(site.id, desc);
@@ -214,6 +214,14 @@ export async function effectiveJobs(envJobs: CronJob[]): Promise<CronJob[]> {
   return jobs;
 }
 
+/** The next instant a daily entry fires: today's slot if it is still ahead,
+ *  otherwise tomorrow's. Logged with the knob so "did it skip?" is answerable
+ *  from `fly logs` without doing timezone arithmetic in your head. */
+function nextSlot(cron: Pick<CronJob, "hour" | "tz">): number {
+  const today = scheduledInstant(cron);
+  return Date.now() < today ? today : scheduledInstant(cron, 1);
+}
+
 /** Calendar/clock parts of an instant as seen in a named timezone. */
 function partsIn(instant: Date, tz: string): Clock {
   const dtf = new Intl.DateTimeFormat("en-US", {
@@ -235,7 +243,7 @@ function offsetMs(instant: Date, tz: string): number {
 }
 
 /** UTC instant of the job's local hour, on the TZ calendar day `dayShift` days from now. */
-function scheduledInstant(job: CronJob, dayShift = 0): number {
+function scheduledInstant(job: Pick<CronJob, "hour" | "tz">, dayShift = 0): number {
   const p = partsIn(new Date(Date.now() + dayShift * 86_400_000), job.tz);
   const naive = Date.UTC(p.year, p.month - 1, p.day, job.hour, 0, 0);
   // Two passes settles the DST edge cases (the offset depends on the instant).
@@ -334,7 +342,9 @@ async function tick(job: CronJob): Promise<void> {
   }
 }
 
-async function tickAll(jobs: CronJob[]): Promise<void> {
+/** One pass over every due job. Exported for src/dev/cron-boot-check.ts, which
+ *  drives it against a fake clock to prove a restart never skips a slot. */
+export async function tickAll(jobs: CronJob[]): Promise<void> {
   const bySite = new Map<string, CronJob[]>();
   for (const job of jobs) {
     const siteJobs = bySite.get(job.site) ?? [];
