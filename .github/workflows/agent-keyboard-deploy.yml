@@ -21,8 +21,9 @@ jobs:
       - name: Install flyctl
         run: |
           set -euo pipefail
-          curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
-          flyctl version
+          curl -fsSL https://fly.io/install.sh | sh   # $HOME/.fly — /usr/local needs sudo on the runner
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+          "$HOME/.fly/bin/flyctl" version
       # Build context = repo root so the Dockerfile can bake widget/ into the image.
       # The target app comes from server/fly.toml, so forks deploy their own app unchanged.
       - run: flyctl deploy . --config server/fly.toml --dockerfile server/Dockerfile --remote-only --ha=false

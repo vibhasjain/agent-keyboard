@@ -63,8 +63,9 @@ jobs:
         if: steps.check.outputs.changed == 'true'
         run: |
           set -euo pipefail
-          curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
-          flyctl version
+          curl -fsSL https://fly.io/install.sh | sh   # $HOME/.fly — /usr/local needs sudo on the runner
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+          "$HOME/.fly/bin/flyctl" version
 
       # Deploy BEFORE committing: if the build/deploy fails, the pin stays
       # unchanged in the repo and tomorrow's run retries. A successful deploy is
