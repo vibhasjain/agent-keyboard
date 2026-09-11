@@ -14,7 +14,15 @@ jobs:
     concurrency: agent-keyboard-deploy
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master
+      # superfly/flyctl-actions silently no-opped on 2026-09-11 — the step went
+      # green having downloaded nothing, so the next step died on `flyctl:
+      # command not found`. Install it ourselves (the same script the Dockerfile
+      # uses) and prove it runs, so an upstream hiccup fails here, loudly.
+      - name: Install flyctl
+        run: |
+          set -euo pipefail
+          curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
+          flyctl version
       # Build context = repo root so the Dockerfile can bake widget/ into the image.
       # The target app comes from server/fly.toml, so forks deploy their own app unchanged.
       - run: flyctl deploy . --config server/fly.toml --dockerfile server/Dockerfile --remote-only --ha=false

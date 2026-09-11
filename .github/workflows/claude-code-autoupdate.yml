@@ -55,8 +55,16 @@ jobs:
           sed -i "s#@openai/codex@[0-9.]*#@openai/codex@${{ steps.check.outputs.codex_latest }}#" server/Dockerfile
           grep -E 'claude-code@|codex@' server/Dockerfile
 
-      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # master
+      # superfly/flyctl-actions silently no-opped on 2026-09-11 — the step went
+      # green having downloaded nothing, so the next step died on `flyctl:
+      # command not found`. Install it ourselves (the same script the Dockerfile
+      # uses) and prove it runs, so an upstream hiccup fails here, loudly.
+      - name: Install flyctl
         if: steps.check.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          curl -fsSL https://fly.io/install.sh | FLYCTL_INSTALL=/usr/local sh
+          flyctl version
 
       # Deploy BEFORE committing: if the build/deploy fails, the pin stays
       # unchanged in the repo and tomorrow's run retries. A successful deploy is
