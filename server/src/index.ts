@@ -32,6 +32,7 @@ import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, ou
 import { readConversation } from "./conversation.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
+import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
 import { seedCodexConfig, seedSkills } from "./skills.js";
 import {
@@ -816,6 +817,10 @@ app.post("/realtime/token", authed, async (_req, res) => {
 // Ring webhook + focus registry (see ring.ts).
 app.use(ringRouter());
 
+// Isolated browser tasks (see browser.ts) — primary-owner-only, one throwaway
+// Chromium + profile per task, never the agent's own CDP browsers.
+app.use(browserTasksRouter());
+
 // ─── boot + graceful shutdown ────────────────────────────────────────────────
 const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
@@ -895,6 +900,7 @@ async function shutdown(signal: string): Promise<void> {
     /* auto-resume is best-effort; never block shutdown */
   }
   killAllChildren();
+  await closeAllBrowserTasks().catch(() => {});
   await interruptRunningJobs().catch(() => {});
   process.exit(0);
 }

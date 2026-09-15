@@ -17,12 +17,14 @@
     "sender-check": "tsx src/dev/sender-check.ts",
     "guest-check": "tsx src/dev/guest-check.ts",
     "page-model-check": "tsx src/dev/page-model-check.ts",
-    "cron-boot-check": "tsx src/dev/cron-boot-check.ts"
+    "cron-boot-check": "tsx src/dev/cron-boot-check.ts",
+    "browser-check": "tsx src/dev/browser-check.ts"
   },
   "dependencies": {
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "playwright-core": "1.58.2",
     "sharp": "^0.33.5",
     "tsx": "^4.19.2",
     "uuid": "^11.0.5"
