@@ -23,7 +23,7 @@
   "dependencies": {
     "busboy": "^1.6.0",
     "cors": "^2.8.5",
-    "express": "^4.21.2",
+    "express": "^4.22.3",
     "playwright-core": "1.58.2",
     "sharp": "^0.33.5",
     "tsx": "^4.19.2",
