@@ -859,12 +859,12 @@ export async function* runMessageJob(
 
       // Session-store recovery: flip create↔resume once,
       // doesn't consume a rate-limit attempt.
-      if (!recovered && !result && resume && /no conversation|not found/i.test(lastErr)) {
+      if (!recovered && resume && /no conversation|not found/i.test(lastErr)) {
         recovered = true;
         resume = false;
         continue;
       }
-      if (!recovered && !result && !resume && /already (in use|exists)/i.test(lastErr)) {
+      if (!recovered && !resume && /already (in use|exists)/i.test(lastErr)) {
         recovered = true;
         resume = true;
         continue;
