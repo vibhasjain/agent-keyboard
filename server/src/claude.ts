@@ -65,16 +65,16 @@ const COMPACT_TIMEOUT_MS = envInt("CLAUDE_COMPACT_TIMEOUT_MS", 300_000);
 const EXIT_GRACE_MS = envInt("CLAUDE_EXIT_GRACE_MS", 5_000);
 const ASSISTANT_THROTTLE_MS = 180;
 const MAX_ATTEMPTS = 3;
-// Experimental streaming-input mode: deliver the turn on stdin (--input-format
-// stream-json) instead of one-shot -p, so a run can later stay open for follow-up
-// messages. Off by default; enable per deploy (AK_STREAMING_INPUT=1) while it's
-// being proven. Milestone 1 still closes stdin after one message (≡ -p behavior).
-const STREAMING_INPUT = process.env.AK_STREAMING_INPUT === "1";
-// M2 (keep-alive multi-turn session) is behind its OWN flag, so deploying M2 code
-// leaves the verified M1 behaviour (AK_STREAMING_INPUT single-message) untouched
-// until this is deliberately flipped on (alongside the widget changes).
-export const STREAMING_SESSION = process.env.AK_STREAMING_SESSION === "1";
-const SESSION_IDLE_MS = envInt("AK_SESSION_IDLE_MS", 180_000); // close stdin after 3 min idle
+// Streaming-input mode: deliver the turn on stdin (--input-format stream-json)
+// instead of one-shot -p, so a run can stay open for follow-up messages. On by
+// default; AK_STREAMING_INPUT=0 falls back to classic -p.
+const STREAMING_INPUT = process.env.AK_STREAMING_INPUT !== "0";
+// Keep-alive multi-turn session: a message sent while a job runs is injected into
+// the running CLI ("send now", like Claude Code's ctrl+enter) instead of queueing
+// behind it. On by default on every instance; AK_STREAMING_SESSION=0 opts out.
+export const STREAMING_SESSION = process.env.AK_STREAMING_SESSION !== "0";
+// An idle session holds its site's job lock, so keep the window short.
+const SESSION_IDLE_MS = envInt("AK_SESSION_IDLE_MS", 45_000);
 const SESSION_MAX_MS = envInt("AK_SESSION_MAX_MS", 3_600_000); // absolute session lifetime cap (1h)
 
 // HOME is where Claude Code keeps its session store; on Fly HOME=/data.
