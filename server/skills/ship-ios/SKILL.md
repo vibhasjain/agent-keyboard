@@ -34,9 +34,12 @@ wa-bridge. If a run fails there, the fix is the workflow's secret environment
 variable in App Store Connect — **never** a token committed to the repo. Say
 so and stop; do not work around it.
 
-Cloud builds number themselves `1000 + CI_BUILD_NUMBER`, clear of the Mac's
-range, so they can never collide with a build the owner made locally. Do not
-edit `CURRENT_PROJECT_VERSION` for a cloud build.
+**Never touch `CURRENT_PROJECT_VERSION` for a cloud build.** Xcode Cloud
+overwrites `CFBundleVersion` with its own auto-incrementing counter at archive
+time — after `ci_post_clone.sh` and after xcodegen — so anything written into
+`project.yml` is silently discarded (measured: run 65 wrote 1065 and shipped
+65). Cloud builds own the low numbers; **local archives from the Mac use
+1000+**. That separation is the only thing keeping the two from colliding.
 
 ## Credentials
 
@@ -97,6 +100,12 @@ curl -s "https://api.appstoreconnect.apple.com/v1/ciBuildRuns/<run_id>" \
 `completionStatus` is `SUCCEEDED`, `FAILED`, `ERRORED`, or `CANCELED`. Poll
 every ~60s. A build is roughly 10-15 minutes, so do not poll tightly and do not
 promise a time.
+
+A `FAILED` run whose only error is *"The bundle version must be higher than the
+previously uploaded version"* means the cloud counter has caught up with a build
+number already on App Store Connect. The run still consumed a number, so simply
+starting another run usually clears it. Do not "fix" it by editing the build
+number — see above.
 
 On `FAILED`, get the reason before reporting — the issues endpoint is the
 fastest read:
