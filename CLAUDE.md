@@ -106,6 +106,10 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 ## Design system (real, and used by the live widget)
 
 ### Brand: dark, warm, editorial
+
+These are the **widget's** tokens. `site/index.html` is light since 2026-09-22 (owner
+decision): paper `#fbfaf8`, ink `#16150f`, one printed accent `#a8480c`, system faces only
+(no webfonts, no Inter/Instrument Serif/JetBrains Mono) — don't "restore" it to dark.
 | Token | Value | Use |
 |-------|-------|-----|
 | `--bg` / `--bg-2` | `#0a0a0a` / `#111110` | near-black background / raised surfaces |
