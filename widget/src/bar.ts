@@ -51,7 +51,25 @@ interface Composer {
   setNote: (text: string, isError?: boolean) => void
   flashConfirm: (text: string) => void
   reset: () => void
+  addFiles: (files: File[]) => void
 }
+
+/** Files carried by a paste or a drop. Empty during dragover — the browser hides
+ *  the bytes until the drop lands (protected mode); use `dragHasFiles` there. */
+function filesFromTransfer(dt: DataTransfer | null): File[] {
+  if (!dt) return []
+  const files: File[] = []
+  for (const item of Array.from(dt.items || [])) {
+    if (item.kind === 'file') {
+      const f = item.getAsFile()
+      if (f) files.push(f)
+    }
+  }
+  if (!files.length) files.push(...Array.from(dt.files || []))
+  return files
+}
+
+const dragHasFiles = (dt: DataTransfer | null): boolean => Array.from(dt?.types ?? []).includes('Files')
 
 function makeComposer(): Composer {
   const root = el('div', 'ak-composer')
@@ -269,19 +287,6 @@ function makeComposer(): Composer {
     doSend()
   }, true)
 
-  const filesFromTransfer = (dt: DataTransfer | null): File[] => {
-    if (!dt) return []
-    const files: File[] = []
-    for (const item of Array.from(dt.items || [])) {
-      if (item.kind === 'file') {
-        const f = item.getAsFile()
-        if (f) files.push(f)
-      }
-    }
-    if (!files.length) files.push(...Array.from(dt.files || []))
-    return files
-  }
-
   on(document, 'keydown', (e) => {
     const voiceState = getState().ui.voice
     if (voiceState !== 'connecting' && voiceState !== 'live') return
@@ -322,18 +327,6 @@ function makeComposer(): Composer {
     e.preventDefault()
     photos.addFiles(files)
   })
-  on(root, 'dragover', (e) => {
-    const files = filesFromTransfer((e as DragEvent).dataTransfer)
-    if (!files.length) return
-    e.preventDefault()
-  })
-  on(root, 'drop', (e) => {
-    const files = filesFromTransfer((e as DragEvent).dataTransfer)
-    if (!files.length) return
-    e.preventDefault()
-    photos.addFiles(files)
-  })
-
   // keyboard avoidance while the composer has focus
   let detachKb: (() => void) | null = null
   on(ta, 'focus', () => {
@@ -366,6 +359,9 @@ function makeComposer(): Composer {
     el: root,
     focus: () => ta.focus(),
     hasContent: () => ta.value.trim().length > 0 || photos.hasAttachments(),
+    addFiles: (files) => {
+      photos.addFiles(files)
+    },
     setDisabled: (d) => {
       ta.disabled = d
       cam.disabled = d
@@ -596,6 +592,45 @@ export function mountBar(shadow: ShadowRoot): void {
   // -- expand / collapse --
   // Both corner surfaces do the same single thing: open the transcript.
   const enterExpanded = () => patchUi({ mode: 'expanded' })
+
+  // Drop a file anywhere on the bar — corner box, pill or transcript. dragover
+  // must preventDefault to accept the drop, and at that point the browser only
+  // exposes `types` (the bytes come with the drop), so decide from that.
+  const host = shadow.host as HTMLElement
+  let dragDepth = 0
+  const setDropping = (o: boolean) => host.classList.toggle('ak-dropping', o)
+  const dragEvt = (e: Event) => (e as DragEvent).dataTransfer
+  shadow.addEventListener('dragenter', (e) => {
+    if (!dragHasFiles(dragEvt(e))) return
+    e.preventDefault()
+    dragDepth++
+    setDropping(true)
+  })
+  shadow.addEventListener('dragover', (e) => {
+    const dt = dragEvt(e)
+    if (!dragHasFiles(dt)) return
+    e.preventDefault()
+    if (dt) dt.dropEffect = 'copy'
+  })
+  shadow.addEventListener('dragleave', (e) => {
+    if (!dragHasFiles(dragEvt(e))) return
+    if (--dragDepth <= 0) {
+      dragDepth = 0
+      setDropping(false)
+    }
+  })
+  shadow.addEventListener('drop', (e) => {
+    const dt = dragEvt(e)
+    const files = filesFromTransfer(dt)
+    if (!files.length && !dragHasFiles(dt)) return
+    e.preventDefault()
+    dragDepth = 0
+    setDropping(false)
+    if (getState().auth !== 'authed' || !files.length) return
+    if (getState().ui.mode !== 'expanded') enterExpanded()
+    composer.addFiles(files)
+    composer.focus()
+  })
   on(pill, 'click', enterExpanded)
 
   // -- streaming timer --

@@ -295,6 +295,14 @@ button::-moz-focus-inner{ border:0; }
     opacity var(--panel-close-dur) ease,
     filter var(--panel-close-dur) ease;
 }
+/* drop zone: the whole bar accepts a dragged file */
+:host(.ak-dropping) .ak-mini, :host(.ak-dropping) .ak-pill{ outline:2px dashed var(--ak-amber); outline-offset:3px; }
+:host(.ak-dropping) .ak-overlay[data-open="true"]::after{
+  content:'Drop to attach'; position:absolute; inset:10px; z-index:5; pointer-events:none;
+  display:flex; align-items:center; justify-content:center;
+  border:2px dashed var(--ak-amber); border-radius:12px; background:rgba(255,184,107,.06);
+  color:var(--ak-amber); font:500 14px/1 var(--ak-mono); letter-spacing:.04em;
+}
 .ak-overlay[data-open="true"]{
   transform:translateY(var(--ak-dismiss-y,0px)); opacity:var(--ak-dismiss-opacity,1); filter:blur(0);
   pointer-events:auto;
