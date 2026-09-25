@@ -12,7 +12,7 @@
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black" />
 <meta name="apple-mobile-web-app-title" content="Agent Keyboard" />
-<title>Agent Keyboard — A Mini IDE That Sits Inside Your App</title>
+<title>Agent Keyboard — Change your app by talking to it</title>
 <meta name="description" content="One script tag on your app. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session that edits your codebase and commits it, right where you're looking. Open source, self-hosted, your keys, MIT." />
 
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=3" />
@@ -41,7 +41,7 @@
 <style>
 :root{
   --bg:#0a0a0a; --bg-2:#111110; --bg-3:#161513;
-  --ink:#f5f1ea; --ink-2:#b8b2a7; --ink-3:#6f6a61;
+  --ink:#f5f1ea; --ink-2:#b8b2a7; --ink-3:#8a847a;
   --rule:#211f1c; --rule-2:#2a2723;
   --amber:#ffb86b; --amber-2:#f9a26c; --amber-deep:#c4651a;
   --warm:#e7d3b8; --violet:#b794f6; --ok:#6dd396;
@@ -103,9 +103,9 @@ a:hover{ color:var(--amber); }
 .gh-pill:hover{ color:var(--amber); border-color:rgba(255,184,107,.4); }
 
 /* ---- hero ---- */
-.hero{ padding:60px 0 40px; text-align:center; }
+.hero{ padding:40px 0 0; text-align:center; }
 .hero .kbd{
-  font-size:88px; line-height:1; margin:0 auto 34px; width:fit-content;
+  font-size:64px; line-height:1; margin:0 auto 26px; width:fit-content;
   filter:drop-shadow(0 10px 40px rgba(255,134,60,.45)) drop-shadow(0 0 60px rgba(255,184,107,.18));
   animation:breathe 3s ease-in-out infinite;
 }
@@ -116,11 +116,11 @@ h1{
   font-size:clamp(36px, 6.4vw, 64px); line-height:1.05; margin:0 auto; max-width:13em; text-wrap:balance;
 }
 h1 em{ font-style:normal; color:var(--warm); }
-.lede{ max-width:60ch; margin:26px auto 0; font-size:clamp(16px,2.3vw,19px); color:var(--ink-2); }
+.lede{ max-width:56ch; margin:22px auto 0; font-size:clamp(16px,2.3vw,19px); color:var(--ink-2); }
 .lede code{ font-family:var(--mono); font-size:.86em; color:var(--warm); }
 
 /* ---- cta row ---- */
-.cta-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin:32px auto 0; }
+.cta-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin:28px auto 0; }
 .btn{
   display:inline-flex; align-items:center; gap:9px;
   font-size:14px; font-weight:500;
@@ -129,17 +129,20 @@ h1 em{ font-style:normal; color:var(--warm); }
   color:var(--ink-2); cursor:pointer; transition:box-shadow .2s ease, border-color .2s ease, color .2s ease;
 }
 .btn svg{ width:16px; height:16px; flex:none; }
-.btn.primary{ color:var(--amber); border-color:rgba(255,184,107,.45); }
-.btn.primary:hover{ color:var(--amber); border-color:var(--amber); box-shadow:0 6px 26px rgba(255,184,107,.18); }
+.btn.primary{ color:#1a1208; background:var(--amber); border-color:var(--amber); font-weight:600; }
+.btn.primary:hover{ background:#ffc88a; border-color:#ffc88a; box-shadow:0 6px 26px rgba(255,184,107,.28); }
 .btn.ghost:hover{ color:var(--warm); border-color:var(--rule-2); }
 
 /* ---- install line ---- */
 .install{
-  max-width:760px; margin:34px auto 0; display:flex; align-items:center; gap:12px;
+  max-width:760px; margin:0 auto; display:flex; align-items:center; gap:12px;
   background:var(--bg-2); border:1px solid var(--rule-2); border-radius:14px;
-  padding:14px 16px; overflow-x:auto;
+  padding:14px 16px;
 }
-.install code{ font-family:var(--mono); font-size:13px; color:var(--warm); white-space:nowrap; }
+.install code{ flex:1; min-width:0; overflow-x:auto; scrollbar-width:none;
+  font-family:var(--mono); font-size:13px; color:var(--warm); white-space:nowrap; }
+.install code::-webkit-scrollbar{ display:none; }
+.install-note{ margin:12px auto 0; text-align:center; font-size:12.5px; color:var(--ink-3); }
 .k{ color:var(--violet); } .a{ color:var(--amber); } .s{ color:var(--ok); } .c{ color:var(--ink-3); }
 .copybtn{
   margin-left:auto; flex:none; font-size:12px; font-weight:500; cursor:pointer;
@@ -152,11 +155,36 @@ h1 em{ font-style:normal; color:var(--warm); }
 /* ---- section scaffolding ---- */
 section{ padding:58px 0; }
 .why-art{ display:block; width:184px; height:auto; margin:0 auto 26px; image-rendering:pixelated; filter:drop-shadow(0 10px 34px rgba(255,134,60,.20)); }
+@media (min-width:720px){
+  .why{ display:flex; align-items:center; gap:52px; max-width:860px; }
+  .why .why-art{ width:260px; margin:0; flex:none; }
+  .why .kicker, .why h2, .why .sub{ text-align:left; margin-left:0; }
+}
 .kicker{ font-size:11.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); margin-bottom:14px; text-align:center; }
 h2{ font-weight:600; letter-spacing:-.025em; font-size:clamp(26px,4.2vw,36px); line-height:1.12; text-align:center; max-width:22em; margin:0 auto; text-wrap:balance; }
 h2 em{ font-style:normal; color:var(--warm); }
 .sub{ max-width:60ch; margin:18px auto 0; text-align:center; color:var(--ink-2); font-size:16px; }
 .sub code{ font-family:var(--mono); font-size:.84em; color:var(--amber); }
+
+/* ---- hero demo ---- */
+/* Desktop: the ship scene at 1024px in a browser window, so the real bar docks
+   beside the page and the change lands next to the conversation. The iframe is
+   laid out at 1024x640 and scaled to the frame (JS sets --s). */
+.screen{ display:none; position:relative; z-index:1; max-width:1070px; margin:36px auto 0; padding:0 22px; }
+.screen-win{ border:1px solid var(--rule-2); border-radius:14px; overflow:hidden; background:#0a0a0a;
+  box-shadow:0 30px 90px rgba(0,0,0,.6), 0 0 80px rgba(255,184,107,.05); }
+.screen-bar{ position:relative; display:flex; align-items:center; gap:7px; height:34px; padding:0 14px;
+  background:var(--bg-2); border-bottom:1px solid var(--rule); }
+.screen-bar i{ width:10px; height:10px; border-radius:50%; background:var(--rule-2); }
+.screen-bar span{ position:absolute; left:50%; transform:translateX(-50%); font-size:12px; color:var(--ink-3);
+  background:rgba(255,255,255,.03); border:1px solid var(--rule); border-radius:7px; padding:3px 44px; }
+.screen-view{ position:relative; aspect-ratio:1024/640; overflow:hidden; }
+.screen-view iframe{ position:absolute; top:0; left:0; width:1024px; height:640px; border:0; pointer-events:none;
+  transform:scale(var(--s,1)); transform-origin:0 0; opacity:0; transition:opacity .5s ease; }
+.demo-cap{ margin:14px auto 0; text-align:center; font-size:13px; color:var(--ink-3); }
+.demo-phone{ max-width:380px; margin:36px auto 0; }
+@media (min-width:900px){ .screen{ display:block; } .demo-phone{ display:none; } }
+.hero-foot{ margin-top:44px; }
 
 /* ---- phone-frame demo iframes ---- */
 .phone{ position:relative; width:100%; overflow:hidden; background:#0a0a0a;
@@ -166,7 +194,7 @@ h2 em{ font-style:normal; color:var(--warm); }
 .phone .poster{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; object-position:bottom; }
 .phone iframe{ position:absolute; inset:0; width:100%; height:100%; border:0; pointer-events:none;
   opacity:0; transition:opacity .5s ease; }
-.phone.ready iframe{ opacity:1; }
+[data-scene].ready iframe{ opacity:1; }
 .scene-fig{ margin:0; }
 .scene-fig figcaption{ font-size:12.5px; color:var(--ink-3); margin-top:12px; text-align:center; }
 .demo-scene{ max-width:380px; margin:36px auto 0; }
@@ -215,18 +243,23 @@ h2 em{ font-style:normal; color:var(--warm); }
 .feat h4{ font-size:14.5px; font-weight:600; margin-bottom:7px; }
 .feat p{ font-size:13.5px; color:var(--ink-3); }
 .feat p .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-2); white-space:nowrap; }
-.asks{ max-width:600px; margin:34px auto 0; text-align:left; }
-.ask{ display:flex; align-items:flex-start; gap:13px; padding:13px 6px; border-bottom:1px solid var(--rule); }
-.ask:last-child{ border-bottom:0; }
-.ask .a-ico{ width:17px; height:17px; color:var(--amber); flex:none; margin-top:1px; }
-.ask .a-txt{ font-size:14.5px; color:var(--ink-2); }
-.ask .eg{ font-size:13.5px; color:var(--ink-3); margin-left:8px; overflow-wrap:anywhere; }
+.asks{ max-width:720px; margin:34px auto 0; text-align:left; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.ask{ display:flex; flex-direction:column; gap:12px; padding:18px; border:1px solid var(--rule); border-radius:14px; background:var(--bg-2); }
+.ask .a-ico{ width:18px; height:18px; color:var(--amber); flex:none; }
+.ask .a-txt{ font-size:15px; font-weight:500; color:var(--ink); }
+.ask .eg{ display:block; margin-top:4px; font-size:13.5px; font-weight:400; color:var(--ink-3); overflow-wrap:anywhere; }
 
 /* ---- faq ---- */
 .faq{ max-width:760px; margin:40px auto 0; }
-.qa{ border-top:1px solid var(--rule); padding:22px 4px; }
-.qa h3{ font-weight:600; font-size:17.5px; letter-spacing:-.01em; color:var(--warm); margin-bottom:8px; }
-.qa p{ color:var(--ink-2); font-size:15px; }
+.qa{ border-top:1px solid var(--rule); padding:0 4px; }
+.qa:last-child{ border-bottom:1px solid var(--rule); }
+.qa summary{ list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:18px 0; }
+.qa summary::-webkit-details-marker{ display:none; }
+.qa summary::after{ content:"+"; flex:none; font-size:22px; font-weight:300; line-height:1; color:var(--ink-3); transition:transform .2s ease; }
+.qa[open] summary::after{ transform:rotate(45deg); }
+.qa summary:hover h3, .qa summary:focus-visible h3{ color:var(--amber); }
+.qa h3{ font-weight:600; font-size:17px; letter-spacing:-.01em; color:var(--warm); }
+.qa p{ color:var(--ink-2); font-size:15px; padding:0 0 20px; }
 .qa code{ font-family:var(--mono); font-size:12.5px; color:var(--amber); }
 .qa .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-3); white-space:nowrap; }
 
@@ -242,6 +275,7 @@ footer .meta a:hover{ color:var(--amber); }
   .top{ justify-content:center; }
   .top .brand{ display:none; }
   section{ padding:44px 0; }
+  .asks{ grid-template-columns:1fr; }
 }
 @media (prefers-reduced-motion: reduce){
   .hero .kbd{ animation:none; }
@@ -276,10 +310,10 @@ footer .meta a:hover{ color:var(--amber); }
 
   <header class="hero">
     <div class="kbd" aria-hidden="true">⌨️</div>
-    <div class="eyebrow">OPEN SOURCE · SELF-HOSTED · MIT</div>
-    <h1>A mini IDE that sits <em>inside</em> your app.</h1>
-    <p class="lede">Your IDE should live inside your app, not the other way around.<br>
-      An IDE for the rest of us.</p>
+    <div class="eyebrow">This page edits itself</div>
+    <h1>Change your app by <em>talking</em> to it.</h1>
+    <p class="lede">One script tag puts a prompt bar in your app. Type, talk, or snap a photo —
+      a real Claude Code session edits the repo and ships it while you watch.</p>
 
     <div class="cta-row">
       <button class="btn primary demo-cta" type="button"><span aria-hidden="true">✻</span>Interactive demo</button>
@@ -289,38 +323,47 @@ footer .meta a:hover{ color:var(--amber); }
       </a>
     </div>
 
+  </header>
+</div>
+
+<figure class="screen" aria-label="Agent Keyboard shipping a change, side by side">
+  <div class="screen-win">
+    <div class="screen-bar" aria-hidden="true"><i></i><i></i><i></i><span>sundaypottery.com</span></div>
+    <div class="screen-view" data-scene="ship">
+      <iframe title="Agent Keyboard shipping a change, live" tabindex="-1" aria-hidden="true"></iframe>
+    </div>
+  </div>
+</figure>
+<div class="wrap">
+  <div class="demo-phone">
+    <div class="phone" data-scene="ship" style="height:420px">
+      <img class="poster" src="shots/poster-ship.png" alt="" aria-hidden="true">
+      <iframe title="Agent Keyboard shipping a change, live" tabindex="-1" aria-hidden="true"></iframe>
+    </div>
+  </div>
+  <p class="demo-cap">The real bar on a scripted run: ask, it edits the repo, and the page updates right where you're looking.</p>
+  <div class="hero-foot">
     <div class="install">
       <code><span class="a">&lt;script</span> <span class="k">src</span>=<span class="s">"https://agent-keyboard.fly.dev/widget.js"</span> <span class="k">data-site</span>=<span class="s">"halo"</span> <span class="k">defer</span><span class="a">&gt;&lt;/script&gt;</span></code>
       <button class="copybtn" data-copy="&lt;script src=&quot;https://agent-keyboard.fly.dev/widget.js&quot; data-site=&quot;halo&quot; defer&gt;&lt;/script&gt;">copy</button>
     </div>
-  </header>
+    <p class="install-note">That's the whole install. Open source · self-hosted · MIT.</p>
+  </div>
 </div>
 
-<section id="demo">
-  <div class="wrap">
-    <div class="kicker">The demo is the product</div>
-    <h2>Ask. <em>Watch it ship.</em></h2>
-
-    <div class="demo-scene">
-      <div class="phone" data-scene="ship" style="height:420px">
-        <img class="poster" src="shots/poster-ship.png" alt="" aria-hidden="true">
-        <iframe loading="lazy" title="Agent Keyboard shipping a change, live" tabindex="-1" aria-hidden="true"></iframe>
-      </div>
-    </div>
-
-  </div>
-</section>
 
 
 <section id="why">
-  <div class="wrap">
+  <div class="wrap why">
     <img class="why-art" src="sculpting-david.webp" width="180" height="196" loading="lazy" alt="" aria-hidden="true">
+    <div>
     <div class="kicker">Why</div>
     <h2>It should feel like <em>sculpting</em>.</h2>
     <p class="sub">I built this for myself — to change my app in the place I actually look at it, not
       some throwaway browser bolted into my IDE.</p>
     <p class="sub">So it happens in situ: you ask, you watch it change, you ask again. Less typing at a
       wall, more shaping something right in front of you.</p>
+    </div>
   </div>
 </section>
 
@@ -395,43 +438,43 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="kicker">Questions</div>
     <h2>The honest version.</h2>
     <div class="faq">
-      <div class="qa">
-        <h3>Is it a browser extension?</h3>
+      <details class="qa">
+        <summary><h3>Is it a browser extension?</h3></summary>
         <p>No — there's nothing to install in your browser. It's a single <code>&lt;script&gt;</code> tag you
           add to your app's own code, like an analytics snippet. The bar then appears right inside your running
           site once you're signed in. No extension, no separate app.</p>
-      </div>
-      <div class="qa">
-        <h3>Who is it for?</h3>
+      </details>
+      <details class="qa">
+        <summary><h3>Who is it for?</h3></summary>
         <p>Anyone who wants to change a site they own without opening their editor — founders tweaking a landing
           page, indie hackers and solo devs shipping on the go, small teams fixing copy or spacing from a phone,
           designers who'd rather describe a change than file a ticket. If you can describe it, you can ship it.</p>
-      </div>
-      <div class="qa">
-        <h3>How long does setup take?</h3>
+      </details>
+      <details class="qa">
+        <summary><h3>How long does setup take?</h3></summary>
         <p>Minutes. Drop in the script tag and allow-list your repo — you can even ask the agent to wire it up
           for you. Standing up your own server (or forking this one) is the longer part, and it's a short,
           well-documented path.</p>
-      </div>
-      <div class="qa">
-        <h3>Can I keep my existing workflow?</h3>
+      </details>
+      <details class="qa">
+        <summary><h3>Can I keep my existing workflow?</h3></summary>
         <p>Yes — it complements your workflow, it doesn't replace it. It commits and pushes to the same repo you
           already use, and re-syncs to the latest before every change, so your editor, CI, and deploys keep
           working exactly as before. If you've used Claude Code, there's no learning curve — it's the same
           engine, just reachable from inside your app: a faster feedback loop for shipping small changes, not a
           new tool to adopt.</p>
-      </div>
-      <div class="qa">
-        <h3>Is it safe to point an agent at my codebase?</h3>
+      </details>
+      <details class="qa">
+        <summary><h3>Is it safe to point an agent at my codebase?</h3></summary>
         <p>It only touches repos you allow-list, and every commit is attributed to "Agent Keyboard."
           Want to review before it goes live? Point it at a staging branch. And you can always ask it to
           roll a change back.</p>
-      </div>
-      <div class="qa">
-        <h3>What does it cost to run?</h3>
+      </details>
+      <details class="qa">
+        <summary><h3>What does it cost to run?</h3></summary>
         <p>Mostly things you already pay for: the Claude Code subscription edits, Supabase's free tier
           does auth, a small Fly VM (often free) hosts. The OpenAI key is optional, for voice.</p>
-      </div>
+      </details>
     </div>
   </div>
 </section>
@@ -480,13 +523,21 @@ footer .meta a:hover{ color:var(--amber); }
   // Live demo iframes: point each phone frame at its scene on the demo origin,
   // and reveal it only once that scene signals it's painted.
   var DEMO_ORIGIN = 'https://agent-keyboard.fly.dev';
-  document.querySelectorAll('.phone[data-scene]').forEach(function(p){
-    var f = p.querySelector('iframe');
-    if (f) f.src = DEMO_ORIGIN + '/demo/' + p.getAttribute('data-scene');
-  });
+  // Desktop shows the 1024px window, narrow screens the phone — only the visible
+  // one loads (a hidden frame has no offsetParent). The window is laid out at
+  // 1024px and scaled to fit its frame.
+  function syncDemos(){
+    document.querySelectorAll('[data-scene]').forEach(function(p){
+      var f = p.querySelector('iframe');
+      if (f && !f.getAttribute('src') && p.offsetParent !== null) f.src = DEMO_ORIGIN + '/demo/' + p.getAttribute('data-scene');
+    });
+    document.querySelectorAll('.screen-view').forEach(function(v){ v.style.setProperty('--s', v.clientWidth / 1024); });
+  }
+  syncDemos();
+  window.addEventListener('resize', syncDemos);
   window.addEventListener('message', function(e){
     if (e.origin !== DEMO_ORIGIN || !e.data || e.data.type !== 'ak-demo-ready') return;
-    document.querySelectorAll('.phone[data-scene="' + e.data.scene + '"]').forEach(function(p){ p.classList.add('ready'); });
+    document.querySelectorAll('[data-scene="' + e.data.scene + '"]').forEach(function(p){ p.classList.add('ready'); });
   });
 
   // Pause a demo whose frame is scrolled out of view — a looping animation off
@@ -499,7 +550,7 @@ footer .meta a:hover{ color:var(--amber); }
         if (f && f.contentWindow) f.contentWindow.postMessage({ type: 'ak-demo-vis', visible: en.isIntersecting }, DEMO_ORIGIN);
       });
     }, { threshold: 0.15 });
-    document.querySelectorAll('.phone[data-scene]').forEach(function(p){ demoVis.observe(p); });
+    document.querySelectorAll('[data-scene]').forEach(function(p){ demoVis.observe(p); });
   }
 
   // Pull-to-refresh — only when running as an installed web app (standalone),
