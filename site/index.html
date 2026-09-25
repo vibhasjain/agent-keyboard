@@ -105,10 +105,11 @@ a:hover{ color:var(--amber); }
 /* ---- hero ---- */
 .hero{ padding:40px 0 0; text-align:center; }
 .hero .kbd{
-  font-size:64px; line-height:1; margin:0 auto 26px; width:fit-content;
+  display:block; line-height:0; margin:0 auto 26px; width:fit-content;
   filter:drop-shadow(0 10px 40px rgba(255,134,60,.45)) drop-shadow(0 0 60px rgba(255,184,107,.18));
   animation:breathe 3s ease-in-out infinite;
 }
+.hero .kbd img{ display:block; width:168px; height:auto; }
 @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
 .eyebrow{ font-size:12px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--amber); margin-bottom:20px; }
 h1{
@@ -309,7 +310,10 @@ footer .meta a:hover{ color:var(--amber); }
   </div>
 
   <header class="hero">
-    <div class="kbd" aria-hidden="true">⌨️</div>
+    <picture class="kbd" aria-hidden="true">
+      <source srcset="typewriter-still.webp" media="(prefers-reduced-motion: reduce)">
+      <img src="typewriter.webp" width="168" height="90" alt="" fetchpriority="high">
+    </picture>
     <div class="eyebrow">This page edits itself</div>
     <h1>Change your app by <em>talking</em> to it.</h1>
     <p class="lede">One script tag puts a prompt bar in your app. Type, talk, or snap a photo —

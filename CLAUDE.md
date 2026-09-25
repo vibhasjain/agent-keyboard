@@ -120,8 +120,10 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 **Agent state colors carry meaning:** syncing = dim, thinking = violet, editing/acting = amber,
 done = green, error = `#f97066` (red, outside the palette, used sparingly).
 
-**Brand mark:** the keyboard emoji ⌨️ (site topbar, hero — with an amber drop-shadow glow and a
-breathing animation — and favicon.svg). This is a deliberate exception to the no-emoji UI rule: it is
+**Brand mark:** the keyboard emoji ⌨️ (site topbar and favicon.svg). The site hero instead shows
+`site/typewriter.webp` — an animated pixel-art typewriter whose keys run a rainbow wave (added
+2026-09-25 at Lingz's request; `typewriter-still.webp` is served under reduced motion) — with the
+amber drop-shadow glow and breathing animation. This is a deliberate exception to the no-emoji UI rule: it is
 the brand, chosen on purpose (owner decision 2026-07-02); the rule still bans emoji-set codepoints as
 functional UI glyphs. The retired amber orb should not come back. The widget's persistent surface is
 the corner **rectangle**, which carries one line of status and becomes the streaming pill (with the
