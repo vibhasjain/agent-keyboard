@@ -206,6 +206,13 @@ function mount(): void {
   host.id = 'agent-keyboard-host'
   host.style.cssText = 'position:fixed;inset:auto 0 0 0;z-index:2147483000;pointer-events:none;'
   document.body.appendChild(host)
+  // The top layer: above every stacking context on the page, and outside the
+  // transform chat.ts puts on <html> to squeeze full-screen app shells beside
+  // the docked transcript. Older engines keep the z-index.
+  if (host.showPopover) {
+    host.popover = 'manual'
+    host.showPopover()
+  }
   blockZoomGestures(host)
 
   const shadow = host.attachShadow({ mode: 'open' })

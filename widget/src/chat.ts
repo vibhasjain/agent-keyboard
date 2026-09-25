@@ -566,6 +566,16 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const host = shadow.host as HTMLElement
   const root = document.documentElement.style
   let marginTimer: ReturnType<typeof setTimeout> | null = null
+  // Full-screen app shells (a position:fixed root, no document scroll) lay out
+  // against the viewport, which no margin narrows. A transform makes <html>
+  // their containing block, so they squeeze too — the bar itself escapes that in
+  // the top layer (index.ts). Scrolling pages keep the plain margin: there the
+  // transform would unpin fixed headers and let them scroll away.
+  const pageScrolls = () => {
+    const se = document.scrollingElement ?? document.documentElement
+    const hidden = (e: Element) => getComputedStyle(e).overflowY === 'hidden'
+    return se.scrollHeight > se.clientHeight && !hidden(document.documentElement) && !hidden(document.body)
+  }
   const applyDock = (animate = true) => {
     const expanded = getState().ui.mode === 'expanded'
     host.classList.toggle('ak-docked', wide.matches)
@@ -577,8 +587,20 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       const ms = animate ? parseFloat(cs.getPropertyValue(expanded ? '--panel-open-dur' : '--panel-close-dur')) || 0 : 0
       if (marginTimer != null) clearTimeout(marginTimer)
       root.transition = ms ? `margin-right ${ms}ms ${cs.getPropertyValue('--panel-ease')}` : ''
+      if (margin && !root.marginRight) {
+        root.width = 'auto' // a page that pins html{width:100%} would just overflow the margin
+        if (!pageScrolls()) {
+          root.height = '100%'
+          root.transform = 'translateX(0)'
+        }
+      }
       root.marginRight = margin
-      marginTimer = setTimeout(() => (root.transition = ''), ms)
+      // Undocking keeps the containment until the page has finished widening, so
+      // a shell never jumps back to the viewport mid-slide.
+      marginTimer = setTimeout(() => {
+        root.transition = ''
+        if (!root.marginRight) root.width = root.height = root.transform = ''
+      }, ms)
     }
     if (expanded && !wide.matches) lockBody()
     else unlockBody()
