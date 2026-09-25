@@ -311,6 +311,10 @@ button::-moz-focus-inner{ border:0; }
     opacity var(--panel-open-dur) ease,
     filter var(--panel-open-dur) ease;
 }
+/* Wide screens: docked to the right, page reflowed beside it (chat.ts applyDock
+   sizes the <html> margin off this width). */
+:host(.ak-docked) .ak-overlay{ left:auto; width:clamp(380px, 34vw, 480px); border-left:1px solid var(--ak-rule); }
+:host(.ak-docked) .ak-ov-scroll{ padding-top:52px; } /* clear the corner controls in the narrow column */
 .ak-overlay.ak-dragging{ transition:none !important; } /* track the finger, don't chase it */
 .ak-ov-close, .ak-ov-settings{
   /* pinned to the VISIBLE top corners: --ak-vvt tracks how far iOS scrolled the

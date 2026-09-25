@@ -554,6 +554,24 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // durations to 0 and this collapses to the old instant behaviour on its own.
   let panelOpen = false
   let hideTimer: ReturnType<typeof setTimeout> | null = null
+
+  // -- side by side on wide screens --
+  // With room for both, the transcript docks to the right edge and the page
+  // reflows into the space beside it (a margin on <html>, sized off the panel's
+  // own CSS width), so you watch the site change while you talk to it. The page
+  // stays live then — no scroll lock. Narrow screens keep the full-screen sheet.
+  const wide = matchMedia('(min-width: 1024px)')
+  const host = shadow.host as HTMLElement
+  const applyDock = () => {
+    const expanded = getState().ui.mode === 'expanded'
+    const docked = expanded && wide.matches
+    host.classList.toggle('ak-docked', docked)
+    document.documentElement.style.marginRight = docked ? `${overlay.offsetWidth}px` : ''
+    if (expanded && !docked) lockBody()
+    else unlockBody()
+  }
+  on(window, 'resize', applyDock) // crossing the breakpoint, and the vw-based width inside it
+
   const setPanelOpen = (open: boolean) => {
     if (open === panelOpen) return
     panelOpen = open
@@ -890,13 +908,12 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     // reads above, and bar.ts keeps the login form in the footer the whole time.
     const expanded = getState().ui.mode === 'expanded'
     setPanelOpen(expanded)
+    applyDock()
     if (!expanded) {
-      unlockBody()
       if (menuOpen) setMenu(false)
       wasExpanded = false
       return
     }
-    lockBody()
     // The footer's occupant is bar.ts's call (placeFooter): composer when signed
     // in, the login or invite form when not. Don't fight it for the slot.
     if (!loaded && !loading) {

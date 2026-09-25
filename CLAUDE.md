@@ -142,7 +142,8 @@ live **ticker**) while a job runs.
 ## Terminology
 - **Bar** — the widget as a whole. It has exactly **two surfaces**: the **rectangle** (the resting
   bottom-right corner box carrying one status line; it becomes the streaming **pill** while a job
-  runs) and the **transcript** (the full-screen panel you get by clicking it — tour or conversation in
+  runs) and the **transcript** (the panel you get by clicking it — full-screen, or docked right beside the
+  page on screens ≥1024px wide — tour or conversation in
   the body, composer or login form in the footer). Nothing else. The brand mark is the ⌨️ keyboard
   emoji (the old amber orb is retired).
 - **Ticker** — single-line status text: syncing → thinking → editing → the streamed reply.
