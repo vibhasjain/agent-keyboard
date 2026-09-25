@@ -332,6 +332,8 @@ button::-moz-focus-inner{ border:0; }
   display:flex; align-items:center; justify-content:center;
 }
 .ak-ov-close{ right:10px; }
+/* docked, the panel leaves to the right — the chevron says so */
+:host(.ak-docked) .ak-ov-close svg{ transform:rotate(-90deg); }
 .ak-ov-settings{ left:10px; }
 .ak-ov-close:hover, .ak-ov-settings:hover, .ak-ov-settings.on{ color:var(--ak-amber); background:rgba(10,10,10,.72); }
 
