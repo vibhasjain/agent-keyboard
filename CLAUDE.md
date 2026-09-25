@@ -120,15 +120,13 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 **Agent state colors carry meaning:** syncing = dim, thinking = violet, editing/acting = amber,
 done = green, error = `#f97066` (red, outside the palette, used sparingly).
 
-**Brand mark:** on the site, `site/typewriter.webp`, an animated pixel-art typewriter whose keys run
-a rainbow wave (adopted 2026-09-25 at Lingz's request). **Only the hero moves** (with the amber
-drop-shadow glow and breathing animation; `typewriter-still.webp` under reduced motion). Everywhere
-else uses the muted static mark `site/typewriter-mark.png` (first frame at 40% saturation), so nothing
-competes with the hero: the topbar, `favicon.png`, `apple-touch-icon.png`, the share card, the server's
-`/welcome` page and the invite/recovery emails (the last two load it from agentkeyboard.com). The
-widget still uses the keyboard emoji ⌨️. The emoji is a deliberate exception to the no-emoji UI rule: it is
-the brand, chosen on purpose (owner decision 2026-07-02); the rule still bans emoji-set codepoints as
-functional UI glyphs. The retired amber orb should not come back. The widget's persistent surface is
+**Brand mark:** the pixel-art typewriter (adopted 2026-09-25 at Lingz's request; it replaced the ⌨️
+emoji, which is no longer used in any UI). **Only the site hero moves**: `site/typewriter.webp`, keys
+running a rainbow wave, with the amber drop-shadow glow and breathing (`typewriter-still.webp` under
+reduced motion). Everywhere else uses the muted static mark `site/typewriter-mark.png` (first frame at
+40% saturation): the site topbar, `favicon.png`, `apple-touch-icon.png`, the share card, the server's
+`/welcome` page and the invite/recovery emails (those two load it from agentkeyboard.com), and the
+widget's corner glyph (inlined as a 52x28 data URI in `widget/src/styles.ts`). The retired amber orb should not come back. The widget's persistent surface is
 the corner **rectangle**, which carries one line of status and becomes the streaming pill (with the
 live **ticker**) while a job runs.
 
@@ -152,8 +150,8 @@ live **ticker**) while a job runs.
   bottom-right corner box carrying one status line; it becomes the streaming **pill** while a job
   runs) and the **transcript** (the panel you get by clicking it — full-screen, or docked right beside the
   page on screens ≥1024px wide — tour or conversation in
-  the body, composer or login form in the footer). Nothing else. The brand mark is the ⌨️ keyboard
-  emoji (the old amber orb is retired).
+  the body, composer or login form in the footer). Nothing else. The brand mark is the muted typewriter
+  (the ⌨️ emoji and the old amber orb are retired).
 - **Ticker** — single-line status text: syncing → thinking → editing → the streamed reply.
 - **Site** — an allow-listed repo/domain the bar can edit (an entry in the `SITES` env var).
 - **Fire-and-forget** — the job survives the browser closing; the bar re-attaches on return.

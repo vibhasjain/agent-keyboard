@@ -392,15 +392,12 @@ export function mountBar(shadow: ShadowRoot): void {
   // The resting surface: a small rectangle parked bottom-right carrying one line of
   // status — "Log in" signed out, "Whatsup?" idle, the job's own summary or
   // error once it finishes. Click (or the tilde shortcut) opens the transcript. The
-  // ⌨️ is the brand mark (the documented emoji exception).
+  // glyph is the muted typewriter brand mark (an inline image in styles.ts).
   const miniBtn = el('button', 'ak-mini', (n) => {
     n.type = 'button'
     n.setAttribute('aria-label', 'Open Agent Keyboard')
   })
-  const miniGlyph = el('span', 'ak-mini-glyph', (n) => {
-    n.textContent = '⌨️'
-    n.setAttribute('aria-hidden', 'true')
-  })
+  const miniGlyph = el('span', 'ak-mini-glyph', (n) => n.setAttribute('aria-hidden', 'true'))
   const miniCopy = el('span', 'ak-mini-copy')
   const miniArrow = icon('arrow-right', 15)
   miniArrow.classList.add('ak-mini-arrow')

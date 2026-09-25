@@ -32,5 +32,6 @@ async function bundle(entry, outfile, gzipBudgetKB) {
 // scripted fakes). The demo carries scene scripts + timeline so its budget is
 // looser; it never ships to a customer's page.
 // 32: transcript tool lines (2026-09-04); Docker's zlib measures ~0.2 KB heavier than local.
-await bundle('src/index.ts', 'dist/widget.js', 32)
+// 33: the typewriter mark inlined as the corner glyph (~0.8 KB, 2026-09-25).
+await bundle('src/index.ts', 'dist/widget.js', 33)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)

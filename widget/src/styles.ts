@@ -47,7 +47,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-bar{ display:flex; justify-content:flex-end; }
 .ak-stash{ display:none; }
 
-/* ---- the resting rectangle: ⌨️ + one line of status, parked bottom-right ---- */
+/* ---- the resting rectangle: the typewriter mark + one line of status, parked bottom-right ---- */
 .ak-mini{
   display:flex; align-items:center; gap:9px;
   margin-left:auto; margin-right:0;
@@ -67,8 +67,10 @@ button::-moz-focus-inner{ border:0; }
 .ak-mini.error{ color:var(--ak-err); border-color:rgba(249,112,102,.4); }
 .ak-mini.browser-live{ max-width:274px; padding-right:78px; }
 .ak-mini.browser-live .ak-mini-arrow{ display:none; }
+/* the muted typewriter (site/typewriter-mark.png at 52x28, inlined so the bundle stays self-contained) */
 .ak-mini-glyph{
-  flex:none; font-size:15px; line-height:1;
+  flex:none; width:26px; height:14px;
+  background:url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADQAAAAcBAMAAADcqYGDAAAAMFBMVEVSUlKEgX3Gw7upo508OUReXWdbTkeyrqiYk4mCclvg3dMvLCl7eHJ6d3QjIB9QSkfBjSw9AAAAEHRSTlMB9973/PX6ufD59EBy0B/Fg7mq3gAAAAlwSFlzAAAD6AAAA+gBtXtSawAAAjVJREFUeNptkkFo01AYx3NvLaRJa5gU6ZM2sTBGnC3OW7tkoJ5Mk6x6kWzLW4OIEBkBQTStaC12UHGlb6DQlsEWGCiyk5d5kR08tCiuK0704kUdYxQvO+hLi0Ltfn8efPCD9773vUcQGN8eMYDvy7/y27VBtXH9b+UJiu8GeHupL358aiembJskScYmGYYskAVa2H3h7vs+AIUhtjex8t7Z7x63AGvhBTCWideCto/Vz7G9bn78PyaEQ6xentxCfJlv92NTJSpEhZglCu+4cdiupxsHq9KqVLu63hnrRIt3b0fOh5u4DZ/SusBr8Ww8m8g+SNPTH9L0Np1eavZupRgV5EbVFUUWZUEUdcVYdFv0O9Ecn+P8YX+Y4igujTPiNE64KnQqmIsuRyScmdHp8CQ3uZZiI646FvwFDQMhBHVVpxVZkAUV3uw+dlUONNB4gSpQExTPxDPxDJ85PQJKWH31A+5GfSeWKEY7K9LoxfVUI1U7AM+wegV/wwpCmmFAXXY7FINQ1T9q+M22GNsoVatlmwyRTIsMKAFl90rVZvDs3zhO2YnGastOj0bKCTgrRYfHauehNQXo3MI86BFOsrJ5X2IzeIi2KEPd0I2nSo85WRZFUa3MbBK+PJxDaBahs6omyIoo0vLlpEZXpCbhiVUMDj55VF2DfloHcjIiUOpsAhbvEd4Ya/YOqZuAZQFr1m8BcIa1YouEN29ZlmkN85nw9p/83NAneE54WuTR4I/z/fXREH8A2tn2L7bJ3IYAAAAASUVORK5CYII=) center/contain no-repeat;
   filter:drop-shadow(0 0 6px rgba(255,184,107,.5));
   animation:ak-breathe 3.4s ease-in-out infinite;
 }
