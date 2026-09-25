@@ -128,9 +128,12 @@ the corner **rectangle**, which carries one line of status and becomes the strea
 live **ticker**) while a job runs.
 
 ### Typography
-- **Instrument Serif** — display / wordmark / italic accents.
-- **Inter** — body / UI on the marketing site.
-- **JetBrains Mono** — labels, code, the status ticker, the mm:ss timer.
+- **Inter** — the marketing site's only text face: headings (bold, tight tracking,
+  `text-wrap:balance`, no italics — `<em>` accents are colour only), body, labels, buttons.
+- **JetBrains Mono** — code only on the site (install snippet, inline `code`, repo names), and
+  the widget's terminal surface (transcript, status ticker, the mm:ss timer).
+- Instrument Serif was retired from the site 2026-09-25 (owner decision); the widget's
+  `--ak-serif` token and `site/agent-keyboard-flight-prototype.html` still carry it.
 
 ### Motion principles
 - Respect `prefers-reduced-motion`.
