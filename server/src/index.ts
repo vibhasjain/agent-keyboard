@@ -222,7 +222,7 @@ app.get("/welcome", (_req, res) => {
   html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
   main{max-width:420px;margin:18vh auto 0;padding:0 20px}
   h1{font-size:17px;font-weight:600;margin:0 0 6px}
-  h1 .k{margin-right:8px}
+  h1 .k{margin-right:10px;vertical-align:-3px}
   p{color:var(--ink2);margin:0 0 22px;font-size:13.5px}
   label{display:block;color:var(--ink3);font-size:11px;letter-spacing:.06em;margin:14px 0 4px}
   input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;padding:6px 2px;outline:none}
@@ -233,7 +233,7 @@ app.get("/welcome", (_req, res) => {
   .msg.err{color:var(--err)} .msg.ok{color:var(--ok)}
 </style></head>
 <body><main>
-  <h1><span class="k">⌨️</span>Agent Keyboard</h1>
+  <h1><img class="k" src="https://agentkeyboard.com/typewriter-mark.png" width="41" height="22" alt="">Agent Keyboard</h1>
   <p>You've been invited. Set a password to finish — then sign in from the bar on the site.</p>
   <form id="f">
     <label for="pw">new password</label>

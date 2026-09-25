@@ -121,10 +121,12 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 done = green, error = `#f97066` (red, outside the palette, used sparingly).
 
 **Brand mark:** on the site, `site/typewriter.webp`, an animated pixel-art typewriter whose keys run
-a rainbow wave (adopted 2026-09-25 at Lingz's request). It's in the hero (with the amber drop-shadow
-glow and breathing animation) and the topbar. `typewriter-still.webp` is served under reduced motion,
-and its first frame is the favicon (`favicon.png`) and `apple-touch-icon.png`. The widget and the
-share card still use the keyboard emoji ⌨️. The emoji is a deliberate exception to the no-emoji UI rule: it is
+a rainbow wave (adopted 2026-09-25 at Lingz's request). **Only the hero moves** (with the amber
+drop-shadow glow and breathing animation; `typewriter-still.webp` under reduced motion). Everywhere
+else uses the muted static mark `site/typewriter-mark.png` (first frame at 40% saturation), so nothing
+competes with the hero: the topbar, `favicon.png`, `apple-touch-icon.png`, the share card, the server's
+`/welcome` page and the invite/recovery emails (the last two load it from agentkeyboard.com). The
+widget still uses the keyboard emoji ⌨️. The emoji is a deliberate exception to the no-emoji UI rule: it is
 the brand, chosen on purpose (owner decision 2026-07-02); the rule still bans emoji-set codepoints as
 functional UI glyphs. The retired amber orb should not come back. The widget's persistent surface is
 the corner **rectangle**, which carries one line of status and becomes the streaming pill (with the

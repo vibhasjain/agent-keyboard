@@ -1,7 +1,7 @@
 # Branded auth emails
 
 Branded, email-client-safe templates for the Supabase auth emails (invite +
-password recovery). Dark card, amber button, the ⌨️ mark — table layout and
+password recovery). Dark card, amber button, the muted typewriter mark (hosted at agentkeyboard.com/typewriter-mark.png) — table layout and
 inline styles only, system fonts (webfonts don't load in most clients).
 
 `{{ .ConfirmationURL }}` and `{{ .Email }}` are Supabase template variables —
