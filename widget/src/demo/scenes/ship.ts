@@ -2,6 +2,8 @@
 // first, readable) — a prompt goes in — thinking, thinking — pushed — the page
 // REFRESHES — and the change you see is exactly what the prompt asked for.
 // Predetermined pair: "make the headline bigger" → the headline is bigger.
+// Desktop-sized (the site's hero frame), the transcript docks beside the page
+// and stays open through the job, so the change lands next to the conversation.
 
 import { start } from '../../jobstore'
 import { patchUi, setJob } from '../../state'
@@ -9,7 +11,7 @@ import { clearTextarea, q, typeInto } from '../actions'
 import type { Frame } from '../fake-api'
 import { type Scene, streamFrames } from './scene'
 
-const PROMPT = 'make the headline bigger on phones'
+const PROMPT = 'make the headline bigger'
 
 const send: Frame[] = [
   [200, 'job', { job_id: 'demo-ship' }],
@@ -17,12 +19,12 @@ const send: Frame[] = [
   [1000, 'status', { phase: 'syncing', detail: 'Syncing the repo' }],
   [2000, 'status', { phase: 'thinking', detail: 'Reading the current layout…' }],
   [3600, 'status', { phase: 'tool', detail: 'Editing index.html' }],
-  [5200, 'status', { phase: 'tool', detail: '$ git commit -am "Hero: larger phone headline"' }],
-  ...streamFrames('Done — bumped the phone headline so it reads larger on small screens.', 6400, 8200),
+  [5200, 'status', { phase: 'tool', detail: '$ git commit -am "Hero: larger headline"' }],
+  ...streamFrames('Done — the headline is bigger. Pushed, redeploying now.', 6400, 8200),
   [
     8700,
     'result',
-    { reply: 'Done — bumped the phone headline.', git: { changed: true, pushed: true, headSha: '3f2a91c00', branch: 'main' } },
+    { reply: 'Done — the headline is bigger.', git: { changed: true, pushed: true, headSha: '3f2a91c00', branch: 'main' } },
   ],
 ]
 
@@ -49,7 +51,9 @@ export const ship: Scene = {
           run: () => {
             start({ text: ta.value.trim() || PROMPT, page: '/' })
             clearTextarea(ta)
-            patchUi({ mode: 'collapsed' }) // back to the corner, now carrying the live ticker
+            // back to the corner, now carrying the live ticker — unless docked, where
+            // the transcript stays beside the page and the job streams right there
+            if (!matchMedia('(min-width: 1024px)').matches) patchUi({ mode: 'collapsed' })
 
           },
         },

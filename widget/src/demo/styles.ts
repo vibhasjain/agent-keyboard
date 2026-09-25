@@ -14,6 +14,8 @@ export const DEMO_STYLES = `
    forever-looping demo. The surfaces are near-opaque already, so it reads the
    same without the blur — drop it in the demo only (the shipped widget keeps it). */
 .ak-pill, .ak-composer, .ak-mini{ backdrop-filter:none !important; -webkit-backdrop-filter:none !important; }
+/* desktop-sized scene (the site's hero frame): no fake phone chrome to float above */
+@media (min-width:1024px){ .ak-zone{ padding-bottom:10px; } }
 /* demos ignore Reduce Motion by design (owner's call): restore the widget's
    own animations that STYLES turns off under the media query */
 @media (prefers-reduced-motion: reduce){
@@ -112,5 +114,17 @@ body{
   border-radius:999px; padding:4px 18px;
 }
 .demo-home{ width:110px; height:4px; border-radius:3px; background:rgba(245,241,234,.22); }
+
+/* Desktop-sized scene: the site frames it as a browser window, the transcript
+   docks beside the page, and the page stays readable while it changes — that
+   side-by-side IS the story here, so no phone chrome and no dimming. */
+@media (min-width:1024px){
+  .demo-chrome{ display:none; }
+  .demo-site{ max-width:600px; padding-top:56px; }
+  .demo-site.backdrop{ opacity:.72; }
+  .demo-headline{ font-size:36px; }
+  .demo-headline.grown{ font-size:56px; }
+  .demo-img{ height:150px; }
+}
 
 `

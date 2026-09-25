@@ -29,6 +29,13 @@ function boot(): void {
   host.id = 'agent-keyboard-host'
   host.style.cssText = 'position:fixed;inset:auto 0 0 0;z-index:2147483000;pointer-events:none;'
   document.body.appendChild(host)
+  // Same top-layer lift as the live widget (index.ts): the demo page never
+  // scrolls, so docking puts a transform on <html> that would otherwise trap
+  // the bar inside the squeezed page.
+  if (host.showPopover) {
+    host.popover = 'manual'
+    host.showPopover()
+  }
 
   const shadow = host.attachShadow({ mode: 'open' })
   const base = document.createElement('style')
