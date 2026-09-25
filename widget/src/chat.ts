@@ -560,17 +560,31 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // reflows into the space beside it (a margin on <html>, sized off the panel's
   // own CSS width), so you watch the site change while you talk to it. The page
   // stays live then — no scroll lock. Narrow screens keep the full-screen sheet.
+  // ak-docked tracks the screen, not the open state, so a closing panel keeps its
+  // column shape and slides out sideways instead of snapping back to full-screen.
   const wide = matchMedia('(min-width: 1024px)')
   const host = shadow.host as HTMLElement
-  const applyDock = () => {
+  const root = document.documentElement.style
+  let marginTimer: ReturnType<typeof setTimeout> | null = null
+  const applyDock = (animate = true) => {
     const expanded = getState().ui.mode === 'expanded'
-    const docked = expanded && wide.matches
-    host.classList.toggle('ak-docked', docked)
-    document.documentElement.style.marginRight = docked ? `${overlay.offsetWidth}px` : ''
-    if (expanded && !docked) lockBody()
+    host.classList.toggle('ak-docked', wide.matches)
+    const margin = expanded && wide.matches ? `${overlay.offsetWidth}px` : ''
+    if (root.marginRight !== margin) {
+      // The page moves with the panel, on the panel's own clock. The transition
+      // on <html> is borrowed for just that long, then handed back.
+      const cs = getComputedStyle(overlay)
+      const ms = animate ? parseFloat(cs.getPropertyValue(expanded ? '--panel-open-dur' : '--panel-close-dur')) || 0 : 0
+      if (marginTimer != null) clearTimeout(marginTimer)
+      root.transition = ms ? `margin-right ${ms}ms ${cs.getPropertyValue('--panel-ease')}` : ''
+      root.marginRight = margin
+      marginTimer = setTimeout(() => (root.transition = ''), ms)
+    }
+    if (expanded && !wide.matches) lockBody()
     else unlockBody()
   }
-  on(window, 'resize', applyDock) // crossing the breakpoint, and the vw-based width inside it
+  // Crossing the breakpoint, and the vw-based width inside it — tracked live, not eased.
+  on(window, 'resize', () => applyDock(false))
 
   const setPanelOpen = (open: boolean) => {
     if (open === panelOpen) return

@@ -314,6 +314,9 @@ button::-moz-focus-inner{ border:0; }
 /* Wide screens: docked to the right, page reflowed beside it (chat.ts applyDock
    sizes the <html> margin off this width). */
 :host(.ak-docked) .ak-overlay{ left:auto; width:clamp(380px, 34vw, 480px); border-left:1px solid var(--ak-rule); }
+/* …and it comes and goes sideways, from the edge it lives on: no rise, no blur. */
+:host(.ak-docked){ --panel-blur:0px; }
+:host(.ak-docked) .ak-overlay:not([data-open="true"]){ transform:translateX(100%); }
 :host(.ak-docked) .ak-ov-scroll{ padding-top:52px; } /* clear the corner controls in the narrow column */
 .ak-overlay.ak-dragging{ transition:none !important; } /* track the finger, don't chase it */
 .ak-ov-close, .ak-ov-settings{
