@@ -131,7 +131,7 @@ the corner **rectangle**, which carries one line of status and becomes the strea
 live **ticker**) while a job runs.
 
 ### Typography
-- **Inter** — the marketing site's only text face: headings (bold, tight tracking,
+- **Inter** — the marketing site's only text face: headings (weight 500 since 2026-09-25, tight tracking,
   `text-wrap:balance`, no italics — `<em>` accents are colour only), body, labels, buttons.
 - **JetBrains Mono** — code only on the site (install snippet, inline `code`, repo names), and
   the widget's terminal surface (transcript, status ticker, the mm:ss timer).
