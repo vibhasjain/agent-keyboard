@@ -96,10 +96,12 @@ const GOOGLE_HD_SITES = csvExact(process.env.GOOGLE_HD_SITES);
 export interface UserScope {
   sites: string[];
   pathPrefix?: string;
+  /** Per-site path prefix (siteId → prefix); wins over pathPrefix on that site. */
+  paths?: Record<string, string>;
 }
 
 /** Parse allowed-emails.json content: entries are "email" strings (full access)
- *  or {email, sites, pathPrefix?} objects (scoped). Malformed entries are
+ *  or {email, sites, pathPrefix?, paths?} objects (scoped). Malformed entries are
  *  skipped — a typo must never widen access. Exported for the dev check. */
 export function parseAllowedList(raw: string): Map<string, UserScope | null> {
   const out = new Map<string, UserScope | null>();
@@ -112,10 +114,34 @@ export function parseAllowedList(raw: string): Map<string, UserScope | null> {
       const sites = Array.isArray(entry.sites) ? entry.sites.map(String).filter(Boolean) : [];
       if (!sites.length) continue; // a scoped entry with no sites grants nothing
       const pathPrefix = typeof entry.pathPrefix === "string" && entry.pathPrefix ? entry.pathPrefix : undefined;
-      out.set(entry.email.toLowerCase().trim(), { sites, pathPrefix });
+      // paths: keep only non-empty string prefixes for sites the entry grants.
+      const paths: Record<string, string> = {};
+      if (entry.paths && typeof entry.paths === "object" && !Array.isArray(entry.paths)) {
+        for (const [site, p] of Object.entries(entry.paths)) {
+          if (sites.includes(site) && typeof p === "string" && p) paths[site] = p;
+        }
+      }
+      out.set(entry.email.toLowerCase().trim(), {
+        sites,
+        pathPrefix,
+        ...(Object.keys(paths).length ? { paths } : {}),
+      });
     }
   }
   return out;
+}
+
+/** The server-authored path constraint appended to every prompt and follow-up
+ *  from a path-scoped user on this site (its per-site path, else the global
+ *  pathPrefix). It rides the user turn because Claude sessions are shared per
+ *  site/page — the session-level scope note can't be per-user. */
+export function pathScopeNote(user: AuthedUser | undefined, siteId: string): string {
+  const p = user?.scope?.paths?.[siteId] ?? user?.scope?.pathPrefix;
+  if (!p) return "";
+  return (
+    `\n\n[Server note — sent by ${user!.email}, a restricted user: for this request you may only create, modify, or delete files under "${p}" in this repo (committing and pushing as usual). ` +
+    `If the request would require touching anything outside that path, make no change and reply that this user's access is limited to ${p}.]`
+  );
 }
 
 // Runtime-provisioned emails (allowed-emails.json on the volume), cached

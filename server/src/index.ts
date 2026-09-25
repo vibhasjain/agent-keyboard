@@ -19,6 +19,7 @@ import {
   denySite,
   googleSessionsConfigured,
   mintGoogleSession,
+  pathScopeNote,
   requireOwner,
   requireOwnerOrGoogle,
   verifyGoogle,
@@ -112,18 +113,6 @@ const authedOrGoogle = requireOwnerOrGoogle();
 // ─── per-user site/path scoping (see auth.ts UserScope) ─────────────────────
 function authedUser(req: Request): AuthedUser | undefined {
   return (req as Request & { user?: AuthedUser }).user;
-}
-
-/** The server-authored path constraint appended to every prompt and follow-up
- *  from a path-scoped user. It rides the user turn because Claude sessions are
- *  shared per site/page — the session-level scope note can't be per-user. */
-function pathScopeNote(user: AuthedUser | undefined): string {
-  const p = user?.scope?.pathPrefix;
-  if (!p) return "";
-  return (
-    `\n\n[Server note — sent by ${user!.email}, a restricted user: for this request you may only create, modify, or delete files under "${p}" in this repo (committing and pushing as usual). ` +
-    `If the request would require touching anything outside that path, make no change and reply that this user's access is limited to ${p}.]`
-  );
 }
 
 // ─── open routes ───────────────────────────────────────────────────────────
@@ -489,7 +478,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const pageSlug = pageSlugFor(site, page);
   // Path-scoped users: the constraint travels with the turn itself; the stored
   // job prompt stays the user's own words.
-  const promptText = text + pathScopeNote(authedUser(req));
+  const promptText = text + pathScopeNote(authedUser(req), site.id);
   const sender = authedUser(req)?.email;
   // Record which Claude session this job drives, so an auto-resume after a
   // self-triggered redeploy can pick the turn back up with --resume.
@@ -544,7 +533,7 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
   const user = authedUser(req);
   const ok = appendToJob(
     req.params.jobId ?? "",
-    buildPrompt(site, { text: text + pathScopeNote(user), page: "/", attachmentPaths: [], sender: user?.email }),
+    buildPrompt(site, { text: text + pathScopeNote(user, site.id), page: "/", attachmentPaths: [], sender: user?.email }),
   );
   if (!ok) {
     res.status(409).json({ error: "job not accepting messages" });

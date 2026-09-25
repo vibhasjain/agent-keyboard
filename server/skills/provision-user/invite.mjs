@@ -19,20 +19,27 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 // Flags: --sites <id,id> restricts the user to those site ids (auth-enforced);
 // --path <prefix> additionally confines their change requests to that repo path
-// (rides every prompt as a server note). See auth.ts UserScope.
+// (rides every prompt as a server note); --path <site>=<prefix> (repeatable)
+// confines them on that one site only. See auth.ts UserScope.
 const argv = process.argv.slice(2);
-const flags = { sites: null, path: "" };
+const flags = { sites: null, path: "", paths: {} };
 const positional = [];
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === "--sites") flags.sites = String(argv[++i] || "").split(",").map((s) => s.trim()).filter(Boolean);
-  else if (argv[i] === "--path") flags.path = String(argv[++i] || "").trim();
+  else if (argv[i] === "--path") {
+    const v = String(argv[++i] || "").trim();
+    const eq = v.indexOf("=");
+    if (eq > 0) flags.paths[v.slice(0, eq).trim()] = v.slice(eq + 1).trim();
+    else flags.path = v;
+  }
   else positional.push(argv[i]);
 }
 const email = (positional[0] || "").trim().toLowerCase();
 let siteArg = (positional[1] || "").trim();
-if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (flags.path && !flags.sites?.length)) {
-  console.error("usage: node invite.mjs <email> [site-domain] [--sites siteId,siteId] [--path prefix/]");
-  console.error("(--path requires --sites: a path scope without a site scope grants nothing)");
+const badPathSite = Object.keys(flags.paths).find((s) => !flags.sites?.includes(s) || !flags.paths[s]);
+if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || ((flags.path || Object.keys(flags.paths).length) && !flags.sites?.length) || badPathSite) {
+  console.error("usage: node invite.mjs <email> [site-domain] [--sites siteId,siteId] [--path prefix/] [--path siteId=prefix/ ...]");
+  console.error("(--path requires --sites: a path scope without a site scope grants nothing; --path site=prefix/ needs that site in --sites)");
   process.exit(2);
 }
 
@@ -172,15 +179,24 @@ const listPath = join(dataDir, "agent-keyboard", "allowed-emails.json");
 let list = [];
 try {
   const parsed = JSON.parse(await readFile(listPath, "utf8"));
-  // Entries are "email" strings (full access) or {email, sites, pathPrefix?}
-  // objects (scoped) — see auth.ts parseAllowedList.
+  // Entries are "email" strings (full access) or {email, sites, pathPrefix?,
+  // paths?} objects (scoped) — see auth.ts parseAllowedList.
   if (Array.isArray(parsed)) list = parsed;
 } catch {
   /* first user */
 }
 const entryEmail = (e) => (typeof e === "string" ? e : e?.email || "").toLowerCase();
 list = list.filter((e) => entryEmail(e) !== email); // re-inviting replaces the old entry (and its scope)
-list.push(flags.sites?.length ? { email, sites: flags.sites, ...(flags.path ? { pathPrefix: flags.path } : {}) } : email);
+list.push(
+  flags.sites?.length
+    ? {
+        email,
+        sites: flags.sites,
+        ...(flags.path ? { pathPrefix: flags.path } : {}),
+        ...(Object.keys(flags.paths).length ? { paths: flags.paths } : {}),
+      }
+    : email,
+);
 await mkdir(dirname(listPath), { recursive: true });
 await writeFile(`${listPath}.tmp`, JSON.stringify(list, null, 2) + "\n");
 await rename(`${listPath}.tmp`, listPath);

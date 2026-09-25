@@ -22,7 +22,9 @@ phrase when several exist.
 allow-list (auth then rejects them on every other site), and optionally `--path`
 with a repo path prefix (every prompt they send carries a server note confining
 the change to that path — a guardrail for a trusted guest, not a hard sandbox).
-Example: `--sites closeout --path report/`. Re-inviting an email replaces its
+Example: `--sites closeout --path report/`. For a path on one site only, use
+`--path siteId=prefix/` (repeatable, e.g. `--sites closeout-jobs,closeout --path closeout=story/`);
+other sites then get no path note. Re-inviting an email replaces its
 existing entry, so the same command also tightens or loosens someone's scope.
 
 What it does:

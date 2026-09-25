@@ -20,9 +20,11 @@ ENV HOME=/data \
     PORT=8080
 
 # git (checkout + commit + push), ripgrep/jq/python3 for the agent's toolbelt,
-# xauth (xvfb-run needs it to fake a display for the headed-Playwright submit path).
+# xauth (xvfb-run needs it to fake a display for the headed-Playwright submit path),
+# python3-pil so repo image scripts (e.g. closeout-deck story/assets/raw/compress.sh)
+# can convert PNG→JPEG without magick/sips.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl git ripgrep jq python3 xauth \
+      ca-certificates curl git ripgrep jq python3 python3-pil xauth \
     && rm -rf /var/lib/apt/lists/*
 
 # GitHub CLI (gh) from the official apt repo (not in Debian default).
