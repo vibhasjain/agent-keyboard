@@ -36,6 +36,7 @@ import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
 import { seedCodexConfig, seedSkills } from "./skills.js";
+import { startUsagePush } from "./usage.js";
 import {
   startJob,
   tail,
@@ -870,6 +871,7 @@ app.listen(port, () => {
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
   void seedCodexConfig().catch((e) => console.error("[boot] codex config seed failed", e));
   startTailscale();
+  startUsagePush();
 });
 
 // LinkedIn-only residential egress (see tailscale-up.sh): bring up the
