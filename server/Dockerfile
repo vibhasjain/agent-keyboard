@@ -51,7 +51,7 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.283
 
 # OpenAI Codex CLI (pinned) — the GPT lane for the fable-subagents skill and the
 # codex plugin (/codex:rescue). Login lives on the volume: /data/.codex/auth.json.
-RUN npm install -g @openai/codex@0.157.1
+RUN npm install -g @openai/codex@0.158.0
 
 # Supabase CLI (pinned). Logged in per site via SUPABASE_ACCESS_TOKEN in that
 # site's settings.json "env" knob (harness.ts) — each site's own Supabase account.
