@@ -7,7 +7,7 @@
 // per-site "pending-resume" marker (Fly's kill window is ~5s — no time for
 // async); on the next boot, if we came up on a genuinely NEW image, we re-launch
 // each still-running turn with a short continuation prompt, resuming its Claude
-// session (--resume finds it because the marker file still exists).
+// session with a bounded handoff in a fresh conversation.
 //
 // The whole feature is gated behind AK_AUTO_RESUME=1 (default OFF) and is fully
 // defensive: every fs op is in try/catch and the boot call is .catch'd, so with
@@ -152,11 +152,10 @@ export async function resumeAfterRedeploy(): Promise<void> {
       // Old (pre-page-scope) markers lack pageSlug → "" → the site root, which
       // is correct: every pre-deploy job was root-scoped.
       if ((await conversationIdFor(s.id, marker.pageSlug ?? "")) !== marker.conversationId) continue;
-      // (f) The Claude session file still exists, so --resume will find it.
+      // (f) The old conversation exists for the continuation handoff.
       if (!marker.conversationId || !existsSync(markerPathFor(marker.conversationId))) continue;
 
-      // All checks pass — launch a normal turn. The run auto-picks --resume
-      // because the session marker file exists.
+      // All checks pass — rotate under the site lock at admission and hand off.
       const ac = new AbortController();
       const input = marker.streaming ? new InputChannel() : null;
       const pageSlug = marker.pageSlug ?? "";
@@ -169,8 +168,8 @@ export async function resumeAfterRedeploy(): Promise<void> {
         pageSlug,
         makeGen: (preLock) =>
           input
-            ? runStreamingSession(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [], preLock }, input, ac.signal)
-            : runMessageJob(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [], preLock }, ac.signal),
+            ? runStreamingSession(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [], preLock, forceFresh: "redeploy continuation" }, input, ac.signal)
+            : runMessageJob(s, { text: CONTINUATION, page, pageSlug, attachmentPaths: [], preLock, forceFresh: "redeploy continuation" }, ac.signal),
         abort: () => ac.abort(),
         streaming: !!input,
         input,

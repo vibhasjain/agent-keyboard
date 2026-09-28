@@ -66,7 +66,7 @@ export function cleanUserText(raw: string): { text: string; attachments: number;
   let attachments = 0;
   let photos = 0;
   let sender: string | undefined;
-  const text = raw
+  const text = raw.replace(/^Earlier in this chat \(for context\)[\s\S]*?\nEnd of earlier context\.\n\n/, "")
     .split("\n")
     .filter((l) => {
       if (/^Attachment\(s\) attached( — use the Read tool[^:]*)?:/i.test(l)) {
@@ -236,4 +236,22 @@ export async function readConversation(
   const messages = all.slice(start, Math.max(start, end));
   const cursor = start; // number of older messages still available
   return { messages, cursor };
+}
+
+/** Migration/crash fallback: recover the last model call from this exact session. */
+export async function readSessionUsage(siteId: string, conversationId: string): Promise<import("./harness.js").TurnUsage | null> {
+  const path = await sessionFilePath(sessionIdFor(conversationId), checkoutPath(siteId));
+  if (!path) return null;
+  let raw: string;
+  try { raw = await readFile(path, "utf8"); } catch { return null; }
+  for (const line of raw.split("\n").reverse()) {
+    try {
+      const row = JSON.parse(line);
+      if (row.type !== "assistant" || row.parent_tool_use_id) continue;
+      const u = row.message?.usage;
+      const contextTokens = (Number(u?.input_tokens) || 0) + (Number(u?.cache_read_input_tokens) || 0) + (Number(u?.cache_creation_input_tokens) || 0);
+      if (contextTokens > 0) return { contextTokens, contextPct: 0, at: row.timestamp ?? "", conversationId };
+    } catch { /* partial final line */ }
+  }
+  return null;
 }

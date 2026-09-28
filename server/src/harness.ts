@@ -29,12 +29,20 @@ export interface CronSettings {
 }
 
 /** Per-page override of the site-wide knobs (page-scoped sites). */
-export interface PageSettings {
+export interface ContextSettings {
+  maxContextTokens?: number;
+  idleRotateMinutes?: number;
+  idleRotateMinTokens?: number;
+  turnMaxContextTokens?: number;
+  maxBudgetUsd?: number;
+}
+
+export interface PageSettings extends ContextSettings {
   model?: string;
   effort?: string;
 }
 
-export interface HarnessSettings {
+export interface HarnessSettings extends ContextSettings {
   model?: string;
   effort?: string;
   pages?: Record<string, PageSettings>;
@@ -68,7 +76,20 @@ interface Knob {
   describe: string;
 }
 
+export const CONTEXT_DEFAULTS = { maxContextTokens: 150_000, idleRotateMinutes: 60, idleRotateMinTokens: 60_000, turnMaxContextTokens: 300_000, maxBudgetUsd: 5 };
+const PAGE_KEYS = ["model", "effort", ...Object.keys(CONTEXT_DEFAULTS)];
+
 const KNOBS: Knob[] = [
+  ...Object.entries(CONTEXT_DEFAULTS).map(([key, value]): Knob => ({
+    key: key as keyof ContextSettings,
+    validate: (v, warn) => {
+      if (v === undefined) return undefined;
+      if (typeof v === "number" && Number.isFinite(v) && v > 0 && (key === "maxBudgetUsd" || Number.isInteger(v))) return v;
+      warn(`${key} must be a positive ${key === "maxBudgetUsd" ? "number" : "integer"} — using default`);
+      return undefined;
+    },
+    describe: `"${key}": positive ${key === "maxBudgetUsd" ? "number" : "integer"} (default ${value}${key === "maxBudgetUsd" ? "; cron default 3" : ""})`,
+  })),
   {
     key: "model",
     validate: (v, warn) => {
@@ -130,7 +151,7 @@ const KNOBS: Knob[] = [
 
 // The page knob reuses the site-level validators verbatim, so an override can
 // never accept a model or effort the site knob would reject.
-function knobValidate(key: "model" | "effort", v: unknown, warn: (w: string) => void): unknown {
+function knobValidate(key: string, v: unknown, warn: (w: string) => void): unknown {
   return KNOBS.find((k) => k.key === key)!.validate(v, warn);
 }
 
@@ -149,21 +170,17 @@ KNOBS.push({
         continue;
       }
       const entry = raw as Record<string, unknown>;
+      const validated: Record<string, unknown> = {};
       for (const k of Object.keys(entry)) {
-        if (k !== "model" && k !== "effort") warn(`pages[${JSON.stringify(page)}].${k} is not overridable — ignored; valid keys: model, effort`);
+        if (!PAGE_KEYS.includes(k)) { warn(`pages[${JSON.stringify(page)}].${k} is not overridable — ignored`); continue; }
+        const value = knobValidate(k, entry[k], warn);
+        if (value !== undefined) validated[k] = value;
       }
-      const model = knobValidate("model", entry.model, warn);
-      const effort = knobValidate("effort", entry.effort, warn);
-      if (model === undefined && effort === undefined) continue;
-      // Keyed by slug, so "/jobs", "jobs" and "/jobs/" are the same page.
-      out[slugifyPage(page)] = {
-        ...(typeof model === "string" ? { model } : {}),
-        ...(typeof effort === "string" ? { effort } : {}),
-      };
+      if (Object.keys(validated).length) out[slugifyPage(page)] = validated;
     }
     return Object.keys(out).length ? out : undefined;
   },
-  describe: `"pages": {"/jobs": {"model": "opus", "effort": "high"}} — per-page overrides for a page-scoped site: that page's session runs with these instead of the site-wide "model"/"effort" (only those two are overridable; "/" is the site root, and every other page keeps the site values)`,
+  describe: `"pages": {"/jobs": {"model": "opus", "effort": "high"}} — per-page overrides for a page-scoped site: that page's session runs with these instead of the site-wide "model"/"effort" (model, effort and all context/budget knobs are overridable; "/" is the site root, and every other page keeps the site values)`,
 });
 
 const ENV_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -352,7 +369,8 @@ export function defaultHarness(): ResolvedHarness {
  *  KEEP permissionMode. Flipping a plan-mode site to bypassPermissions because
  *  its model id was bad would silently drop the owner's safety intent. */
 export function fallbackHarness(prev: HarnessSettings): ResolvedHarness {
-  return resolve(prev.permissionMode ? { permissionMode: prev.permissionMode } : {}, []);
+  const { model, effort, ...rest } = prev;
+  return resolve(rest, []);
 }
 
 /** Fold a page's override onto the site-wide settings. The result is what the
@@ -398,26 +416,27 @@ export async function clearCompactFlag(siteId: string): Promise<void> {
 }
 
 // ─── context-usage introspection ─────────────────────────────────────────────
-// Approximate: stream-json usage rows have known quirks (placeholder
-// input_tokens on some entries), so we take the max plausible total per turn and
-// present it as "~N% used". Good enough for "how much context is left?".
+// Context from the last model call, scoped to page and conversation. Repeated
+// snapshots for the same call are deduplicated by the runner.
 
 export interface TurnUsage {
   contextTokens: number;
   contextPct: number;
   at: string;
+  conversationId?: string;
+  freshCron?: boolean;
 }
 
 const parsedWindow = Number(process.env.CONTEXT_WINDOW_TOKENS ?? 200_000);
 export const CONTEXT_WINDOW_TOKENS =
   Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : 200_000;
 
-export async function writeLastUsage(siteId: string, u: TurnUsage): Promise<void> {
-  await writeDataFile(siteRel(siteId, "last-usage.json"), JSON.stringify(u) + "\n");
+export async function writeLastUsage(siteId: string, u: TurnUsage, pageSlug = ""): Promise<void> {
+  await writeDataFile(siteRel(siteId, pageSlug ? `pages/${pageSlug}/last-usage.json` : "last-usage.json"), JSON.stringify(u) + "\n");
 }
 
-export async function readLastUsage(siteId: string): Promise<TurnUsage | null> {
-  const raw = await readDataFile(siteRel(siteId, "last-usage.json"));
+export async function readLastUsage(siteId: string, pageSlug = ""): Promise<TurnUsage | null> {
+  const raw = await readDataFile(siteRel(siteId, pageSlug ? `pages/${pageSlug}/last-usage.json` : "last-usage.json"));
   if (!raw) return null;
   try {
     const u = JSON.parse(raw) as TurnUsage;

@@ -443,6 +443,9 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     idemKey?: unknown;
     attachmentIds?: unknown;
     priority?: unknown;
+    cron?: unknown;
+    freshCron?: unknown;
+    forceFresh?: unknown;
   };
   const text = typeof body.text === "string" ? body.text : "";
   const page = typeof body.page === "string" ? body.page : "/";
@@ -480,8 +483,12 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   // job prompt stays the user's own words.
   const promptText = text + pathScopeNote(authedUser(req), site.id);
   const sender = authedUser(req)?.email;
+  const internal = authedUser(req)?.id === "internal";
+  const cron = internal && body.cron === true;
+  const freshCron = cron && body.freshCron === true;
+  const forceFresh = freshCron ? "fresh cron" : internal && body.forceFresh === true ? "boot requeue" : undefined;
   // Record which Claude session this job drives, so an auto-resume after a
-  // self-triggered redeploy can pick the turn back up with --resume.
+  // self-triggered redeploy can validate its lineage before a fresh handoff.
   const conversationId = await conversationIdFor(site.id, pageSlug);
   const sessionId = sessionIdFor(conversationId);
   const job = await startJob({
@@ -493,8 +500,8 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     // scheduler-held site lock instead of queueing on it with a slot in hand.
     makeGen: (preLock) =>
       input
-        ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths, sender, preLock }, input, ac.signal)
-        : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths, sender, preLock }, ac.signal),
+        ? runStreamingSession(site, { text: promptText, page, pageSlug, attachmentPaths, sender, preLock, cron, freshCron, forceFresh }, input, ac.signal)
+        : runMessageJob(site, { text: promptText, page, pageSlug, attachmentPaths, sender, preLock, cron, freshCron, forceFresh }, ac.signal),
     abort: () => ac.abort(),
     idemKey: idemKey || undefined,
     priority,
@@ -846,6 +853,8 @@ app.listen(port, () => {
               : row.prompt,
           page: row.page ?? "/",
           idemKey: `requeue-${row.job_id}`,
+          forceFresh: true,
+          cron: /^\[scheduled/.test(row.prompt ?? ""),
         }),
       })
         .then(async (r) => {

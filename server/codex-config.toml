@@ -2,10 +2,9 @@
 # fable-subagents skill and /codex:rescue. Written to $HOME/.codex/config.toml on
 # EVERY boot (src/skills.ts seedCodexConfig), so edit it here, not on the volume:
 # the volume copy is overwritten by the next deploy. Login (auth.json) is
-# untouched. Owner decision 2026-09-05: GPT-6 Astra, highest effort, fast tier.
+# untouched. Owner decision 2026-09-05: GPT-6 Astra, medium effort, regular speed.
 model = "gpt-6-astra"
-model_reasoning_effort = "ultra"
-service_tier = "fast"
+model_reasoning_effort = "medium"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
 

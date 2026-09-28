@@ -212,7 +212,14 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
   try {
     for await (const [event, payload] of gen) {
       job.updatedAt = Date.now();
-      if (event === "status") {
+      if (event === "session") {
+        const session = payload as { conversation_id: string; session_id: string };
+        job.conversationId = session.conversation_id;
+        job.sessionId = session.session_id;
+      } else if (event === "usage") {
+        job.result = { ...job.result, usage: payload };
+        await maybeFlush(job);
+      } else if (event === "status") {
         job.statusLine = payload as Record<string, unknown>;
         publish(job, event, withBrowserStatus(job.siteId, job.statusLine));
         await maybeFlush(job);
@@ -254,7 +261,7 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
       /* ignore */
     }
     if (job.status === "running") {
-      if (job.streaming && job.result) {
+      if (job.streaming && typeof job.result?.reply === "string") {
         // A streaming session closed normally (idle / lifetime cap) after ≥1 turn.
         job.status = "done";
       } else {

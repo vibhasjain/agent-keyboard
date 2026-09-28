@@ -243,6 +243,38 @@ There is no settings UI. The agent's own runtime is steered in the same chat:
 - **Introspection** — "what model are you on?", "how much context are we using?" (approximate).
 - **Model / effort** — "switch to sonnet", "set effort to max" (`low·medium·high·xhigh·max`).
   Applied from the next message.
+- **Context and turn limits** — optional positive numeric settings at site level or inside
+  `pages` (same validation/override rules as model and effort):
+
+  | Knob | Default | Behavior |
+  | --- | --- | --- |
+  | `maxContextTokens` | `150000` | Rotate at CLI-process admission when the last call's input + cache tokens exceed this. |
+  | `idleRotateMinutes` | `60` | Idle threshold measured from the previous turn's end. |
+  | `idleRotateMinTokens` | `60000` | Idle chats rotate only above this size; small chats retain history. |
+  | `turnMaxContextTokens` | `300000` | Stop the running process when any model call exceeds this context. |
+  | `maxBudgetUsd` | `10` | CLI `--max-budget-usd` once per process, covering all live follow-ups. |
+
+  Token/minute settings require positive integers; budget accepts a positive finite number.
+  Automatic rotations prepend up to six recent user/assistant messages, each capped at
+  500 characters, under “Earlier in this chat (for context)”. Usage is isolated by page
+  and conversation. A fresh cron still starts without a handoff; an idle follow-up to
+  that cron starts fresh even if its context is small. Redeploy continuations and boot
+  requeues always start fresh with the bounded handoff. Rotation runs under the site lock.
+  Twenty consecutive calls with identical tool name and input stop the turn as a polling
+  loop. Both watchdog reasons appear in chat and server logs.
+
+  Open streaming jobs keep one CLI process with stream-json stdin open. Follow-ups
+  are injected live, including mid-turn steering; they are not queued or re-spawned.
+  Rotation and handoff run only at process admission. The identical-tool watchdog
+  spans the whole process stream, including result boundaries; the context cap and
+  CLI budget also bound that process. The checkout syncs once at the job's start.
+  Interrupted/error jobs persist observed input/output/cache tokens as they arrive.
+  Cost comes only from the CLI's reported `total_cost_usd`. Work killed without a
+  reported total retains `cost_usd: null`; there is no price table or cost estimate.
+  Tokens are deduplicated by model-call ID across the process, and reported process
+  cost totals are never added together. Tokens not emitted before termination cannot
+  be recovered from the stream.
+
 - **Plan mode** — "switch to plan mode" makes the next turns propose without committing; "go back to
   dangerously bypass permissions" leaves it (the agent can exit plan mode even though it can't edit
   files there — the server handles it).

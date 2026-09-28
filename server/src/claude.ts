@@ -44,7 +44,8 @@ import {
   type ResolvedHarness,
   type TurnUsage,
 } from "./harness.js";
-import { sessionFilePath } from "./conversation.js";
+import { rotationReason, shortHandoff, turnWatchdog } from "./session-policy.js";
+import { sessionFilePath, readConversation, readSessionUsage } from "./conversation.js";
 import { toolLabel } from "./tool-label.js";
 import { readFile } from "node:fs/promises";
 
@@ -109,11 +110,12 @@ export function cdpPortFor(siteId: string): number {
 
 /** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites) + harness overrides. */
 export function spawnEnv(site: Site, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
+  for (const key of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CODEX_API_KEY"]) delete env[key];
   if (site.guest) for (const k of PERSONAL_ENV) delete env[k];
   // Forced after harness env so every browser launched for this site is
   // discoverable on its one stable port.
-  return { ...env, ...extra, AK_CDP_PORT: String(cdpPortFor(site.id)) };
+  return { ...env, AK_CDP_PORT: String(cdpPortFor(site.id)) };
 }
 
 /** Extra CLI args for a guest site: a --settings blob of deny rules. */
@@ -176,6 +178,23 @@ export async function rotateConversation(siteId: string, pageSlug = ""): Promise
   const next = `${base}:${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
   await writeDataFile(pointerPath(siteId, pageSlug), next);
   return next;
+}
+
+/** Called only while holding the site lock, immediately before a turn. */
+export async function prepareConversation(siteId: string, pageSlug: string, harness: ResolvedHarness, force?: string) {
+  let conversationId = await conversationIdFor(siteId, pageSlug);
+  let usage = await readLastUsage(siteId, pageSlug);
+  // A manual/fresh-cron rotation must never inherit an abandoned session's usage.
+  if (usage?.conversationId !== conversationId) usage = await readSessionUsage(siteId, conversationId);
+  const reason = force ?? rotationReason(usage, harness.settings);
+  let handoff = "";
+  if (reason) {
+    if (reason !== "fresh cron") handoff = shortHandoff((await readConversation(siteId, { pageSlug, limit: 20 })).messages);
+    conversationId = await rotateConversation(siteId, pageSlug);
+    console.log(`[session-rotation] site=${siteId} page=${pageSlug || "/"} context=${usage?.contextTokens ?? 0} reason=${reason}`);
+    usage = null;
+  }
+  return { conversationId, handoff, lastUsage: usage };
 }
 
 export function markerPathFor(conversationId: string): string {
@@ -311,6 +330,7 @@ function streamArgs(
   harness: ResolvedHarness,
   usage: TurnUsage | null,
   streaming: boolean,
+  cron = false,
 ): string[] {
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
@@ -321,6 +341,7 @@ function streamArgs(
     // (harness.ts); with no settings file the defaults reproduce the historical
     // hardcoded values (--model $CLAUDE_MODEL, --permission-mode bypassPermissions).
     ...harness.args,
+    "--max-budget-usd", String(harness.settings.maxBudgetUsd ?? 10),
     ...guestArgs(site),
     "--output-format",
     "stream-json",
@@ -363,14 +384,43 @@ export type LowEvent =
   | { t: "delta"; text: string }
   | { t: "thinking"; text: string }
   | { t: "snapshotText"; text: string }
-  | { t: "tool"; detail: string }
+  | { t: "tool"; detail: string; name?: string; input?: unknown; id?: string }
   | { t: "todos"; items: { content: string; status: string }[] }
   | { t: "taskCreate"; subject: string }
   | { t: "taskUpdate"; taskId: string; status: string }
   | { t: "subagentStart"; id: string; desc: string }
   | { t: "subagentEnd"; id: string }
   | { t: "result"; result: ClaudeResult }
-  | { t: "usage"; contextTokens: number };
+  | { t: "usage"; contextTokens: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; cacheCreationTokens?: number; id?: string };
+
+/** Deduplicate snapshots by model-call ID; costs come only from CLI results. */
+function observeUsage() {
+  type UsageEvent = Extract<LowEvent, { t: "usage" }>;
+  const calls = new Map<string, UsageEvent>();
+  let contextTokens = 0;
+  return {
+    record(e: UsageEvent) {
+      const id = e.id ?? `call-${calls.size}`;
+      const prev = calls.get(id);
+      const merged = { ...e };
+      for (const key of ["inputTokens", "outputTokens", "cacheReadTokens", "cacheCreationTokens", "contextTokens"] as const) {
+        merged[key] = Math.max(prev?.[key] ?? 0, e[key] ?? 0);
+      }
+      calls.set(id, merged);
+      contextTokens = merged.contextTokens;
+    },
+    snapshot(cost?: number) {
+      const totals = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+      for (const u of calls.values()) {
+        totals.input_tokens += u.inputTokens ?? 0;
+        totals.output_tokens += u.outputTokens ?? 0;
+        totals.cache_read_input_tokens += u.cacheReadTokens ?? 0;
+        totals.cache_creation_input_tokens += u.cacheCreationTokens ?? 0;
+      }
+      return { ...totals, context_tokens: contextTokens, cost_usd: cost ?? null };
+    },
+  };
+}
 
 /**
  * Reconstructs the live checklist from this CLI's stateful task ops (TaskCreate
@@ -452,7 +502,7 @@ export function parseStreamLine(line: string, checkoutRoot?: string): { events: 
     }
   } else if (evt.type === "assistant" && Array.isArray(evt.message?.content)) {
     let msgText = "";
-    const tools: string[] = [];
+    const tools: LowEvent[] = [];
     let todos: { content: string; status: string }[] | null = null;
     const taskOps: LowEvent[] = [];
     for (const b of evt.message.content) {
@@ -478,7 +528,7 @@ export function parseStreamLine(line: string, checkoutRoot?: string): { events: 
           const desc = String(b.input?.description ?? b.input?.subagent_type ?? "sub-agent").replace(/\s+/g, " ").trim().slice(0, 80);
           taskOps.push({ t: "subagentStart", id: String(b.id), desc });
         }
-        tools.push(toolLabel(b, checkoutRoot));
+        tools.push({ t: "tool", detail: toolLabel(b, checkoutRoot), name: b.name, input: b.input, id: b.id });
       } else if (b?.type === "text") msgText += String(b.text ?? "");
     }
     // Emit this message's text BEFORE its tool_use(s), so the spawn loop can
@@ -487,18 +537,16 @@ export function parseStreamLine(line: string, checkoutRoot?: string): { events: 
     if (msgText) out.events.push({ t: "snapshotText", text: msgText });
     if (todos) out.events.push({ t: "todos", items: todos });
     for (const op of taskOps) out.events.push(op);
-    for (const d of tools) out.events.push({ t: "tool", detail: d });
-    // Approximate context size = this request's full input + output. Some rows
-    // carry placeholder input_tokens (a known stream-json quirk) — the caller
-    // keeps the max across the run, and tiny totals are dropped here.
+    out.events.push(...tools);
+    // Context size is input plus both cache categories, excluding output.
+    // Call IDs let the runner deduplicate repeated snapshots.
     const u = evt.message?.usage;
     if (u && typeof u === "object") {
       const total =
         (Number(u.input_tokens) || 0) +
         (Number(u.cache_read_input_tokens) || 0) +
-        (Number(u.cache_creation_input_tokens) || 0) +
-        (Number(u.output_tokens) || 0);
-      if (total > 1_000) out.events.push({ t: "usage", contextTokens: total });
+        (Number(u.cache_creation_input_tokens) || 0);
+      if (total > 0) out.events.unshift({ t: "usage", contextTokens: total, inputTokens: Number(u.input_tokens) || 0, outputTokens: Number(u.output_tokens) || 0, cacheReadTokens: Number(u.cache_read_input_tokens) || 0, cacheCreationTokens: Number(u.cache_creation_input_tokens) || 0, id: evt.message.id });
     }
   } else if (evt.type === "user" && Array.isArray(evt.message?.content)) {
     // tool_result blocks arrive as `user` messages — a sub-agent's result ends it
@@ -675,6 +723,7 @@ async function runCompactTurn(site: Site, sessionId: string, dir: string, harnes
     "-p",
     "/compact",
     ...harness.args,
+    "--max-budget-usd", String(harness.settings.maxBudgetUsd ?? 10),
     "--output-format",
     "stream-json",
     "--verbose",
@@ -731,6 +780,9 @@ export async function* runMessageJob(
     sender?: string;
     /** Scheduler-admitted jobs arrive with the site lock already held. */
     preLock?: () => void;
+    forceFresh?: string;
+    cron?: boolean;
+    freshCron?: boolean;
   },
   signal?: AbortSignal,
 ): AsyncGenerator<Frame, void, unknown> {
@@ -760,17 +812,17 @@ export async function* runMessageJob(
     const pushBranch = resolvePushBranch(site);
 
     const pageSlug = opts.pageSlug ?? "";
-    const conversationId = await conversationIdFor(site.id, pageSlug);
+    let harness = await loadHarness(site.id, pageSlug);
+    const { conversationId, handoff, lastUsage } = await prepareConversation(site.id, pageSlug, harness, opts.forceFresh);
+    yield ["session", { conversation_id: conversationId, session_id: sessionIdFor(conversationId) }];
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
     let resume = existsSync(marker) || sessionFileExists(dir, sessionId);
-    const prompt = buildPrompt(site, opts);
+    const prompt = handoff + buildPrompt(site, opts);
 
     // Per-site harness settings (model / effort / permission mode — see
     // harness.ts). Loaded inside the site lock, once per job.
-    const [initialHarness, lastUsage] = await Promise.all([loadHarness(site.id, pageSlug), readLastUsage(site.id)]);
-    let harness = initialHarness;
     console.log(
       `[harness] site=${site.id}${pageSlug ? `/${pageSlug}` : ""} model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"} mode=${harness.settings.permissionMode ?? "bypassPermissions"}${site.guest ? " guest" : ""}${harness.warnings.length ? ` warnings=${harness.warnings.length}` : ""}`,
     );
@@ -785,7 +837,11 @@ export async function* runMessageJob(
     let recovered = false; // session create↔resume flip is a one-shot
     let harnessFellBack = false; // harness-arg rejection fallback is a one-shot too
     let attempt = 0;
-    let maxContext = 0; // max plausible context-tokens total seen this run
+    let maxContext = 0; // last model call, not a high-water mark across compaction
+    let stopReason: string | null = null;
+    const watchdog = turnWatchdog(harness.settings.turnMaxContextTokens);
+    const observed = observeUsage();
+    const usageSoFar = () => observed.snapshot(result?.total_cost_usd);
 
     while (attempt < MAX_ATTEMPTS) {
       const queue = new FrameQueue<Frame>();
@@ -808,12 +864,23 @@ export async function* runMessageJob(
       const subagents = makeSubagentTracker();
 
       const { child: c, done } = spawnClaude(
-        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT),
+        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT, opts.cron),
         dir,
         (e) => {
+          if (stopReason) return;
           if (e.t === "usage") {
-            maxContext = Math.max(maxContext, e.contextTokens);
-          } else if (e.t === "todos") {
+            observed.record(e);
+            maxContext = observed.snapshot().context_tokens;
+            queue.push(["usage", usageSoFar()]);
+          }
+          const stopped = watchdog(e);
+          if (stopped) {
+            stopReason = stopped;
+            console.warn(`[turn-watchdog] site=${site.id} page=${pageSlug || "/"} ${stopped}`);
+            child?.kill("SIGKILL");
+            return;
+          }
+          if (e.t === "todos") {
             queue.push(["todos", { items: e.items }]);
           } else if (e.t === "taskCreate" || e.t === "taskUpdate") {
             const items = checklist(e);
@@ -855,6 +922,9 @@ export async function* runMessageJob(
       result = out.result;
       lastErr = out.stderr || (result?.is_error ? String(result?.result ?? "") : "");
 
+      await writeLastUsage(site.id, { contextTokens: maxContext || lastUsage?.contextTokens || 0, contextPct: Math.min(100, Math.round(maxContext / CONTEXT_WINDOW_TOKENS * 100)), at: new Date().toISOString(), conversationId, freshCron: opts.freshCron }, pageSlug);
+      yield ["usage", usageSoFar()];
+      if (stopReason) { yield ["error", { kind: "stopped", detail: stopReason, usage: usageSoFar() }]; return; }
       if (signal?.aborted) return; // stopped by the user — end the run, no retry
       if (result && !result.is_error) break;
 
@@ -926,8 +996,9 @@ export async function* runMessageJob(
           contextTokens: maxContext,
           contextPct: Math.min(100, Math.round((maxContext / CONTEXT_WINDOW_TOKENS) * 100)),
           at: new Date().toISOString(),
+          conversationId, freshCron: opts.freshCron,
         };
-        await writeLastUsage(site.id, turnUsage).catch(() => {});
+        await writeLastUsage(site.id, turnUsage, pageSlug).catch(() => {});
       }
 
       // One-shot on-demand compaction: the agent (or a reply directive) set
@@ -971,7 +1042,7 @@ export async function* runMessageJob(
           images,
           cleared: contextCleared,
           usage: {
-            cost_usd: result.total_cost_usd ?? null,
+            ...usageSoFar(),
             duration_ms: result.duration_ms ?? null,
             context_tokens: turnUsage?.contextTokens ?? lastUsage?.contextTokens ?? null,
             context_pct: turnUsage?.contextPct ?? lastUsage?.contextPct ?? null,
@@ -996,6 +1067,7 @@ export async function* runMessageJob(
         /* already gone */
       }
     }
+    signal?.removeEventListener("abort", onAbort);
     await cleanupUploads(site.id, opts.attachmentPaths).catch(() => {});
     release?.();
   }
@@ -1020,6 +1092,9 @@ export async function* runStreamingSession(
     sender?: string;
     /** Scheduler-admitted jobs arrive with the site lock already held. */
     preLock?: () => void;
+    forceFresh?: string;
+    cron?: boolean;
+    freshCron?: boolean;
   },
   input: InputChannel,
   signal?: AbortSignal,
@@ -1047,13 +1122,14 @@ export async function* runStreamingSession(
     const dir = checkoutPath(site.id);
     const pushBranch = resolvePushBranch(site);
     const pageSlug = opts.pageSlug ?? "";
-    const conversationId = await conversationIdFor(site.id, pageSlug);
+    const harness = await loadHarness(site.id, pageSlug);
+    const { conversationId, handoff, lastUsage } = await prepareConversation(site.id, pageSlug, harness, opts.forceFresh);
+    yield ["session", { conversation_id: conversationId, session_id: sessionIdFor(conversationId) }];
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
     const resume = existsSync(marker) || sessionFileExists(dir, sessionId);
-    const prompt = buildPrompt(site, opts);
-    const [harness, lastUsage] = await Promise.all([loadHarness(site.id, pageSlug), readLastUsage(site.id)]);
+    const prompt = handoff + buildPrompt(site, opts);
     console.log(
       `[harness] site=${site.id}${pageSlug ? `/${pageSlug}` : ""} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}${site.guest ? " guest" : ""}`,
     );
@@ -1068,6 +1144,18 @@ export async function* runStreamingSession(
     let thinkingTail = "";
     let lastThinkingEmit = 0;
     let maxContext = 0;
+    const observed = observeUsage();
+    const watchdog = turnWatchdog(harness.settings.turnMaxContextTokens);
+    let stopReason: string | null = null;
+    let reportedCost: number | undefined;
+    let freshCron = opts.freshCron;
+    let lastTurnEndedAt: string | undefined;
+    const saveUsage = () => writeLastUsage(site.id, {
+      contextTokens: maxContext || lastUsage?.contextTokens || 0,
+      contextPct: Math.min(100, Math.round(maxContext / CONTEXT_WINDOW_TOKENS * 100)),
+      at: lastTurnEndedAt ?? new Date().toISOString(), conversationId, freshCron,
+    }, pageSlug).catch(() => {});
+    let resultWork: Promise<void> = Promise.resolve();
     const best = () => (streamed.length >= snapshot.length ? streamed : snapshot);
     const emitAssistant = () => {
       const now = Date.now();
@@ -1099,6 +1187,10 @@ export async function* runStreamingSession(
     // process stays alive (stdin open), so the queue is still open when it pushes.
     const onResult = (r: ClaudeResult) => {
       clearIdle();
+      lastTurnEndedAt = new Date().toISOString();
+      reportedCost = r.total_cost_usd;
+      queue.push(["usage", observed.snapshot(reportedCost)]);
+      resultWork = resultWork.then(saveUsage);
       // An errored turn carries no reply. Reporting it as a normal (empty)
       // result made a dead run look like a clean finish — the session just went
       // quiet mid-queue. Surface it and wind the session down, the way
@@ -1109,19 +1201,12 @@ export async function* runStreamingSession(
         closeInput();
         return;
       }
-      void (async () => {
+      resultWork = resultWork.then(async () => {
         const git = await gitSummary(site, turnStartSha, pushBranch).catch(
           () => ({}) as Awaited<ReturnType<typeof gitSummary>>,
         );
         if (git.headSha) turnStartSha = git.headSha;
         const images = await collectOutputs(site.id).catch(() => []);
-        if (maxContext > 0) {
-          await writeLastUsage(site.id, {
-            contextTokens: maxContext,
-            contextPct: Math.min(100, Math.round((maxContext / CONTEXT_WINDOW_TOKENS) * 100)),
-            at: new Date().toISOString(),
-          }).catch(() => {});
-        }
         queue.push([
           "result",
           {
@@ -1129,7 +1214,7 @@ export async function* runStreamingSession(
             git,
             images,
             usage: {
-              cost_usd: r.total_cost_usd ?? null,
+              ...observed.snapshot(reportedCost),
               duration_ms: r.duration_ms ?? null,
               model: harness.settings.model ?? process.env.CLAUDE_MODEL ?? "opus",
             },
@@ -1144,17 +1229,31 @@ export async function* runStreamingSession(
         streamed = "";
         snapshot = "";
         armIdle();
-      })();
+      });
     };
 
     const checklist = makeTaskChecklist();
     const subagents = makeSubagentTracker();
     const spawned = spawnClaude(
-      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true),
+      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true, opts.cron),
       dir,
       (e) => {
-        if (e.t === "usage") maxContext = Math.max(maxContext, e.contextTokens);
-        else if (e.t === "todos") queue.push(["todos", { items: e.items }]);
+        if (stopReason) return;
+        if (e.t === "usage") {
+          observed.record(e);
+          maxContext = observed.snapshot().context_tokens;
+          lastTurnEndedAt = undefined;
+          reportedCost = undefined; // work since the last reported total has unknown cost
+          queue.push(["usage", observed.snapshot()]);
+        }
+        const stopped = watchdog(e);
+        if (stopped) {
+          stopReason = stopped;
+          console.warn(`[turn-watchdog] site=${site.id} page=${pageSlug || "/"} ${stopped}`);
+          child?.kill("SIGKILL");
+          return;
+        }
+        if (e.t === "todos") queue.push(["todos", { items: e.items }]);
         else if (e.t === "taskCreate" || e.t === "taskUpdate") {
           const items = checklist(e);
           if (items) queue.push(["todos", { items }]);
@@ -1189,6 +1288,9 @@ export async function* runStreamingSession(
 
     // Follow-up turns injected by the append endpoint while the session is live.
     input.attach((text) => {
+      freshCron = false;
+      lastTurnEndedAt = undefined;
+      reportedCost = undefined;
       clearIdle();
       queue.push(["injected", { text }]);
       void resetOutputs(site.id).catch(() => {});
@@ -1202,9 +1304,17 @@ export async function* runStreamingSession(
       closeInput();
     }, SESSION_MAX_MS);
 
-    const settled = spawned.done.finally(() => queue.close());
+    const settled = spawned.done.finally(async () => {
+      try { await resultWork; } finally { queue.close(); }
+    });
     for await (const frame of queue) yield frame;
     const out = await settled;
+    await saveUsage();
+    yield ["usage", observed.snapshot(reportedCost)];
+    if (stopReason) {
+      yield ["error", { kind: "stopped", detail: stopReason }];
+      return;
+    }
     if (signal?.aborted) return;
     // A session that dies after its first good turn used to end silently: the
     // guard was `!out.result`, and out.result is set by ANY completed turn. A
@@ -1215,6 +1325,7 @@ export async function* runStreamingSession(
   } catch (err) {
     yield ["error", { kind: "server_error", detail: String((err as Error)?.message ?? err).slice(0, 500) }];
   } finally {
+    signal?.removeEventListener("abort", onAbort);
     if (idleTimer) clearTimeout(idleTimer);
     if (maxTimer) clearTimeout(maxTimer);
     input.close();

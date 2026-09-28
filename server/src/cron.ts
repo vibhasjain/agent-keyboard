@@ -13,11 +13,10 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import { rotateConversation } from "./claude.js";
 import { DATA_DIR } from "./checkouts.js";
 import { loadHarness } from "./harness.js";
 import { listActive } from "./jobs.js";
-import { getSite, pageSlugFor, SITES } from "./sites.js";
+import { SITES } from "./sites.js";
 
 const TICK_MS = 5 * 60_000;
 const BOOT_GRACE_MS = 2 * 60_000;
@@ -66,7 +65,7 @@ function legacyCronJob(): CronJob {
     tz: process.env.JOBS_CRON_TZ ?? "America/New_York",
     state: process.env.JOBS_CRON_STATE ?? "/data/agent-keyboard/jobs-cron.json",
     page: "/jobs",
-    fresh: false,
+    fresh: true,
   };
 }
 
@@ -275,15 +274,10 @@ async function writeLastRun(state: string, when: number): Promise<void> {
 }
 
 async function fire(job: CronJob): Promise<boolean> {
-  if (job.fresh) {
-    // Fresh session every run: yesterday's transcript is dead weight (tokens) for today's cycle.
-    const site = getSite(job.site);
-    if (site) await rotateConversation(site.id, pageSlugFor(site, job.page));
-  }
   const res = await fetch(`http://127.0.0.1:${PORT}/sites/${job.site}/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-ak-internal": SECRET },
-    body: JSON.stringify({ text: job.prompt, page: job.page }),
+    body: JSON.stringify({ text: job.prompt, page: job.page, cron: true, freshCron: job.fresh }),
   });
   await res.body?.cancel(); // durable job — don't hold the SSE stream open
   if (!res.ok) {
