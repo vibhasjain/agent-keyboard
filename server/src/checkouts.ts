@@ -12,7 +12,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync } from "node:fs";
-import { mkdir, appendFile, readFile, writeFile, rename, rm } from "node:fs/promises";
+import { mkdir, appendFile, readFile, writeFile, rename, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Site } from "./sites.js";
 
@@ -143,6 +143,69 @@ async function doEnsureCheckout(site: Site): Promise<string> {
   // Keep our photo-staging dir out of every diff/status the agent might commit.
   await appendFile(join(dir, ".git", "info", "exclude"), "\n.tmp/\n").catch(() => {});
   return dir;
+}
+
+// ─── nightly cleanup ─────────────────────────────────────────────────────────
+// The volume is 10 GB and a checkout never shrinks on its own. Two things go:
+//  - a checkout with no job in IDLE_DAYS (its last fetch) is deleted outright;
+//    ensureCheckout re-clones it on the next job (a one-off 10-30 s). Session
+//    JSONLs live under ~/.claude, keyed by the path, so memory survives.
+//  - syncCheckout's "ak-autosync" stashes older than IDLE_DAYS are dropped and
+//    the repo gc'd. Daily cron sites piled up 100+ of them.
+// `.tmp/` is never touched: it holds browser logins and repo clones jobs reuse.
+const IDLE_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Last time a job synced this checkout (every sync fetches → FETCH_HEAD). */
+async function lastUsed(dir: string): Promise<number> {
+  for (const f of [join(dir, ".git", "FETCH_HEAD"), join(dir, ".git")]) {
+    const s = await stat(f).catch(() => null);
+    if (s) return s.mtimeMs;
+  }
+  return Date.now();
+}
+
+/** One pass over every site. Skips a site whose lock is held (a job is running). */
+export async function pruneCheckouts(sites: Site[], now = Date.now()): Promise<void> {
+  const cutoff = now - IDLE_DAYS * DAY_MS;
+  for (const site of sites) {
+    const dir = checkoutPath(site.id);
+    if (!existsSync(join(dir, ".git"))) continue;
+    const release = tryAcquireSiteLock(site.id);
+    if (!release) continue;
+    try {
+      if ((await lastUsed(dir)) < cutoff) {
+        await rm(dir, { recursive: true, force: true });
+        ensuring.delete(site.id); // else ensureCheckout returns the deleted dir
+        console.log(`[prune] ${site.id}: idle ${IDLE_DAYS}+ days, checkout deleted (re-clones on next job)`);
+        continue;
+      }
+      // Newest first, so dropping from the end never shifts an index still to visit.
+      const stashes = (await git(dir, ["stash", "list", "--format=%gd %ct %gs"]).catch(() => ""))
+        .split("\n")
+        .filter((l) => l.includes("ak-autosync"))
+        .map((l) => l.split(" "))
+        .filter(([, ct]) => Number(ct) * 1000 < cutoff)
+        .map(([ref]) => ref!)
+        .reverse();
+      for (const ref of stashes) await git(dir, ["stash", "drop", "--quiet", ref]);
+      if (stashes.length) {
+        await git(dir, ["gc", "--prune=now", "--quiet"]).catch(() => "");
+        console.log(`[prune] ${site.id}: dropped ${stashes.length} old autosync stashes`);
+      }
+    } catch (e) {
+      console.error(`[prune] ${site.id} failed`, scrubToken(e));
+    } finally {
+      release();
+    }
+  }
+}
+
+/** Prune at boot and daily. */
+export function startCheckoutPruning(sites: Site[]): void {
+  const run = () => void pruneCheckouts(sites).catch((e) => console.error("[prune] failed", e));
+  run();
+  setInterval(run, DAY_MS).unref();
 }
 
 /**

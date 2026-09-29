@@ -28,7 +28,7 @@ import {
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
 import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
-import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, tryAcquireSiteLock } from "./checkouts.js";
+import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { startJobsCron } from "./cron.js";
@@ -827,6 +827,7 @@ app.listen(port, () => {
     publishBrowserStatus,
   );
   if (process.env.JOBS_CRON_DISABLED !== "1") startJobsCron();
+  startCheckoutPruning(SITES);
   // Purge stale staged uploads, then reconcile any jobs the last process left
   // "running" (machine slept / crashed mid-job). Both tolerate an unreachable
   // Supabase / missing checkouts — log and continue, never block serving.
