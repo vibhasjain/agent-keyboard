@@ -24,6 +24,9 @@ import {
   requireOwnerOrGoogle,
   verifyGoogle,
   type AuthedUser,
+  listAgentKeys,
+  mintAgentKey,
+  revokeAgentKey,
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
@@ -420,6 +423,39 @@ app.post("/sites/cv/todo-data", authed, async (req, res) => {
   } finally {
     release();
   }
+});
+
+// Long-lived agent keys (see auth.ts). Minting needs a real sign-in, so a key
+// (or the internal/relay secrets) can't mint more keys. The key is returned once.
+app.post("/agent-keys", authed, async (req, res) => {
+  const user = authedUser(req);
+  if (!user || user.agentKey || user.id === "internal" || user.id === "relay") {
+    res.status(403).json({ error: "sign in with a user session to mint agent keys" });
+    return;
+  }
+  const label = String(req.body?.label ?? "").trim().slice(0, 64);
+  if (!label) {
+    res.status(400).json({ error: "label required" });
+    return;
+  }
+  const { key, record } = await mintAgentKey(user, label);
+  res.status(201).json({ key, id: record.id, label: record.label, createdAt: record.createdAt });
+});
+app.get("/agent-keys", authed, async (req, res) => {
+  const email = authedUser(req)?.email.toLowerCase();
+  res.json(
+    (await listAgentKeys())
+      .filter((k) => k.email.toLowerCase() === email)
+      .map(({ id, label, createdAt }) => ({ id, label, createdAt })),
+  );
+});
+app.delete("/agent-keys/:id", authed, async (req, res) => {
+  const user = authedUser(req);
+  if (!user || !(await revokeAgentKey(user, req.params.id ?? ""))) {
+    res.status(404).json({ error: "no such key" });
+    return;
+  }
+  res.json({ revoked: true });
 });
 
 app.get("/sites", authed, (req, res) => {

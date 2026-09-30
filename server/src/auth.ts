@@ -20,8 +20,8 @@
 // users are rejected — unset it to use runtime provisioning.
 
 import type { Request, Response, NextFunction } from "express";
-import { createHmac, createPublicKey, createVerify, timingSafeEqual, type JsonWebKey } from "node:crypto";
-import { readDataFile } from "./checkouts.js";
+import { createHash, createHmac, createPublicKey, randomBytes, createVerify, timingSafeEqual, type JsonWebKey } from "node:crypto";
+import { readDataFile, writeDataFile } from "./checkouts.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
@@ -203,6 +203,8 @@ export interface AuthedUser {
   hd?: string;
   // Present for scoped provisioned users or site-confined Workspace viewers.
   scope?: UserScope;
+  /** Set when the caller authenticated with a long-lived agent key (its label). */
+  agentKey?: string;
 }
 
 interface CacheEntry {
@@ -469,6 +471,71 @@ export async function verifyGoogleSession(token: string): Promise<AuthedUser | n
   }
 }
 
+// ─── long-lived agent keys ─────────────────────────────────────────────────
+// Scripts/agents can't share a Supabase session: refresh tokens are single-use,
+// so two refreshers race and one ends up with refresh_token_already_used. A
+// signed-in user mints a key per agent (POST /agent-keys {label}); the key is a
+// Bearer anywhere a session is accepted, acts as the minter, never expires, and
+// is revoked with DELETE /agent-keys/:id. Only the sha256 is stored, and the
+// minter's CURRENT allow-list scope applies on every use, so un-inviting a user
+// kills their keys too.
+const AGENT_KEY_PREFIX = "akk_";
+const AGENT_KEYS_FILE = "agent-keyboard/agent-keys.json";
+export interface AgentKeyRecord {
+  id: string;
+  label: string;
+  email: string;
+  userId: string;
+  hash: string;
+  createdAt: string;
+}
+const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
+
+export async function listAgentKeys(): Promise<AgentKeyRecord[]> {
+  try {
+    const parsed: unknown = JSON.parse((await readDataFile(AGENT_KEYS_FILE)) ?? "[]");
+    return Array.isArray(parsed) ? (parsed as AgentKeyRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+// ponytail: read-modify-write of one small JSON file; minting is rare and manual.
+export async function mintAgentKey(user: AuthedUser, label: string): Promise<{ key: string; record: AgentKeyRecord }> {
+  const key = AGENT_KEY_PREFIX + randomBytes(32).toString("base64url");
+  const record: AgentKeyRecord = {
+    id: randomBytes(6).toString("hex"),
+    label,
+    email: user.email,
+    userId: user.id,
+    hash: sha256(key),
+    createdAt: new Date().toISOString(),
+  };
+  await writeDataFile(AGENT_KEYS_FILE, JSON.stringify([...(await listAgentKeys()), record], null, 2));
+  return { key, record };
+}
+
+/** Revoke a key the caller owns (by email). False when no such key. */
+export async function revokeAgentKey(user: AuthedUser, id: string): Promise<boolean> {
+  const keys = await listAgentKeys();
+  const kept = keys.filter((k) => !(k.id === id && k.email.toLowerCase() === user.email.toLowerCase()));
+  if (kept.length === keys.length) return false;
+  await writeDataFile(AGENT_KEYS_FILE, JSON.stringify(kept, null, 2));
+  return true;
+}
+
+async function verifyAgentKey(token: string): Promise<AuthedUser | null> {
+  const got = Buffer.from(sha256(token), "hex");
+  const rec = (await listAgentKeys()).find((k) => {
+    const want = Buffer.from(String(k.hash), "hex");
+    return want.length === got.length && timingSafeEqual(want, got);
+  });
+  if (!rec) return null;
+  const scope = await allowedScope(rec.email);
+  if (scope === undefined) return null; // minter no longer allowed
+  return { id: rec.userId, email: rec.email, agentKey: rec.label, ...(scope ? { scope } : {}) };
+}
+
 interface OwnerAuth {
   user: AuthedUser | null;
   token: string;
@@ -500,6 +567,9 @@ async function authenticateOwner(req: Request): Promise<OwnerAuth> {
     };
   }
   const token = bearer(req);
+  if (token.startsWith(AGENT_KEY_PREFIX)) {
+    return { user: await verifyAgentKey(token), token, configured: true, unavailable: false };
+  }
   const configured = !!SUPABASE_URL && !!SUPABASE_ANON_KEY;
   const outcome = configured && token ? await verify(token) : null;
   return {
