@@ -103,7 +103,8 @@ export async function deleteNote(siteId: string, name: string): Promise<void> {
 }
 
 /** Point the agent at every existing note the prompt mentions as #name or
- *  [[name]], and at the notes those notes mention in turn. */
+ *  [[name]], and at the notes those notes mention in turn. Mentioning a folder
+ *  mentions every note in it. */
 export function notesNote(siteId: string, text: string): string {
   const names: string[] = [];
   const queue = [text];
@@ -113,11 +114,20 @@ export function notesNote(siteId: string, text: string): string {
         .filter((f) => f.isFile() && f.name.endsWith(".md"))
         .map((f) => f.name.slice(0, -3))
     : [];
+  let folders: Map<string, string[]>;
+  try {
+    const order: unknown = JSON.parse(readFileSync(orderPath(siteId), "utf8"));
+    folders = new Map(validOrder(order) ? order.flatMap((i) => (typeof i === "string" ? [] : [[i.folder, i.notes] as const])) : []);
+  } catch {
+    folders = new Map();
+  }
+  if (all.length) all.push(...folders.keys());
   while (queue.length) {
     const t = queue.shift()!;
     const found = [...t.matchAll(/\[\[([^\[\]]+)\]\]/g)].map((m) => m[1]!.trim());
     const lower = t.toLowerCase();
     for (const n of all) if (lower.includes(`#${n.toLowerCase()}`)) found.push(n);
+    for (const n of [...found]) found.push(...(folders.get(n) ?? []));
     for (const n of found) {
       if (names.includes(n) || !validNoteName(n) || !existsSync(notePath(siteId, n))) continue;
       names.push(n);

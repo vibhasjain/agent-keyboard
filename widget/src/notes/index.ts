@@ -172,8 +172,10 @@ export async function open(opts: NotesOptions): Promise<void> {
   }
   const mapNotes = (fn: (n: string) => string[]) =>
     setTree(tree.flatMap((i): Item[] => (typeof i === 'string' ? fn(i) : [{ ...i, notes: i.notes.flatMap(fn) }])))
-  // Folder and note names are unique together, so a name always means one thing.
-  const taken = (n: string) => names.includes(n) || tree.some((i) => typeof i !== 'string' && i.folder === n)
+  const folderNames = () => tree.flatMap((i) => (typeof i === 'string' ? [] : [i.folder]))
+  // Folder and note names are unique together, so a name always means one thing:
+  // [[Folder]] mentions every note in it.
+  const taken = (n: string) => names.includes(n) || folderNames().includes(n)
   let current: string | null = null
   let crepe: CrepeBuilder | null = null
   let markdown = ''
@@ -190,12 +192,13 @@ export async function open(opts: NotesOptions): Promise<void> {
     list.replaceChildren()
     if (!tree.length) list.appendChild(h('li', 'akn-empty', 'No notes yet'))
     for (const i of tree) {
-      if (typeof i === 'string') noteRow(i, false)
+      if (typeof i === 'string') noteRow(i)
       else {
         folderRow(i.folder, i.folder === renaming)
-        for (const n of i.notes) noteRow(n, true)
+        for (const n of i.notes) noteRow(n)
       }
     }
+    markRows()
   }
 
   // Rows are flat: a note belongs to the folder row above it, and loose notes sit
@@ -210,12 +213,26 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
     return t
   }
-  const markIndent = () => {
-    let inFolder = false
-    for (const c of list.children) {
-      if (isFolder(c)) inFolder = true
-      else c.classList.toggle('in', inFolder)
+  /** Indent notes in folders; hide those in collapsed ones (unless being dragged
+   *  or open). */
+  const markRows = () => {
+    let folder: string | undefined
+    for (const c of list.children as HTMLCollectionOf<HTMLElement>) {
+      if (isFolder(c)) folder = c.dataset.folder
+      else {
+        c.classList.toggle('in', folder !== undefined)
+        c.hidden = folder !== undefined && collapsed.has(folder) && !c.classList.contains('dragging') && c.dataset.name !== current
+      }
     }
+  }
+  const folderOf = (li: Element) => {
+    let n: Element | null = li
+    while (n && !isFolder(n)) n = n.previousElementSibling
+    return (n as HTMLElement | null)?.dataset.folder
+  }
+  const visible = (n: Element | null, dir: 'previousElementSibling' | 'nextElementSibling') => {
+    while (n && (n as HTMLElement).hidden) n = n[dir]
+    return n
   }
   /** A folder row drags with its notes; a note row alone. */
   const blockOf = (li: HTMLElement) => {
@@ -225,7 +242,7 @@ export async function open(opts: NotesOptions): Promise<void> {
   }
   const place = (rows: HTMLElement[], ref: Element | null) => {
     if (rows[rows.length - 1]!.nextElementSibling !== ref) for (const r of rows) list.insertBefore(r, ref)
-    markIndent()
+    markRows()
   }
   const commitDom = () => {
     const next = fromDom()
@@ -260,12 +277,17 @@ export async function open(opts: NotesOptions): Promise<void> {
         }
         place(rows, ref)
       } else if (e.key === 'ArrowUp') {
-        // A note steps over a folder row: out of its folder, or into the one above's end.
-        if (!li.previousElementSibling) return
-        place(rows, li.previousElementSibling)
+        // A note steps over a folder row: out of its folder, or into the one above's
+        // end (a collapsed one is stepped over whole).
+        const prev = visible(li.previousElementSibling, 'previousElementSibling')
+        if (!prev) return
+        place(rows, prev)
       } else {
-        if (!li.nextElementSibling) return
-        place(rows, li.nextElementSibling.nextElementSibling)
+        const next = visible(li.nextElementSibling, 'nextElementSibling')
+        if (!next) return
+        place(rows, visible(next.nextElementSibling, 'nextElementSibling'))
+        // Stepped into a collapsed folder: open it so the note stays in view.
+        if (li.hidden) toggleFolder(folderOf(li)!, false)
       }
       b.focus()
       commitDom()
@@ -288,11 +310,14 @@ export async function open(opts: NotesOptions): Promise<void> {
           if (e.pointerType === 'touch' || Math.abs(ev.clientY - y0) < 4) return
           start()
         }
+        // Insert above the first shown row below the pointer, so a row dropped
+        // under a collapsed folder lands at the end of it.
         const others = [...list.children].filter((c) => !rows.includes(c as HTMLElement))
-        let i = others.filter((c) => {
+        const below = others.find((c) => {
           const r = c.getBoundingClientRect()
-          return r.top + r.height / 2 < ev.clientY
-        }).length
+          return !(c as HTMLElement).hidden && r.top + r.height / 2 >= ev.clientY
+        })
+        let i = below ? others.indexOf(below) : others.length
         if (isFolder(li)) while (i < others.length && !isFolder(others[i]!)) i++
         place(rows, others[i] ?? null)
       }
@@ -304,6 +329,7 @@ export async function open(opts: NotesOptions): Promise<void> {
         if (!dragging) return
         dragging = false
         for (const r of rows) r.classList.remove('dragging')
+        markRows()
         // Touch fires no click after a hold, so nothing is left to swallow.
         if (e.pointerType === 'touch') dragged = false
         commitDom()
@@ -319,8 +345,8 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
   }
 
-  const noteRow = (name: string, inFolder: boolean) => {
-    const li = h('li', inFolder ? 'in' : undefined)
+  const noteRow = (name: string) => {
+    const li = h('li')
     li.dataset.name = name
     const b = h('button', undefined, name)
     b.type = 'button'
@@ -331,11 +357,30 @@ export async function open(opts: NotesOptions): Promise<void> {
     list.appendChild(li)
   }
 
+  // Collapsed folders, remembered per site in this browser.
+  const collapsedKey = `akn-collapsed:${opts.site}`
+  const collapsed = new Set<string>(JSON.parse(localStorage.getItem(collapsedKey) ?? '[]'))
+  const toggleFolder = (folder: string, close = !collapsed.has(folder)) => {
+    if (close) collapsed.add(folder)
+    else collapsed.delete(folder)
+    localStorage.setItem(collapsedKey, JSON.stringify([...collapsed]))
+    const toggle = list.querySelector(`[data-folder="${CSS.escape(folder)}"] .akn-toggle`)
+    toggle?.setAttribute('aria-expanded', String(!close))
+    markRows()
+  }
+
   // A folder renames in place: click its name, Enter (or clicking away) saves,
-  // Esc cancels. An empty name removes the folder and keeps its notes.
+  // Esc cancels. An empty name removes the folder and keeps its notes. The
+  // chevron collapses it.
   const folderRow = (folder: string, renaming: boolean) => {
     const li = h('li', 'akn-folder')
     li.dataset.folder = folder
+    const toggle = h('button', 'akn-toggle')
+    toggle.type = 'button'
+    toggle.setAttribute('aria-label', `Show notes in ${folder}`)
+    toggle.setAttribute('aria-expanded', String(!collapsed.has(folder)))
+    toggle.append(icon('chevron-down', 14))
+    toggle.onclick = () => toggleFolder(folder)
     const b = h('button')
     b.type = 'button'
     b.title = 'Rename folder'
@@ -364,7 +409,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       input.select()
     }
     b.onclick = () => wasDrag() || edit()
-    li.append(b)
+    li.append(toggle, b)
     list.appendChild(li)
     if (renaming) edit()
   }
@@ -374,6 +419,11 @@ export async function open(opts: NotesOptions): Promise<void> {
       setStatus(`"${to}" already exists`, true)
       renderList()
       return
+    }
+    if (collapsed.has(from)) {
+      collapsed.delete(from)
+      if (to) collapsed.add(to)
+      localStorage.setItem(collapsedKey, JSON.stringify([...collapsed]))
     }
     setTree(
       to
@@ -455,7 +505,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       const m = empty && v.hasFocus() && $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc').match(/\[\[([^[\]\n]*)$/)
       if (!m) return hide()
       const q = m[1]!.toLowerCase()
-      const others = names.filter((n) => n !== current)
+      const others = [...names, ...folderNames()].filter((n) => n !== current)
       matches = [
         ...others.filter((n) => n.toLowerCase().startsWith(q)),
         ...others.filter((n) => !n.toLowerCase().startsWith(q) && n.toLowerCase().includes(q)),
@@ -508,6 +558,7 @@ export async function open(opts: NotesOptions): Promise<void> {
               if (!m) return false
               const name = m[1]!
               if (names.includes(name)) void openNote(name)
+              else if (folderNames().includes(name)) toggleFolder(name, false)
               else setStatus(`No note named "${name}"`, true)
               return true
             },

@@ -128,7 +128,7 @@ function makeComposer(onTeamNote: () => void): Composer {
   })
   taWrap.append(ta)
   row.append(taWrap, cam, attach, mic, sendBtn)
-  const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => l.map((n) => n.name)))
+  const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => [...new Set(l.flatMap((n) => (n.folder ? [n.name, n.folder] : [n.name])))]))
   const people = attachMentions(ta, taWrap, () => api.teammates(CONFIG.site).then((l) => l.map((t) => t.handle)), '@', 'teammates')
   root.append(photos.el, row, note)
   show(note, false)
