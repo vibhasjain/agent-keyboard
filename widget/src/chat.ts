@@ -181,7 +181,7 @@ function msgEl(
     // Plain text (no markdown in user turns) — but @handle mentions still tag.
     line.appendChild(el('span', undefined, (n) => (n.innerHTML = renderUserText(text))))
     body.appendChild(line)
-    if (extras?.to?.length) body.appendChild(el('div', 'ak-t-to', (n) => (n.textContent = `Note — emailed ${extras.to!.join(', ')}`)))
+    if (extras?.to?.length) body.appendChild(el('div', 'ak-t-to', (n) => (n.textContent = `Note for ${extras.to!.join(', ')}`)))
     return lineEl('user', '>', body)
   }
   // Assistant: markdown text, plus any images the agent chose to show (same

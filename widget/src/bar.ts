@@ -247,7 +247,7 @@ function makeComposer(onTeamNote: () => void): Composer {
       await voice.flush()
       const text = ta.value.trim()
       if (!text && !photos.hasAttachments()) return
-      // @teammate → a note to them (saved in the chat + emailed), not an agent turn.
+      // @teammate → a note to them (saved in the chat), not an agent turn.
       // The server decides who's a teammate; 400 = nobody, so it's a normal prompt.
       if (/(?:^|\s)@[\w.+-]/.test(text) && !photos.hasAttachments()) {
         try {
@@ -257,7 +257,7 @@ function makeComposer(onTeamNote: () => void): Composer {
           return
         } catch (e) {
           if (!(e instanceof HttpError && e.status === 400)) {
-            setNote(e instanceof HttpError && e.status === 502 ? "Couldn't email that note — try again" : "Couldn't send that note — try again", true)
+            setNote("Couldn't send that note — try again", true)
             return
           }
         }

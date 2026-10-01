@@ -36,7 +36,7 @@ import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMIN
 import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
-import { addTeamNote, emailTeamNote, handleOf } from "./team.js";
+import { addTeamNote, handleOf } from "./team.js";
 import { deleteNote, listNotes, notesNote, readNote, validNoteName, writeNote } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
@@ -740,7 +740,7 @@ app.get("/sites/:siteId/teammates", authed, async (req, res) => {
 });
 
 /** Leave a note for the teammates @mentioned in `text`: saved to the transcript
- *  and emailed — no Claude turn. 400 if it mentions nobody on the site. */
+ *  (not emailed) — no Claude turn. 400 if it mentions nobody on the site. */
 app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   if (!site) {
@@ -759,13 +759,6 @@ app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
   const path = typeof page === "string" && page.startsWith("/") ? page : "/";
   const conversationId = await conversationIdFor(site.id, pageSlugFor(site, path));
   const note = { id: randomUUID(), role: "user" as const, text: text.trim(), tools: [], ts: new Date().toISOString(), sender: from, to };
-  try {
-    await emailTeamNote(to, from, note.text, `https://${site.domain}${path}`);
-  } catch (err) {
-    console.error("[teamnotes] email failed", err);
-    res.status(502).json({ error: "couldn't send the email — note not saved" });
-    return;
-  }
   await addTeamNote(site.id, conversationId, note);
   res.json(note);
 });

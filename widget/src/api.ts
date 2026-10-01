@@ -142,7 +142,7 @@ export interface ConversationMessage {
   // Who typed a user turn (email). Absent on turns from before sender tagging
   // shipped — those render without a name tag.
   sender?: string
-  /** A teammate note (never seen by the agent): who it was emailed to. */
+  /** A teammate note (never seen by the agent): who it's for. */
   to?: string[]
   // Client-only demo messages may carry visible attachment previews. The real
   // conversation API does not need to return these fields.
@@ -197,7 +197,7 @@ export const api = {
   teammates: (siteId: string): Promise<{ email: string; handle: string }[]> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/teammates`),
 
-  /** Leave a note for the @mentioned teammates: saved to the chat and emailed, no agent turn. */
+  /** Leave a note for the @mentioned teammates: saved to the chat, no agent turn. */
   teamNote: (siteId: string, text: string): Promise<ConversationMessage> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/teamnotes`, {
       method: 'POST',
