@@ -6,8 +6,9 @@ const dev = process.argv.includes('--dev')
 const kb = (n) => (n / 1024).toFixed(2)
 
 /** Build one IIFE bundle and enforce its gzip budget. */
-async function bundle(entry, outfile, gzipBudgetKB) {
+async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
   await build({
+    ...extra,
     entryPoints: [entry],
     bundle: true,
     format: 'iife',
@@ -33,5 +34,21 @@ async function bundle(entry, outfile, gzipBudgetKB) {
 // looser; it never ships to a customer's page.
 // 32: transcript tool lines (2026-09-04); Docker's zlib measures ~0.2 KB heavier than local.
 // 33: the typewriter mark inlined as the corner glyph (~0.8 KB, 2026-09-25).
-await bundle('src/index.ts', 'dist/widget.js', 33)
+// 34: Notes button + lazy loader + [[mention]] autocomplete (~1.2 KB, 2026-10-01).
+await bundle('src/index.ts', 'dist/widget.js', 34)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)
+
+// The notes editor (Milkdown Crepe), lazy-loaded by the widget only when Notes
+// opens. Its CSS is bundled separately (resolving Crepe's @imports) and inlined
+// as a string the bundle injects into <head>.
+const css = await build({
+  entryPoints: ['src/notes/style.css'],
+  bundle: true,
+  minify: !dev,
+  write: false,
+  outdir: 'dist',
+  loader: { '.svg': 'dataurl', '.woff2': 'dataurl', '.woff': 'dataurl', '.ttf': 'dataurl' },
+})
+await bundle('src/notes/index.ts', 'dist/notes.js', 260, {
+  define: { __AKN_CSS__: JSON.stringify(css.outputFiles[0].text) },
+})

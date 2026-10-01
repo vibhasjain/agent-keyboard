@@ -5,10 +5,12 @@
 // Owns the rectangle, the streaming pill that replaces it in place, and the single
 // reparentable composer / auth nodes. Reconciles the DOM on every store change.
 
-import { getPendingInvite, login, setPasswordWithToken } from './auth'
-import { lsKey } from './config'
+import { api } from './api'
+import { getPendingInvite, getToken, login, setPasswordWithToken } from './auth'
+import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
+import { attachMentions } from './mentions'
 import { makePhotos, type Photos } from './photos'
 import { getState, patchUi, subscribe } from './state'
 import * as stopPhrase from './stopphrase'
@@ -69,6 +71,24 @@ function filesFromTransfer(dt: DataTransfer | null): File[] {
   return files
 }
 
+// The notes editor is its own bundle (Milkdown, ~240 KB gzip) — fetched from the
+// server the first time Notes opens, never on page load.
+type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void }) => Promise<void> }
+let notesBundle: Promise<NotesApi> | null = null
+function loadNotes(): Promise<NotesApi> {
+  return (notesBundle ??= new Promise<NotesApi>((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = `${CONFIG.api}/notes.js`
+    s.onload = () => resolve((window as unknown as { AgentKeyboardNotes: NotesApi }).AgentKeyboardNotes)
+    s.onerror = () => {
+      notesBundle = null
+      s.remove()
+      reject(new Error("Couldn't load the notes editor"))
+    }
+    document.head.appendChild(s)
+  }))
+}
+
 const dragHasFiles = (dt: DataTransfer | null): boolean => Array.from(dt?.types ?? []).includes('Files')
 
 function makeComposer(): Composer {
@@ -81,6 +101,11 @@ function makeComposer(): Composer {
     n.type = 'button'
     n.appendChild(icon('camera'))
     n.setAttribute('aria-label', 'Add photo')
+  })
+  const notesBtn = el('button', 'ak-icon-btn', (n) => {
+    n.type = 'button'
+    n.appendChild(icon('note'))
+    n.setAttribute('aria-label', 'Notes')
   })
   const attach = el('button', 'ak-icon-btn', (n) => {
     n.type = 'button'
@@ -105,7 +130,8 @@ function makeComposer(): Composer {
     n.setAttribute('aria-label', 'Send')
   })
   taWrap.append(ta)
-  row.append(taWrap, cam, attach, mic, sendBtn)
+  row.append(taWrap, notesBtn, cam, attach, mic, sendBtn)
+  const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => l.map((n) => n.name)))
   root.append(photos.el, row, note)
   show(note, false)
 
@@ -265,6 +291,29 @@ function makeComposer(): Composer {
     blurButton(cam)
     photos.openPicker()
   })
+  on(notesBtn, 'click', () => {
+    blurButton(notesBtn)
+    // Full-screen focus mode: the bar steps aside (it sits in the top layer, so it
+    // would otherwise cover the editor) and comes back when the note closes.
+    const host = (root.getRootNode() as ShadowRoot).host as HTMLElement
+    loadNotes()
+      .then((notes) => {
+        host.style.visibility = 'hidden'
+        return notes.open({
+          api: CONFIG.api,
+          site: CONFIG.site,
+          getToken,
+          onClose: () => {
+            host.style.visibility = ''
+            ta.focus()
+          },
+        })
+      })
+      .catch((e: Error) => {
+        host.style.visibility = ''
+        setNote(e.message, true)
+      })
+  })
   on(attach, 'click', () => {
     blurButton(attach)
     photos.openFilePicker()
@@ -313,6 +362,7 @@ function makeComposer(): Composer {
   })
   on(ta, 'keydown', (e) => {
     const ke = e as KeyboardEvent
+    if (mentions.handleKey(ke)) return
     if (ke.key === 'Enter' && !ke.shiftKey) {
       e.preventDefault()
       doSend()
@@ -349,6 +399,7 @@ function makeComposer(): Composer {
   const applyAuthLock = () => {
     const locked = getState().auth !== 'authed'
     cam.disabled = locked
+    notesBtn.disabled = locked
     attach.disabled = locked
     mic.disabled = locked
   }
@@ -365,6 +416,7 @@ function makeComposer(): Composer {
     setDisabled: (d) => {
       ta.disabled = d
       cam.disabled = d
+      notesBtn.disabled = d
       attach.disabled = d
       mic.disabled = d
       syncSend()

@@ -1,0 +1,89 @@
+@import '@milkdown/crepe/theme/common/prosemirror.css';
+@import '@milkdown/crepe/theme/common/reset.css';
+@import '@milkdown/crepe/theme/common/block-edit.css';
+@import '@milkdown/crepe/theme/common/cursor.css';
+@import '@milkdown/crepe/theme/common/link-tooltip.css';
+@import '@milkdown/crepe/theme/common/list-item.css';
+@import '@milkdown/crepe/theme/common/placeholder.css';
+@import '@milkdown/crepe/theme/common/toolbar.css';
+@import '@milkdown/crepe/theme/common/table.css';
+@import '@milkdown/crepe/theme/classic-dark.css';
+
+/* Full-screen notes overlay. Light DOM (ProseMirror's selection handling is
+   unreliable inside a shadow root), so every rule is scoped under .akn. */
+.akn {
+  position: fixed; inset: 0; z-index: 2147483647;
+  width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden;
+  display: flex; background: #0a0a0a; color: #f5f1ea;
+  font: 15px/1.5 Inter, system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.akn *, .akn *::before, .akn *::after { box-sizing: border-box; }
+.akn button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.akn :focus-visible { outline: 2px solid #ffb86b; outline-offset: 2px; }
+.akn .ProseMirror:focus-visible, .akn-title:focus-visible { outline: none; }
+
+.akn-side {
+  width: 260px; flex: none; display: flex; flex-direction: column;
+  border-right: 1px solid #211f1c; background: #111110;
+}
+.akn-side-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 10px; }
+.akn-side-head h2 { margin: 0; font-size: 13px; font-weight: 500; color: #b8b2a7; letter-spacing: .02em; }
+.akn-new { padding: 4px 10px; border-radius: 6px; color: #ffb86b !important; }
+.akn-new:hover { background: #211f1c !important; }
+.akn-list { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
+.akn-list button {
+  display: block; width: 100%; text-align: left; padding: 7px 10px; border-radius: 6px;
+  color: #b8b2a7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.akn-list button:hover { background: #211f1c; color: #f5f1ea; }
+.akn-list button[aria-current='true'] { background: #211f1c; color: #f5f1ea; }
+.akn-empty { padding: 7px 10px; color: #6f6a61; font-size: 13px; }
+
+.akn-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.akn-top { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #211f1c; }
+.akn-back { display: none; padding: 4px 8px; border-radius: 6px; color: #b8b2a7 !important; }
+.akn-status { margin-left: auto; font-size: 12px; color: #6f6a61; }
+.akn-status.err { color: #f97066; }
+.akn-close { padding: 4px 10px; border-radius: 6px; color: #b8b2a7 !important; }
+.akn-close:hover, .akn-back:hover { background: #211f1c !important; color: #f5f1ea !important; }
+
+.akn-page { flex: 1; overflow-y: auto; }
+.akn-page-inner { max-width: 760px; margin: 0 auto; padding: 48px 0 120px; }
+.akn-title {
+  display: block; width: 100%; padding: 0 48px; margin: 0 0 8px;
+  background: none; border: 0; outline: none; color: #f5f1ea;
+  font: 500 36px/1.2 Inter, system-ui, sans-serif; letter-spacing: -0.02em;
+}
+.akn-title::placeholder { color: #6f6a61; }
+.akn-blank { padding: 80px 24px; text-align: center; color: #6f6a61; }
+
+.akn .milkdown {
+  --crepe-color-background: #0a0a0a;
+  --crepe-color-on-background: #f5f1ea;
+  --crepe-color-surface: #111110;
+  --crepe-color-surface-low: #161514;
+  --crepe-color-on-surface: #f5f1ea;
+  --crepe-color-on-surface-variant: #b8b2a7;
+  --crepe-color-outline: #6f6a61;
+  --crepe-color-primary: #ffb86b;
+  --crepe-color-secondary: #2a241c;
+  --crepe-color-on-secondary: #e7d3b8;
+  --crepe-color-hover: #1a1917;
+  --crepe-color-selected: #3a2c1c;
+  --crepe-color-inline-area: #211f1c;
+  --crepe-color-inline-code: #ffb86b;
+  --crepe-font-title: Inter, system-ui, sans-serif;
+  --crepe-font-default: Inter, system-ui, sans-serif;
+  --crepe-font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+}
+.akn .milkdown .ProseMirror { padding: 8px 48px 40px; min-height: 50vh; }
+
+@media (max-width: 720px) {
+  .akn-side { position: absolute; inset: 0; width: auto; z-index: 1; border-right: 0; }
+  .akn.has-note .akn-side { display: none; }
+  .akn.has-note .akn-back { display: block; }
+  .akn-page-inner { padding-top: 24px; }
+  .akn-title { padding: 0 20px; font-size: 28px; }
+  .akn .milkdown .ProseMirror { padding: 8px 20px 40px; }
+}

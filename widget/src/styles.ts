@@ -220,6 +220,16 @@ button::-moz-focus-inner{ border:0; }
   color:var(--ak-ink); font-family:var(--ak-mono); font-size:var(--ak-fs-input); line-height:20px;
   max-height:88px; padding:8px 4px; overflow-y:auto;
 }
+.ak-mention{
+  position:absolute; left:0; bottom:calc(100% + 6px); z-index:3; min-width:min(100%, 280px); max-width:340px;
+  max-height:220px; overflow-y:auto; padding:4px;
+  background:#111110; border:1px solid #3d372e; border-radius:8px;
+  box-shadow:0 6px 22px rgba(0,0,0,.5);
+  font-family:var(--ak-mono); font-size:13px;
+}
+.ak-mention-opt{ padding:6px 8px; border-radius:6px; color:var(--ak-ink2); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ak-mention-opt[aria-selected="true"]{ background:#211f1c; color:var(--ak-amber); }
+.ak-mention-empty{ padding:6px 8px; color:var(--ak-ink3); }
 .ak-ta::placeholder{ color:var(--ak-ink3); }
 .ak-ta.ak-confirm::placeholder{ color:var(--ak-amber); opacity:1; } /* brief sign-in confirmation */
 .ak-ta:disabled{ opacity:.6; }

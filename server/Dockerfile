@@ -103,6 +103,7 @@ COPY server/email-templates /app/email-templates
 # The widget bundle served at GET /widget.js, and the demo bundle at /demo.js.
 COPY --from=widget /w/dist/widget.js /app/widget/widget.js
 COPY --from=widget /w/dist/demo.js /app/widget/demo.js
+COPY --from=widget /w/dist/notes.js /app/widget/notes.js
 
 EXPOSE 8080
 CMD ["npx", "tsx", "src/index.ts"]

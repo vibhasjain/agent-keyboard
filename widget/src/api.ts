@@ -187,6 +187,10 @@ export const api = {
   jobStream: (jobId: string, onFrame: SseFrameHandler): Promise<void> =>
     readSse(`/jobs/${encodeURIComponent(jobId)}/stream`, { method: 'GET' }, onFrame),
 
+  /** The site's notes, most recently edited first (for [[mention]] autocomplete). */
+  listNotes: (siteId: string): Promise<{ name: string; updatedAt: number }[]> =>
+    jsonFetch(`/sites/${encodeURIComponent(siteId)}/notes`),
+
   listJobs: (siteId: string): Promise<{ jobs: JobRow[] }> =>
     jsonFetch(`/jobs?siteId=${encodeURIComponent(siteId)}&page=${encodeURIComponent(location.pathname)}`),
 

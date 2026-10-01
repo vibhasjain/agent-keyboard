@@ -23,6 +23,8 @@ const turnsBySite = new Map()
 /** siteIds whose mock conversation was cleared by restart */
 const clearedSites = new Set()
 let msgSeq = 0
+/** note name -> {content, at} */
+const notes = new Map([['Pricing page redesign', { content: '# Pricing\n\n- three tiers\n- **annual** toggle\n', at: Date.now() }]])
 
 const frame = (name, data) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`
 
@@ -177,7 +179,7 @@ const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
       'Access-Control-Allow-Headers': 'Authorization,Content-Type',
     })
     res.end()
@@ -211,6 +213,7 @@ const server = createServer(async (req, res) => {
   if (p === '/agent-keyboard-demo.json') return serveStatic(res, '../site/agent-keyboard-demo.json', 'application/json')
   if (p === '/widget.js') return serveStatic(res, 'dist/widget.js', 'text/javascript; charset=utf-8')
   if (p === '/widget.js.map') return serveStatic(res, 'dist/widget.js.map', 'application/json')
+  if (p === '/notes.js') return serveStatic(res, 'dist/notes.js', 'text/javascript; charset=utf-8')
   if (p === '/demo.js') return serveStatic(res, 'dist/demo.js', 'text/javascript; charset=utf-8')
   if (p === '/demo.js.map') return serveStatic(res, 'dist/demo.js.map', 'application/json')
 
@@ -352,6 +355,29 @@ const server = createServer(async (req, res) => {
       ],
       cursor: null,
     })
+  }
+
+  // Notes: GET list, GET one, PUT {content, from?} (in-memory).
+  m = p.match(/^\/sites\/([^/]+)\/notes(?:\/([^/]+))?$/)
+  if (m) {
+    const name = m[2] && decodeURIComponent(m[2])
+    if (!name && req.method === 'GET') {
+      return json(res, 200, [...notes].map(([n, v]) => ({ name: n, updatedAt: v.at })).sort((a, b) => b.updatedAt - a.updatedAt))
+    }
+    if (name && req.method === 'GET') {
+      return notes.has(name) ? json(res, 200, { name, content: notes.get(name).content }) : json(res, 404, { error: 'no such note' })
+    }
+    if (name && req.method === 'PUT') {
+      let body = ''
+      for await (const c of req) body += c
+      const { content, from } = JSON.parse(body || '{}')
+      if (from && from !== name) {
+        if (notes.has(name)) return json(res, 409, { error: 'a note with that name already exists' })
+        notes.delete(from)
+      }
+      notes.set(name, { content, at: Date.now() })
+      return json(res, 200, { name })
+    }
   }
 
   // POST /sites/:id/restart -> clear mock history and report a clean reset.

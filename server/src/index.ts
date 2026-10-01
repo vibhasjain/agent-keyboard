@@ -34,6 +34,7 @@ import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMIN
 import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
+import { listNotes, notesNote, readNote, validNoteName, writeNote } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
@@ -262,6 +263,19 @@ app.get("/welcome", (_req, res) => {
   });
 </script>
 </main></body></html>`);
+});
+
+// The notes editor (Milkdown) — a separate bundle the widget lazy-loads only
+// when the owner opens Notes, so widget.js stays small. Public, like widget.js.
+app.get("/notes.js", (_req, res) => {
+  const p = ["/app/widget/notes.js", join(SERVER_DIR, "..", "widget", "dist", "notes.js")].find((f) => existsSync(f));
+  if (!p) {
+    res.status(404).type("text/plain").send("// notes.js is not built yet");
+    return;
+  }
+  res.setHeader("Content-Type", "text/javascript");
+  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
+  res.sendFile(p);
 });
 
 // ─── demo scenes (open, static, dummy data — see demo.ts) ───────────────────
@@ -518,7 +532,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const pageSlug = pageSlugFor(site, page);
   // Path-scoped users: the constraint travels with the turn itself; the stored
   // job prompt stays the user's own words.
-  const promptText = text + pathScopeNote(authedUser(req), site.id);
+  const promptText = text + notesNote(site.id, text) + pathScopeNote(authedUser(req), site.id);
   const sender = authedUser(req)?.email;
   const internal = authedUser(req)?.id === "internal";
   const cron = internal && body.cron === true;
@@ -577,7 +591,7 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
   const user = authedUser(req);
   const ok = appendToJob(
     req.params.jobId ?? "",
-    buildPrompt(site, { text: text + pathScopeNote(user, site.id), page: "/", attachmentPaths: [], sender: user?.email }),
+    buildPrompt(site, { text: text + notesNote(site.id, text) + pathScopeNote(user, site.id), page: "/", attachmentPaths: [], sender: user?.email }),
   );
   if (!ok) {
     res.status(409).json({ error: "job not accepting messages" });
@@ -643,6 +657,55 @@ app.post("/sites/:siteId/uploads", authed, (req, res) => {
   });
   bb.on("error", (err: unknown) => finish(400, { error: String(err).slice(0, 300) }));
   req.pipe(bb);
+});
+
+// ─── notes (the bar's full-screen markdown editor; see notes.ts) ─────────────
+app.get("/sites/:siteId/notes", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  res.json(await listNotes(site.id));
+});
+
+app.get("/sites/:siteId/notes/:name", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const name = req.params.name;
+  const content = validNoteName(name) ? await readNote(site.id, name) : null;
+  if (content === null) {
+    res.status(404).json({ error: "no such note" });
+    return;
+  }
+  res.json({ name, content });
+});
+
+/** Save a note (body {content, from?}); `from` renames that note to :name first. */
+app.put("/sites/:siteId/notes/:name", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const { content, from } = (req.body ?? {}) as { content?: unknown; from?: unknown };
+  const name = req.params.name;
+  if (!validNoteName(name) || typeof content !== "string" || (from !== undefined && !validNoteName(from))) {
+    res.status(400).json({ error: "invalid note name or content" });
+    return;
+  }
+  await ensureCheckout(site);
+  if (!(await writeNote(site.id, name, content, from))) {
+    res.status(409).json({ error: "a note with that name already exists" });
+    return;
+  }
+  res.json({ name });
 });
 
 /** Forcefully stop a running job (kills the CLI child, releases the lock). The

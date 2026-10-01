@@ -327,7 +327,7 @@ export async function resetCheckoutToOrigin(site: Site): Promise<CheckoutReset> 
   await git(dir, ["remote", "set-url", "origin", tokenizedRemote(site.repo)]);
   await git(dir, ["fetch", "origin", site.branch]);
   await git(dir, ["reset", "--hard", `origin/${site.branch}`]);
-  await git(dir, ["clean", "-fdx"]);
+  await git(dir, ["clean", "-fdx", "-e", ".tmp/notes"]); // notes outlive a Restart
   const headSha = (await git(dir, ["rev-parse", "HEAD"])).trim();
   const status = (await git(dir, ["status", "--porcelain"]).catch(() => "")).trim();
   return { headSha, branch: site.branch, dirty: status.length > 0 };
