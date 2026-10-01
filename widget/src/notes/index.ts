@@ -372,7 +372,8 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   // A folder renames in place: click its name, Enter (or clicking away) saves,
   // Esc cancels. An empty name removes the folder and keeps its notes. The
-  // folder icon collapses it (open folder icon while expanded).
+  // folder icon collapses it (open folder icon while expanded). The trash
+  // removes the folder the same way: its notes move out, nothing is deleted.
   const folderRow = (folder: string, renaming: boolean) => {
     const li = h('li', 'akn-folder')
     li.dataset.folder = folder
@@ -410,7 +411,13 @@ export async function open(opts: NotesOptions): Promise<void> {
       input.select()
     }
     b.onclick = () => wasDrag() || edit()
-    li.append(toggle, b)
+    const del = h('button', 'akn-fdel')
+    del.type = 'button'
+    del.title = 'Delete folder (keeps its notes)'
+    del.setAttribute('aria-label', `Delete folder ${folder}, keeping its notes`)
+    del.append(icon('trash', 14))
+    del.onclick = () => renameFolder(folder, '')
+    li.append(toggle, b, del)
     list.appendChild(li)
     if (renaming) edit()
   }

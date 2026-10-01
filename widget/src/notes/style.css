@@ -48,7 +48,11 @@
 .akn-list .akn-toggle { flex: none; padding: 7px 2px 7px 4px; color: #6f6a61; line-height: 0; }
 .akn-list .akn-toggle:hover { background: none; color: #f5f1ea; }
 .akn-list .akn-folder { margin-top: 6px; }
-.akn-list .akn-folder button:not(.akn-toggle) { display: flex; align-items: center; gap: 8px; color: #f5f1ea; }
+.akn-list .akn-fdel { flex: none; padding: 7px 6px; color: #6f6a61; line-height: 0; opacity: 0; }
+.akn-list .akn-folder:hover .akn-fdel, .akn-list .akn-fdel:focus-visible { opacity: 1; }
+.akn-list .akn-fdel:hover { background: none; color: #f97066; }
+@media (hover: none) { .akn-list .akn-fdel { opacity: 1; } }
+.akn-list .akn-folder button:not(.akn-toggle):not(.akn-fdel) { display: flex; align-items: center; gap: 8px; color: #f5f1ea; }
 .akn-folder button span { overflow: hidden; text-overflow: ellipsis; }
 .akn-folder-name {
   flex: 1; min-width: 0; font: inherit; color: #f5f1ea; background: #0a0a0a;
