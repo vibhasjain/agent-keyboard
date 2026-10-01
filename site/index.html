@@ -116,10 +116,12 @@ a:hover{ color:var(--amber); }
 h1{
   font-weight:500; letter-spacing:-.025em;
   font-size:clamp(36px, 6.4vw, 64px); line-height:1.05; margin:0 auto; max-width:13em; text-wrap:balance;
-  min-height:2.1em; /* the typed mode word changes the line count; keep the page below still */
+  min-height:2.1em; /* the typed phrase always sits on line two; keep the page below still */
 }
-@media (max-width:439px){ h1{ min-height:3.15em; } }
+/* the longest phrase (~9.9em) must fit line two on a phone */
+@media (max-width:439px){ h1{ font-size:min(36px, calc((100vw - 48px) / 10)); } }
 h1 em{ font-style:normal; color:var(--warm); }
+h1 .mode{ white-space:nowrap; }
 h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; margin-left:.04em; vertical-align:-.08em; background:var(--amber); animation:caret 1s steps(1) infinite; }
 @keyframes caret{ 50%{ opacity:0; } }
 .lede{ max-width:56ch; margin:22px auto 0; font-size:clamp(16px,2.3vw,19px); color:var(--ink-2); }
@@ -320,7 +322,7 @@ footer .meta a:hover{ color:var(--amber); }
       <img src="agent-keyboard-hello.webp" width="374" height="410" alt="" fetchpriority="high">
     </picture>
     <div class="eyebrow">This page edits itself</div>
-    <h1 aria-label="Change your app by talking, texting, or sharing a note with it.">Change your app by <em class="mode" aria-hidden="true">talking</em> to it.</h1>
+    <h1 aria-label="Change your app by talking to it, texting it, or sharing a note with it.">Change your app by<br><em class="mode" aria-hidden="true">talking to it.</em></h1>
     <p class="lede">One script tag puts a prompt bar in your app. Type, talk, or snap a photo —
       a real Claude Code session edits the repo and ships it while you watch.</p>
 
@@ -501,7 +503,7 @@ footer .meta a:hover{ color:var(--amber); }
   (function(){
     var el = document.querySelector('h1 .mode');
     if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var modes = ['talking', 'texting', 'sharing a note with'], i = 0, n = el.textContent.length, del = false;
+    var modes = ['talking to it.', 'texting it.', 'sharing a note with it.'], i = 0, n = el.textContent.length, del = false;
     (function tick(){
       if (!del && n === modes[i].length){ del = true; return setTimeout(tick, 2000); }
       if (del && n === 0){ del = false; i = (i + 1) % modes.length; return setTimeout(tick, 300); }
