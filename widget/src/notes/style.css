@@ -44,14 +44,14 @@
 .akn-list button[aria-current='true'] { background: #211f1c; color: #f5f1ea; }
 .akn-list li[hidden] { display: none; }
 .akn-list li.in button:not(.akn-del) { padding-left: 30px; }
-.akn-list .akn-toggle { flex: none; padding: 7px 2px 7px 4px; color: #6f6a61; line-height: 0; }
+.akn-list .akn-toggle { flex: none; padding: 7px 0 7px 10px; /* icon on the note titles' left edge */ color: #6f6a61; line-height: 0; }
 .akn-list .akn-toggle:hover { background: none; color: #f5f1ea; }
 .akn-list .akn-folder { margin-top: 6px; }
 .akn-list .akn-del { flex: none; padding: 7px 6px; color: #6f6a61; line-height: 0; opacity: 0; }
 .akn-list li:hover .akn-del, .akn-list .akn-del:focus-visible { opacity: 1; }
 .akn-list .akn-del:hover { background: none; color: #f97066; }
 @media (hover: none) { .akn-list .akn-del { opacity: 1; } }
-.akn-list .akn-folder button:not(.akn-toggle):not(.akn-del) { display: flex; align-items: center; gap: 8px; color: #f5f1ea; }
+.akn-list .akn-folder button:not(.akn-toggle):not(.akn-del) { display: flex; align-items: center; gap: 8px; padding-left: 5px; color: #f5f1ea; } /* name stays in line with its notes (30px) */
 .akn-folder button span { overflow: hidden; text-overflow: ellipsis; }
 .akn-folder-name {
   flex: 1; min-width: 0; font: inherit; color: #f5f1ea; background: #0a0a0a;
