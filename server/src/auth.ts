@@ -170,6 +170,13 @@ async function allowedScope(email: string): Promise<UserScope | null | undefined
   return entries.has(e) ? entries.get(e) : undefined;
 }
 
+/** Every email that may use this site (env owners + provisioned, scoped or not). */
+export async function siteMembers(siteId: string): Promise<string[]> {
+  const out = new Set(ALLOWED_EMAILS);
+  for (const [email, scope] of await provisionedEntries()) if (!scope || scope.sites.includes(siteId)) out.add(email);
+  return [...out];
+}
+
 /** True when this user may operate on the given site (unscoped users always may). */
 export function allowsSite(user: AuthedUser, siteId: string): boolean {
   return !user.scope || user.scope.sites.includes(siteId);

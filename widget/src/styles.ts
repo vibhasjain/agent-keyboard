@@ -230,6 +230,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-mention-opt{ padding:6px 8px; border-radius:6px; color:var(--ak-ink2); cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ak-mention-opt[aria-selected="true"]{ background:#211f1c; color:var(--ak-amber); }
 .ak-mention-empty{ padding:6px 8px; color:var(--ak-ink3); }
+.ak-t-to{ color:var(--ak-ink3); font-size:.85em; margin-top:2px; }
 .ak-ta::placeholder{ color:var(--ak-ink3); }
 .ak-ta.ak-confirm::placeholder{ color:var(--ak-amber); opacity:1; } /* brief sign-in confirmation */
 .ak-ta:disabled{ opacity:.6; }

@@ -5,7 +5,7 @@
 // Owns the rectangle, the streaming pill that replaces it in place, and the single
 // reparentable composer / auth nodes. Reconciles the DOM on every store change.
 
-import { api } from './api'
+import { api, HttpError } from './api'
 import { getPendingInvite, getToken, login, setPasswordWithToken } from './auth'
 import { CONFIG, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
@@ -94,7 +94,7 @@ function loadNotes(): Promise<NotesApi> {
 
 const dragHasFiles = (dt: DataTransfer | null): boolean => Array.from(dt?.types ?? []).includes('Files')
 
-function makeComposer(): Composer {
+function makeComposer(onTeamNote: () => void): Composer {
   const root = el('div', 'ak-composer')
   const photos: Photos = makePhotos(() => syncSend())
   const note = el('div', 'ak-note')
@@ -135,6 +135,7 @@ function makeComposer(): Composer {
   taWrap.append(ta)
   row.append(taWrap, notesBtn, cam, attach, mic, sendBtn)
   const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => l.map((n) => n.name)))
+  const people = attachMentions(ta, taWrap, () => api.teammates(CONFIG.site).then((l) => l.map((t) => t.handle)), '@', 'teammates')
   root.append(photos.el, row, note)
   show(note, false)
 
@@ -252,6 +253,21 @@ function makeComposer(): Composer {
       await voice.flush()
       const text = ta.value.trim()
       if (!text && !photos.hasAttachments()) return
+      // @teammate → a note to them (saved in the chat + emailed), not an agent turn.
+      // The server decides who's a teammate; 400 = nobody, so it's a normal prompt.
+      if (/(?:^|\s)@[\w.+-]/.test(text) && !photos.hasAttachments()) {
+        try {
+          await api.teamNote(CONFIG.site, text)
+          reset()
+          onTeamNote()
+          return
+        } catch (e) {
+          if (!(e instanceof HttpError && e.status === 400)) {
+            setNote(e instanceof HttpError && e.status === 502 ? "Couldn't email that note — try again" : "Couldn't send that note — try again", true)
+            return
+          }
+        }
+      }
       const attachmentIds = photos.getAttachmentIds()
       const previews = photos.takePreviews() // transfers thumbnail ownership for transcript display
       start({ text, attachmentIds, page: location.pathname, thumbs: previews.thumbs, files: previews.files })
@@ -365,7 +381,7 @@ function makeComposer(): Composer {
   })
   on(ta, 'keydown', (e) => {
     const ke = e as KeyboardEvent
-    if (mentions.handleKey(ke)) return
+    if (mentions.handleKey(ke) || people.handleKey(ke)) return
     if (ke.key === 'Enter' && !ke.shiftKey) {
       e.preventDefault()
       doSend()
@@ -534,7 +550,7 @@ export function mountBar(shadow: ShadowRoot): void {
   zone.append(miniBtn, bar, stash)
   shadow.appendChild(zone)
 
-  const composer = makeComposer()
+  const composer = makeComposer(() => chat.refresh())
   stash.append(composer.el, loginFooter, setpwFooter)
 
   // Back to the corner. A hidden-but-focused composer keeps :host(.ak-kbd) on after

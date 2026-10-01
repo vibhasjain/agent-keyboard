@@ -15,6 +15,8 @@ export interface Chat {
   footerEl: HTMLElement
   /** Drop cached history so it refetches (with the authed token) on next expand — called after login. */
   resetConversation: () => void
+  /** Refetch the history tail (e.g. after a teammate note that never became a job). */
+  refresh: () => void
 }
 
 export interface ChatDeps {
@@ -160,7 +162,7 @@ const localSender = (): string | undefined => getSessionEmail() ?? undefined
 function msgEl(
   role: 'user' | 'assistant',
   text: string,
-  extras?: { thumbs?: string[]; files?: string[]; attachments?: number; photos?: number; images?: string[]; sender?: string },
+  extras?: { thumbs?: string[]; files?: string[]; attachments?: number; photos?: number; images?: string[]; sender?: string; to?: string[] },
 ): HTMLElement {
   if (role === 'user') {
     const body = el('div')
@@ -178,6 +180,7 @@ function msgEl(
     // Plain text (no markdown in user turns) — but @handle mentions still tag.
     line.appendChild(el('span', undefined, (n) => (n.innerHTML = renderUserText(text))))
     body.appendChild(line)
+    if (extras?.to?.length) body.appendChild(el('div', 'ak-t-to', (n) => (n.textContent = `Note — emailed ${extras.to!.join(', ')}`)))
     return lineEl('user', '>', body)
   }
   // Assistant: markdown text, plus any images the agent chose to show (same
@@ -345,6 +348,7 @@ function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
     files: m.files,
     images: m.images,
     sender: m.sender,
+    to: m.to,
   })
   if (m.role === 'assistant') markAnsweredOptions(node, m.chosenOption ?? answer)
   return node
@@ -1004,5 +1008,5 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (st.ui.mode === 'expanded' && (st.job.phase === 'streaming' || st.job.phase === 'sending')) updateLive()
   }, 1000)
 
-  return { footerEl: footer, resetConversation }
+  return { footerEl: footer, resetConversation, refresh: () => void loadHistory() }
 }

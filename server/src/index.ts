@@ -4,6 +4,7 @@
 // pushes, and the host redeploys. Every run is a durable job
 // (fire-and-forget; the client can disconnect and re-attach). Single user.
 
+import { randomUUID } from "node:crypto";
 import express, { type Request, type Response } from "express";
 import cors from "cors";
 import busboy from "busboy";
@@ -27,6 +28,7 @@ import {
   listAgentKeys,
   mintAgentKey,
   revokeAgentKey,
+  siteMembers,
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
@@ -34,6 +36,7 @@ import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMIN
 import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
+import { addTeamNote, emailTeamNote, handleOf } from "./team.js";
 import { deleteNote, listNotes, notesNote, readNote, validNoteName, writeNote } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
@@ -722,6 +725,49 @@ app.delete("/sites/:siteId/notes/:name", authed, async (req, res) => {
   }
   await deleteNote(site.id, name);
   res.json({ name });
+});
+
+// ─── teammate notes (an @mention in the composer; see team.ts) ───────────────
+app.get("/sites/:siteId/teammates", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const me = authedUser(req)?.email.toLowerCase();
+  res.json((await siteMembers(site.id)).filter((e) => e !== me).map((email) => ({ email, handle: handleOf(email) })));
+});
+
+/** Leave a note for the teammates @mentioned in `text`: saved to the transcript
+ *  and emailed — no Claude turn. 400 if it mentions nobody on the site. */
+app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const { text, page } = (req.body ?? {}) as { text?: unknown; page?: unknown };
+  const from = authedUser(req)?.email ?? "";
+  const mentioned = new Set(typeof text === "string" ? [...text.matchAll(/(?:^|\s)@([\w.+-]+)/g)].map((m) => m[1]!.toLowerCase()) : []);
+  const to = (await siteMembers(site.id)).filter((e) => e !== from.toLowerCase() && (mentioned.has(handleOf(e)) || mentioned.has(e)));
+  if (typeof text !== "string" || !text.trim() || text.length > 10_000 || !to.length) {
+    res.status(400).json({ error: "mention a teammate with @name" });
+    return;
+  }
+  const path = typeof page === "string" && page.startsWith("/") ? page : "/";
+  const conversationId = await conversationIdFor(site.id, pageSlugFor(site, path));
+  const note = { id: randomUUID(), role: "user" as const, text: text.trim(), tools: [], ts: new Date().toISOString(), sender: from, to };
+  try {
+    await emailTeamNote(to, from, note.text, `https://${site.domain}${path}`);
+  } catch (err) {
+    console.error("[teamnotes] email failed", err);
+    res.status(502).json({ error: "couldn't send the email — note not saved" });
+    return;
+  }
+  await addTeamNote(site.id, conversationId, note);
+  res.json(note);
 });
 
 /** Forcefully stop a running job (kills the CLI child, releases the lock). The

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { sessionIdFor, conversationIdFor, CLAUDE_HOME } from "./claude.js";
 import { checkoutPath } from "./checkouts.js";
 import { toolLabel } from "./tool-label.js";
+import { readTeamNotes } from "./team.js";
 
 export type ChatPart = { type: "text"; text: string } | { type: "tools"; tools: string[] };
 
@@ -32,6 +33,8 @@ export interface ChatMessage {
   // Who typed a user turn (parsed from the "[Sent from … by <email>]" header);
   // absent on turns from before sender tagging shipped.
   sender?: string;
+  // A teammate note (team.ts): who it was emailed to. Never seen by Claude.
+  to?: string[];
 }
 
 /** Claude Code slugs a project dir as its absolute cwd with `/` and `.` → `-`. */
@@ -219,16 +222,14 @@ export async function readConversation(
   const sessionId = sessionIdFor(conversationId);
   const checkoutRoot = checkoutPath(siteId);
   const path = await sessionFilePath(sessionId, checkoutRoot);
-  if (!path) return { messages: [], cursor: 0 };
+  const raw = path ? await readFile(path, "utf8").catch(() => "") : "";
 
-  let raw: string;
-  try {
-    raw = await readFile(path, "utf8");
-  } catch {
-    return { messages: [], cursor: 0 };
-  }
-
+  // Teammate notes never reach Claude; slot each one in by time.
   const all = parseConversation(raw, checkoutRoot);
+  for (const note of await readTeamNotes(siteId, conversationId)) {
+    const i = all.findIndex((m) => m.ts && note.ts && m.ts > note.ts);
+    all.splice(i < 0 ? all.length : i, 0, note);
+  }
 
   // Newest-last array. Page from the end: skip `before` newest, take `limit`.
   const end = all.length - before;
