@@ -116,8 +116,12 @@ a:hover{ color:var(--amber); }
 h1{
   font-weight:500; letter-spacing:-.025em;
   font-size:clamp(36px, 6.4vw, 64px); line-height:1.05; margin:0 auto; max-width:13em; text-wrap:balance;
+  min-height:2.1em; /* the typed mode word changes the line count; keep the page below still */
 }
+@media (max-width:439px){ h1{ min-height:3.15em; } }
 h1 em{ font-style:normal; color:var(--warm); }
+h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; margin-left:.04em; vertical-align:-.08em; background:var(--amber); animation:caret 1s steps(1) infinite; }
+@keyframes caret{ 50%{ opacity:0; } }
 .lede{ max-width:56ch; margin:22px auto 0; font-size:clamp(16px,2.3vw,19px); color:var(--ink-2); }
 .lede code{ font-family:var(--mono); font-size:.86em; color:var(--warm); }
 
@@ -281,6 +285,7 @@ footer .meta a:hover{ color:var(--amber); }
 }
 @media (prefers-reduced-motion: reduce){
   .hero .kbd{ animation:none; }
+  h1 .mode::after{ display:none; }
   .conn-line .pulse{ animation:none; opacity:0; }
   .phone iframe{ transition:none; }
   html{ scroll-behavior:auto; }
@@ -316,7 +321,7 @@ footer .meta a:hover{ color:var(--amber); }
       <img src="typewriter.webp" width="168" height="90" alt="" fetchpriority="high">
     </picture>
     <div class="eyebrow">This page edits itself</div>
-    <h1>Change your app by <em>talking</em> to it.</h1>
+    <h1 aria-label="Change your app by talking, texting, or sharing a note with it.">Change your app by <em class="mode" aria-hidden="true">talking</em> to it.</h1>
     <p class="lede">One script tag puts a prompt bar in your app. Type, talk, or snap a photo —
       a real Claude Code session edits the repo and ships it while you watch.</p>
 
@@ -493,6 +498,20 @@ footer .meta a:hover{ color:var(--amber); }
 </footer>
 
 <script>
+  // Hero headline types out each input mode, then backspaces to the next.
+  (function(){
+    var el = document.querySelector('h1 .mode');
+    if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var modes = ['talking', 'texting', 'sharing a note with'], i = 0, n = el.textContent.length, del = false;
+    (function tick(){
+      if (!del && n === modes[i].length){ del = true; return setTimeout(tick, 2000); }
+      if (del && n === 0){ del = false; i = (i + 1) % modes.length; return setTimeout(tick, 300); }
+      n += del ? -1 : 1;
+      el.textContent = modes[i].slice(0, n);
+      setTimeout(tick, del ? 40 : 85);
+    })();
+  })();
+
   // No browser zoom, ever: the viewport meta + touch-action cover most engines;
   // iOS Safari additionally needs its proprietary gesture events cancelled and
   // rapid double-taps on non-interactive surfaces eaten.

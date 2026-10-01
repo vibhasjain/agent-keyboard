@@ -74,6 +74,9 @@ function filesFromTransfer(dt: DataTransfer | null): File[] {
 // The notes editor is its own bundle (Milkdown, ~240 KB gzip) — fetched from the
 // server the first time Notes opens, never on page load.
 type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void }) => Promise<void> }
+// Notes are new: the empty composer points at how to reference one.
+const HINT = 'Type [[ to add a note'
+
 let notesBundle: Promise<NotesApi> | null = null
 function loadNotes(): Promise<NotesApi> {
   return (notesBundle ??= new Promise<NotesApi>((resolve, reject) => {
@@ -115,7 +118,7 @@ function makeComposer(): Composer {
   const taWrap = el('div', 'ak-ta-wrap')
   const ta = el('textarea', 'ak-ta', (n) => {
     n.rows = 1
-    n.placeholder = ''
+    n.placeholder = HINT
     n.setAttribute('enterkeyhint', 'send')
     n.setAttribute('aria-label', 'Message')
   })
@@ -428,7 +431,7 @@ function makeComposer(): Composer {
       ta.classList.add('ak-confirm')
       setTimeout(() => {
         ta.classList.remove('ak-confirm')
-        ta.placeholder = ''
+        ta.placeholder = HINT
       }, 1200)
     },
     reset,
