@@ -15,6 +15,7 @@
   position: fixed; inset: 0; z-index: 2147483647;
   width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden;
   display: flex; flex-direction: column; background: #0a0a0a; color: #f5f1ea;
+  box-shadow: 0 0 0 100vmax #0a0a0a; /* iOS keyboard scroll can uncover the page around the overlay; paint over it */
   font: 15px/1.5 'JetBrains Mono', ui-monospace, Menlo, monospace;
   -webkit-font-smoothing: antialiased;
 }
