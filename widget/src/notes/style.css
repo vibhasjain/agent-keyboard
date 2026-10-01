@@ -136,6 +136,7 @@
   .akn.has-note .akn-side { display: none; }
   .akn.has-note .akn-back { display: flex !important; }
   .akn-side-head { padding-right: 56px; } /* room for the floating close */
+  .akn-list .akn-del { padding-right: 12px; } /* trash centre 27px from the edge = the close button's */
   .akn-page-inner { padding-top: 56px; }
   .akn-title { padding: 0 20px; font-size: 28px; }
   .akn .milkdown .ProseMirror { padding: 8px 20px 40px; }
