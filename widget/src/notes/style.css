@@ -118,6 +118,8 @@
   --crepe-font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 }
 .akn .milkdown .ProseMirror { padding: 8px 48px 40px; min-height: 50vh; }
+/* Long unbroken runs (URLs, `a|b|c` code) wrap instead of widening the page on phones. */
+.akn .milkdown .ProseMirror, .akn .milkdown .ProseMirror code { overflow-wrap: anywhere; }
 /* Host pages style bare headings (agentkeyboard.com centres h2 at max-width 22em); undo that here. */
 .akn .milkdown .ProseMirror :is(h1, h2, h3, h4, h5, h6, p) { text-align: left; max-width: none; margin-left: 0; margin-right: 0; text-wrap: wrap; }
 
