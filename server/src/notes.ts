@@ -5,7 +5,7 @@
 // Restart's `git clean -fdx` excludes `.tmp/notes` (resetCheckoutToOrigin).
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkoutPath } from "./checkouts.js";
 
@@ -52,11 +52,19 @@ export async function deleteNote(siteId: string, name: string): Promise<void> {
   await rm(notePath(siteId, name), { force: true });
 }
 
-/** Point the agent at every existing note the prompt mentions as [[name]]. */
+/** Point the agent at every existing note the prompt mentions as [[name]],
+ *  and at the notes those notes mention in turn. */
 export function notesNote(siteId: string, text: string): string {
-  const names = [...new Set([...text.matchAll(/\[\[([^\[\]]+)\]\]/g)].map((m) => m[1]!.trim()))].filter(
-    (n) => validNoteName(n) && existsSync(notePath(siteId, n)),
-  );
+  const names: string[] = [];
+  const queue = [text];
+  while (queue.length) {
+    for (const m of queue.shift()!.matchAll(/\[\[([^\[\]]+)\]\]/g)) {
+      const n = m[1]!.trim();
+      if (names.includes(n) || !validNoteName(n) || !existsSync(notePath(siteId, n))) continue;
+      names.push(n);
+      queue.push(readFileSync(notePath(siteId, n), "utf8"));
+    }
+  }
   if (!names.length) return "";
   const list = names.map((n) => `[[${n}]] = ${join(NOTES_REL, `${n}.md`)}`).join(", ");
   return `\n\n[Referenced notes — read each in full before acting; the change requested is what they describe: ${list}]`;

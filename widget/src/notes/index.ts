@@ -8,6 +8,11 @@
 // statically pulls KaTeX and every CodeMirror language (~1.8 MB gzip).
 import { CrepeBuilder } from '@milkdown/crepe/builder'
 import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
+import { linkSchema } from '@milkdown/kit/preset/commonmark'
+import { InputRule } from '@milkdown/kit/prose/inputrules'
+import { Plugin } from '@milkdown/kit/prose/state'
+import type { EditorView } from '@milkdown/kit/prose/view'
+import { $inputRule, $prose } from '@milkdown/kit/utils'
 import { blockEdit } from '@milkdown/crepe/feature/block-edit'
 import { cursor } from '@milkdown/crepe/feature/cursor'
 import { linkTooltip } from '@milkdown/crepe/feature/link-tooltip'
@@ -37,6 +42,19 @@ function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: s
   if (text) n.textContent = text
   return n
 }
+
+// Typing `[text](url)` turns into a link (commonmark has no input rule for it).
+const linkRule = $inputRule(
+  (ctx) =>
+    new InputRule(/\[([^\]]+)\]\(([^()\s]+)\)$/, (state, [, text, href], start, end) => {
+      const link = linkSchema.type(ctx)
+      return state.tr.replaceWith(start, end, state.schema.text(text!, [link.create({ href })])).removeStoredMark(link)
+    }),
+)
+
+/** remark escapes `[` in text; keep [[mentions]] readable in the saved .md. */
+const unescapeMentions = (md: string) =>
+  md.replace(/\\\[\\\[([^\]\n]+?)\\?\]\\?\]/g, (_, n: string) => `[[${n.replace(/\\(.)/g, '$1')}]]`)
 
 let openInstance: { close: () => Promise<void> } | null = null
 
@@ -155,6 +173,89 @@ export async function open(opts: NotesOptions): Promise<void> {
       })
   }
 
+  // [[note]] mentions inside a note, like the bar's composer: `[[` pops a list of
+  // the other notes that filters as you type; Enter/Tab/click picks, Esc dismisses.
+  const mentions = () => {
+    const box = h('div', 'akn-mention')
+    box.setAttribute('role', 'listbox')
+    box.setAttribute('aria-label', 'Notes')
+    box.hidden = true
+    root.appendChild(box)
+    let view: EditorView
+    let matches: string[] = []
+    let active = 0
+    let range: { from: number; to: number } | null = null
+    const hide = () => {
+      range = null
+      box.hidden = true
+    }
+    const pick = (name: string) => {
+      if (!range) return
+      view.dispatch(view.state.tr.insertText(`[[${name}]]`, range.from, range.to))
+      view.focus()
+    }
+    const render = () => {
+      box.replaceChildren()
+      if (!matches.length) box.appendChild(h('div', 'akn-mention-empty', 'No matching notes'))
+      matches.forEach((name, i) => {
+        const o = h('div', 'akn-mention-opt', name)
+        o.setAttribute('role', 'option')
+        o.setAttribute('aria-selected', String(i === active))
+        // mousedown, not click: keep focus (and the caret) in the editor.
+        o.onmousedown = (e) => {
+          e.preventDefault()
+          pick(name)
+        }
+        box.appendChild(o)
+      })
+      box.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' })
+    }
+    const update = (v: EditorView) => {
+      view = v
+      const { empty, $from } = v.state.selection
+      const m = empty && v.hasFocus() && $from.parent.textBetween(0, $from.parentOffset, undefined, '\ufffc').match(/\[\[([^[\]\n]*)$/)
+      if (!m) return hide()
+      const q = m[1]!.toLowerCase()
+      const others = names.filter((n) => n !== current)
+      matches = [
+        ...others.filter((n) => n.toLowerCase().startsWith(q)),
+        ...others.filter((n) => !n.toLowerCase().startsWith(q) && n.toLowerCase().includes(q)),
+      ]
+      const closed = $from.parent.textBetween($from.parentOffset, Math.min($from.parentOffset + 2, $from.parent.content.size)) === ']]'
+      if (!range) active = 0
+      active = Math.min(active, Math.max(0, matches.length - 1))
+      range = { from: $from.pos - m[0].length, to: $from.pos + (closed ? 2 : 0) }
+      const at = v.coordsAtPos(range.from)
+      box.style.left = `${Math.min(at.left, innerWidth - 300)}px`
+      box.style.top = `${at.bottom + 6}px`
+      box.hidden = false
+      render()
+    }
+    return $prose(
+      () =>
+        new Plugin({
+          view: (v) => {
+            view = v
+            return { update, destroy: () => box.remove() }
+          },
+          props: {
+            handleKeyDown: (_v, e) => {
+              if (!range || e.isComposing) return false
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                if (matches.length) active = (active + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length
+                render()
+              } else if ((e.key === 'Enter' || e.key === 'Tab') && matches[active]) pick(matches[active]!)
+              else if (e.key === 'Escape') hide()
+              else return false
+              e.preventDefault()
+              return true
+            },
+            handleDOMEvents: { blur: () => (hide(), false) },
+          },
+        }),
+    )
+  }
+
   const showBlank = () => {
     page.replaceChildren(h('div', 'akn-blank', 'Pick a note, or start a new one.'))
     root.classList.remove('has-note')
@@ -197,9 +298,10 @@ export async function open(opts: NotesOptions): Promise<void> {
       .addFeature(placeholder, { text: 'Describe the change — type / for blocks' })
     // `-` bullets (remark's default is `*`), so a note round-trips the way people write it.
     crepe.editor.config((ctx) => ctx.update(remarkStringifyOptionsCtx, (o) => ({ ...o, bullet: '-' as const })))
+    crepe.editor.use(linkRule).use(mentions())
     crepe.on((l) =>
       l.markdownUpdated((_ctx, md) => {
-        markdown = md
+        markdown = unescapeMentions(md)
         dirty = true
         clearTimeout(timer)
         timer = setTimeout(() => void flush(), SAVE_DELAY_MS)

@@ -21,6 +21,7 @@
 .akn *, .akn *::before, .akn *::after { box-sizing: border-box; }
 .akn button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 .akn :focus-visible { outline: 2px solid #ffb86b; outline-offset: 2px; }
+.akn ::selection, .akn .milkdown .ProseMirror *::selection { background: #5a3f1f; color: #f5f1ea; } /* the host page's ::selection can set dark text */
 .akn .ProseMirror:focus-visible, .akn-title:focus-visible { outline: none; }
 
 .akn-side {
@@ -81,6 +82,16 @@
   --crepe-font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 }
 .akn .milkdown .ProseMirror { padding: 8px 48px 40px; min-height: 50vh; }
+
+.akn-mention {
+  position: fixed; z-index: 1; width: 280px; max-height: 220px; overflow-y: auto; padding: 4px;
+  background: #111110; border: 1px solid #3d372e; border-radius: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.5);
+  font-size: 14px;
+}
+.akn-mention[hidden] { display: none; }
+.akn-mention-opt { padding: 6px 8px; border-radius: 6px; color: #b8b2a7; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.akn-mention-opt[aria-selected='true'] { background: #211f1c; color: #ffb86b; }
+.akn-mention-empty { padding: 6px 8px; color: #6f6a61; }
 
 @media (max-width: 720px) {
   .akn-side { position: absolute; inset: 0; width: auto; z-index: 1; border-right: 0; }
