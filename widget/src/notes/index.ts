@@ -116,8 +116,9 @@ export async function open(opts: NotesOptions): Promise<void> {
   side.append(sideHead, list)
 
   const main = h('div', 'akn-main')
-  // The bar's pattern: round buttons in the top corners. Top-left steps back to
-  // the list (phones, inside a note); top-right closes Notes.
+  // The bar's pattern: round buttons floating in the top corners (no header row,
+  // so the note keeps the full height). Top-left steps back to the list (phones,
+  // inside a note); top-right closes Notes. Status floats bottom-right.
   const top = h('div', 'akn-top')
   const iconBtn = (cls: string, name: string, label: string) => {
     const b = h('button', `akn-btn ${cls}`)
@@ -131,12 +132,12 @@ export async function open(opts: NotesOptions): Promise<void> {
   const status = h('span', 'akn-status')
   status.setAttribute('aria-live', 'polite')
   const closeBtn = iconBtn('akn-close', 'x', 'Close notes')
-  top.append(back, status, closeBtn)
+  top.append(back, closeBtn)
   const page = h('div', 'akn-page')
   main.append(page)
   const body = h('div', 'akn-body')
   body.append(side, main)
-  root.append(top, body)
+  root.append(body, top, status)
 
   // Keyboard up: iOS doesn't shrink the layout viewport, it scrolls it, which
   // pushed the title off-screen. Pin the overlay to the visible viewport instead.
