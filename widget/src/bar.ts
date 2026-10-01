@@ -51,6 +51,7 @@ interface Composer {
   hasContent: () => boolean
   setDisabled: (d: boolean) => void
   setNote: (text: string, isError?: boolean) => void
+  openNotes: () => void
   flashConfirm: (text: string) => void
   reset: () => void
   addFiles: (files: File[]) => void
@@ -74,8 +75,6 @@ function filesFromTransfer(dt: DataTransfer | null): File[] {
 // The notes editor is its own bundle (Milkdown, ~240 KB gzip) — fetched from the
 // server the first time Notes opens, never on page load.
 type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void }) => Promise<void> }
-// Notes are new: the empty composer points at how to reference one.
-const HINT = '#note'
 
 let notesBundle: Promise<NotesApi> | null = null
 function loadNotes(): Promise<NotesApi> {
@@ -105,11 +104,6 @@ function makeComposer(onTeamNote: () => void): Composer {
     n.appendChild(icon('camera'))
     n.setAttribute('aria-label', 'Add photo')
   })
-  const notesBtn = el('button', 'ak-icon-btn', (n) => {
-    n.type = 'button'
-    n.appendChild(icon('note'))
-    n.setAttribute('aria-label', 'Notes')
-  })
   const attach = el('button', 'ak-icon-btn', (n) => {
     n.type = 'button'
     n.appendChild(icon('paperclip'))
@@ -118,7 +112,7 @@ function makeComposer(onTeamNote: () => void): Composer {
   const taWrap = el('div', 'ak-ta-wrap')
   const ta = el('textarea', 'ak-ta', (n) => {
     n.rows = 1
-    n.placeholder = HINT
+    n.placeholder = ''
     n.setAttribute('enterkeyhint', 'send')
     n.setAttribute('aria-label', 'Message')
   })
@@ -133,7 +127,7 @@ function makeComposer(onTeamNote: () => void): Composer {
     n.setAttribute('aria-label', 'Send')
   })
   taWrap.append(ta)
-  row.append(taWrap, notesBtn, cam, attach, mic, sendBtn)
+  row.append(taWrap, cam, attach, mic, sendBtn)
   const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => l.map((n) => n.name)))
   const people = attachMentions(ta, taWrap, () => api.teammates(CONFIG.site).then((l) => l.map((t) => t.handle)), '@', 'teammates')
   root.append(photos.el, row, note)
@@ -310,8 +304,7 @@ function makeComposer(onTeamNote: () => void): Composer {
     blurButton(cam)
     photos.openPicker()
   })
-  on(notesBtn, 'click', () => {
-    blurButton(notesBtn)
+  const openNotes = () => {
     // Full-screen focus mode: the bar steps aside (it sits in the top layer, so it
     // would otherwise cover the editor) and comes back when the note closes.
     const host = (root.getRootNode() as ShadowRoot).host as HTMLElement
@@ -332,7 +325,7 @@ function makeComposer(onTeamNote: () => void): Composer {
         host.style.visibility = ''
         setNote(e.message, true)
       })
-  })
+  }
   on(attach, 'click', () => {
     blurButton(attach)
     photos.openFilePicker()
@@ -418,7 +411,6 @@ function makeComposer(onTeamNote: () => void): Composer {
   const applyAuthLock = () => {
     const locked = getState().auth !== 'authed'
     cam.disabled = locked
-    notesBtn.disabled = locked
     attach.disabled = locked
     mic.disabled = locked
   }
@@ -435,19 +427,19 @@ function makeComposer(onTeamNote: () => void): Composer {
     setDisabled: (d) => {
       ta.disabled = d
       cam.disabled = d
-      notesBtn.disabled = d
       attach.disabled = d
       mic.disabled = d
       syncSend()
     },
     setNote,
+    openNotes,
     // Flash a brief amber confirmation as the composer's placeholder, then clear it.
     flashConfirm: (text) => {
       ta.placeholder = text
       ta.classList.add('ak-confirm')
       setTimeout(() => {
         ta.classList.remove('ak-confirm')
-        ta.placeholder = HINT
+        ta.placeholder = ''
       }, 1200)
     },
     reset,
@@ -562,7 +554,7 @@ export function mountBar(shadow: ShadowRoot): void {
     patchUi({ mode: phase === 'streaming' || phase === 'sending' ? 'collapsed' : 'mini' })
   }
 
-  const chat: Chat = mountChat(shadow, { composerEl: composer.el, collapse: collapseToCorner })
+  const chat: Chat = mountChat(shadow, { composerEl: composer.el, collapse: collapseToCorner, openNotes: composer.openNotes })
 
   const ticker: Ticker = makeTicker(tickerBox)
 

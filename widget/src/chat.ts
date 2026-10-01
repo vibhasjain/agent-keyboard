@@ -22,6 +22,7 @@ export interface Chat {
 export interface ChatDeps {
   composerEl: HTMLElement
   collapse: () => void
+  openNotes: () => void
 }
 
 function mmss(ms: number): string {
@@ -386,10 +387,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const stopItem = menuItem('stop', 'Stop', 'Cancel the current agent run.')
   const restartItem = menuItem('restart', 'Restart', 'Clear context, discard local checkout changes, and pull latest.')
   const compactItem = menuItem('compact', 'Compact', 'Summarize the session to free up context.')
+  const notesItem = menuItem('note', 'Notes', 'Write a longer request; reference it in a message as #name.')
   const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
   const demoResetItem = menuItem('restart', 'Start tour over')
-  menu.append(identity, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem)
+  menu.append(identity, notesItem, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -416,6 +418,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     ;(restartItem as HTMLButtonElement).disabled = busyAction !== null
     ;(compactItem as HTMLButtonElement).disabled = busyAction !== null
     ;(refreshItem as HTMLButtonElement).disabled = busyAction !== null
+    ;(notesItem as HTMLButtonElement).disabled = busyAction !== null
     ;(logoutItem as HTMLButtonElement).disabled = busyAction !== null
   }
   const setMenu = (open: boolean) => {
@@ -428,7 +431,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       const email = getSessionEmail() // refresh on open so it's current
       identity.textContent = guest ? 'Scripted tour · no AI used' : email ?? ''
       show(identity, guest || !!email)
-      for (const item of [stopItem, restartItem, compactItem, refreshItem, logoutItem]) show(item, !guest)
+      for (const item of [notesItem, stopItem, restartItem, compactItem, refreshItem, logoutItem]) show(item, !guest)
       show(demoResetItem, guest) // no Login item: the form is already in the footer
       refreshBusyMenu()
     }
@@ -505,6 +508,10 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     setTimeout(() => {
       if (busyAction === null) refreshBusyMenu()
     }, 1500)
+  })
+  on(notesItem, 'click', () => {
+    setMenu(false)
+    deps.openNotes()
   })
   on(refreshItem, 'click', () => {
     if (busyAction) return

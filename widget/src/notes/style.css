@@ -15,7 +15,7 @@
   position: fixed; inset: 0; z-index: 2147483647;
   width: auto; height: auto; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden;
   display: flex; background: #0a0a0a; color: #f5f1ea;
-  font: 15px/1.5 Inter, system-ui, -apple-system, sans-serif;
+  font: 15px/1.5 'JetBrains Mono', ui-monospace, Menlo, monospace;
   -webkit-font-smoothing: antialiased;
 }
 .akn *, .akn *::before, .akn *::after { box-sizing: border-box; }
@@ -57,7 +57,7 @@
 .akn-title {
   display: block; width: 100%; padding: 0 48px; margin: 0 0 8px;
   background: none; border: 0; outline: none; color: #f5f1ea;
-  font: 500 36px/1.2 Inter, system-ui, sans-serif; letter-spacing: -0.02em;
+  font: 500 36px/1.2 'JetBrains Mono', ui-monospace, Menlo, monospace; letter-spacing: 0;
 }
 .akn-title::placeholder { color: #6f6a61; }
 .akn-blank { padding: 80px 24px; text-align: center; color: #6f6a61; }
@@ -77,8 +77,8 @@
   --crepe-color-selected: #3a2c1c;
   --crepe-color-inline-area: #211f1c;
   --crepe-color-inline-code: #ffb86b;
-  --crepe-font-title: Inter, system-ui, sans-serif;
-  --crepe-font-default: Inter, system-ui, sans-serif;
+  --crepe-font-title: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  --crepe-font-default: 'JetBrains Mono', ui-monospace, Menlo, monospace;
   --crepe-font-code: 'JetBrains Mono', ui-monospace, Menlo, monospace;
 }
 .akn .milkdown .ProseMirror { padding: 8px 48px 40px; min-height: 50vh; }
