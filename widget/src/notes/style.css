@@ -35,10 +35,8 @@
 .akn-list { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
 .akn-list li { display: flex; align-items: center; border-radius: 6px; }
 .akn-list li.dragging { background: #211f1c; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
-.akn-grip { flex: none; display: flex; padding: 7px 6px; color: #6f6a61; cursor: grab; touch-action: none; opacity: 0; }
-.akn-list li:hover .akn-grip, .akn-list li.dragging .akn-grip { opacity: 1; }
-.akn-list li.dragging .akn-grip { cursor: grabbing; }
-@media (hover: none) { .akn-grip { opacity: 1; } }
+.akn-list button { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.akn-list li.dragging button { cursor: grabbing; }
 .akn-list button {
   display: block; flex: 1; min-width: 0; text-align: left; padding: 7px 10px; border-radius: 6px;
   color: #b8b2a7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;

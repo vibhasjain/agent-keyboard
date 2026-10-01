@@ -180,8 +180,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       b.type = 'button'
       b.setAttribute('aria-current', String(name === current))
       b.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown')
-      b.onclick = () => void openNote(name)
-      // Alt+↑/↓ moves the note, the keyboard twin of dragging the grip.
+      // Alt+↑/↓ moves the note, the keyboard twin of dragging it.
       b.onkeydown = (e) => {
         const to = names.indexOf(name) + (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : NaN)
         if (!e.altKey || !(to >= 0 && to < names.length)) return
@@ -192,14 +191,30 @@ export async function open(opts: NotesOptions): Promise<void> {
         list.querySelectorAll('button')[to]?.focus()
         saveOrder()
       }
-      const grip = h('span', 'akn-grip')
-      grip.title = 'Drag to reorder'
-      grip.appendChild(icon('grip', 14))
-      // Listen on window: moving the row in the DOM would drop pointer capture.
-      grip.onpointerdown = (e) => {
-        e.preventDefault()
-        li.classList.add('dragging')
+      // The whole row drags: a mouse after a few px of movement, a finger after a
+      // short hold (so a plain swipe still scrolls the list). A drag eats the click.
+      let dragging = false
+      let dragged = false
+      li.addEventListener('touchmove', (e) => dragging && e.preventDefault(), { passive: false })
+      b.onclick = () => {
+        if (dragged) dragged = false
+        else void openNote(name)
+      }
+      b.oncontextmenu = (e) => dragging && e.preventDefault()
+      b.onpointerdown = (e) => {
+        if (e.button !== 0) return
+        const y0 = e.clientY
+        const hold = e.pointerType === 'touch' ? setTimeout(() => start(), 300) : undefined
+        const start = () => {
+          dragging = dragged = true
+          li.classList.add('dragging')
+        }
+        // Listen on window: moving the row in the DOM would drop pointer capture.
         const move = (ev: PointerEvent) => {
+          if (!dragging) {
+            if (e.pointerType === 'touch' || Math.abs(ev.clientY - y0) < 4) return
+            start()
+          }
           const others = [...list.children].filter((c) => c !== li)
           const ref = others[others.filter((c) => {
             const r = c.getBoundingClientRect()
@@ -208,10 +223,15 @@ export async function open(opts: NotesOptions): Promise<void> {
           if (ref ? li.nextElementSibling !== ref : list.lastElementChild !== li) list.insertBefore(li, ref ?? null)
         }
         const drop = () => {
+          clearTimeout(hold)
           window.removeEventListener('pointermove', move)
           window.removeEventListener('pointerup', drop)
           window.removeEventListener('pointercancel', drop)
+          if (!dragging) return
+          dragging = false
           li.classList.remove('dragging')
+          // Touch fires no click after a hold, so nothing is left to swallow.
+          if (e.pointerType === 'touch') dragged = false
           const next = [...list.children].map((c) => (c as HTMLElement).dataset.name!)
           if (next.join('\n') === names.join('\n')) return
           names = next
@@ -221,7 +241,7 @@ export async function open(opts: NotesOptions): Promise<void> {
         window.addEventListener('pointerup', drop)
         window.addEventListener('pointercancel', drop)
       }
-      li.append(b, grip)
+      li.append(b)
       list.appendChild(li)
     }
   }
@@ -478,6 +498,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       return
     }
     names = [name, ...names]
+    saveOrder()
     await openNote(name, true)
   }
 
