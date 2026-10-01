@@ -117,7 +117,7 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   const main = h('div', 'akn-main')
   // The bar's pattern: round buttons in the top corners. Top-left steps back to
-  // the list (phones, inside a note); top-right deletes the note / closes Notes.
+  // the list (phones, inside a note); top-right closes Notes.
   const top = h('div', 'akn-top')
   const iconBtn = (cls: string, name: string, label: string) => {
     const b = h('button', `akn-btn ${cls}`)
@@ -130,9 +130,8 @@ export async function open(opts: NotesOptions): Promise<void> {
   const back = iconBtn('akn-back', 'chevron-left', 'All notes')
   const status = h('span', 'akn-status')
   status.setAttribute('aria-live', 'polite')
-  const delBtn = iconBtn('akn-delete', 'trash', 'Delete note')
   const closeBtn = iconBtn('akn-close', 'x', 'Close notes')
-  top.append(back, status, delBtn, closeBtn)
+  top.append(back, status, closeBtn)
   const page = h('div', 'akn-page')
   main.append(page)
   const body = h('div', 'akn-body')
@@ -353,7 +352,13 @@ export async function open(opts: NotesOptions): Promise<void> {
     b.setAttribute('aria-current', String(name === current))
     const wasDrag = draggable(li, b)
     b.onclick = () => wasDrag() || void openNote(name)
-    li.append(b)
+    const del = h('button', 'akn-del')
+    del.type = 'button'
+    del.title = 'Delete note'
+    del.setAttribute('aria-label', `Delete note ${name}`)
+    del.append(icon('trash', 14))
+    del.onclick = () => void deleteNote(name)
+    li.append(b, del)
     list.appendChild(li)
   }
 
@@ -411,7 +416,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       input.select()
     }
     b.onclick = () => wasDrag() || edit()
-    const del = h('button', 'akn-fdel')
+    const del = h('button', 'akn-del')
     del.type = 'button'
     del.title = 'Delete folder (keeps its notes)'
     del.setAttribute('aria-label', `Delete folder ${folder}, keeping its notes`)
@@ -784,11 +789,12 @@ export async function open(opts: NotesOptions): Promise<void> {
     await flush()
     closeNote()
   }
-  delBtn.onclick = async () => {
-    const name = current
-    if (!name || !confirm(`Delete "${name}"? This can't be undone.`)) return
-    clearTimeout(timer)
-    dirty = false
+  const deleteNote = async (name: string) => {
+    if (!confirm(`Delete "${name}"? This can't be undone.`)) return
+    if (current === name) {
+      clearTimeout(timer)
+      dirty = false
+    }
     try {
       await enqueue(() => call(`/${encodeURIComponent(name)}`, { method: 'DELETE' }))
     } catch (e) {
