@@ -35,7 +35,8 @@ async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
 // 32: transcript tool lines (2026-09-04); Docker's zlib measures ~0.2 KB heavier than local.
 // 33: the typewriter mark inlined as the corner glyph (~0.8 KB, 2026-09-25).
 // 34: Notes button + lazy loader + [[mention]] autocomplete (~1.2 KB, 2026-10-01).
-await bundle('src/index.ts', 'dist/widget.js', 34)
+// 35: iOS keyboard fixes (scroll snap-back, keep the latest message in view), 2026-10-01.
+await bundle('src/index.ts', 'dist/widget.js', 35)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)
 
 // The notes editor (Milkdown Crepe), lazy-loaded by the widget only when Notes

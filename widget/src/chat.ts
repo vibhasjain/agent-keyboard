@@ -851,6 +851,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const toBottom = () => {
     scroll.scrollTop = scroll.scrollHeight
   }
+  // The keyboard lifts the composer and shrinks the transcript from below; if you
+  // were at the latest message, keep it in view instead of letting it slide under.
+  let pinned = true
+  on(scroll, 'scroll', () => (pinned = isPinned()))
+  new ResizeObserver(() => pinned && toBottom()).observe(scroll)
 
   // Ghost skeleton while history fetches — reuses the streaming pill's .ak-shimmer
   // sweep (reduced-motion aware). Shown the moment a load kicks off, replaced by
