@@ -33,8 +33,14 @@
 .akn-new { padding: 4px 10px; border-radius: 6px; color: #ffb86b !important; }
 .akn-new:hover { background: #211f1c !important; }
 .akn-list { list-style: none; margin: 0; padding: 0 8px 12px; overflow-y: auto; flex: 1; }
-.akn-list li { display: flex; align-items: center; border-radius: 6px; }
-.akn-list li.dragging { background: #211f1c; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+.akn-list li { display: flex; align-items: center; border-radius: 6px; transition: transform .15s, box-shadow .15s; }
+/* Lifted while dragging: it floats above the list so the reorder reads clearly. */
+.akn-list li.dragging {
+  position: relative; z-index: 1; transform: scale(1.03); background: #211f1c;
+  box-shadow: 0 0 0 1px rgba(255,184,107,.45), 0 10px 28px rgba(0,0,0,.6);
+}
+.akn-list li.dragging button { color: #f5f1ea; }
+@media (prefers-reduced-motion: reduce) { .akn-list li { transition: none; } }
 .akn-list button { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .akn-list li.dragging button { cursor: grabbing; }
 .akn-list button {
