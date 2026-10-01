@@ -85,9 +85,11 @@ export async function open(opts: NotesOptions): Promise<void> {
   back.type = 'button'
   const status = h('span', 'akn-status')
   status.setAttribute('aria-live', 'polite')
+  const delBtn = h('button', 'akn-delete', 'Delete')
+  delBtn.type = 'button'
   const closeBtn = h('button', 'akn-close', 'Close')
   closeBtn.type = 'button'
-  top.append(back, status, closeBtn)
+  top.append(back, status, delBtn, closeBtn)
   const page = h('div', 'akn-page')
   main.append(top, page)
   root.append(side, main)
@@ -288,13 +290,32 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   newBtn.onclick = () => void newNote()
   closeBtn.onclick = () => void close()
-  back.onclick = async () => {
-    await flush()
+  const closeNote = () => {
     crepe?.destroy()
     crepe = null
     current = null
     renderList()
     showBlank()
+  }
+  back.onclick = async () => {
+    await flush()
+    closeNote()
+  }
+  delBtn.onclick = async () => {
+    const name = current
+    if (!name || !confirm(`Delete "${name}"? This can't be undone.`)) return
+    clearTimeout(timer)
+    dirty = false
+    try {
+      await enqueue(() => call(`/${encodeURIComponent(name)}`, { method: 'DELETE' }))
+    } catch (e) {
+      setStatus(`Not deleted — ${(e as Error).message}`, true)
+      return
+    }
+    names = names.filter((n) => n !== name)
+    if (current === name) closeNote()
+    else renderList()
+    setStatus('Deleted')
   }
 
   showBlank()

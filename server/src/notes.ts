@@ -4,7 +4,7 @@
 // reads them with a repo-relative path. Turn-start sync never cleans `.tmp`, and
 // Restart's `git clean -fdx` excludes `.tmp/notes` (resetCheckoutToOrigin).
 
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { checkoutPath } from "./checkouts.js";
@@ -46,6 +46,10 @@ export async function writeNote(siteId: string, name: string, content: string, f
   }
   await writeFile(notePath(siteId, name), content);
   return true;
+}
+
+export async function deleteNote(siteId: string, name: string): Promise<void> {
+  await rm(notePath(siteId, name), { force: true });
 }
 
 /** Point the agent at every existing note the prompt mentions as [[name]]. */

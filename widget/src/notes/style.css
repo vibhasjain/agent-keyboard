@@ -45,6 +45,9 @@
 .akn-back { display: none; padding: 4px 8px; border-radius: 6px; color: #b8b2a7 !important; }
 .akn-status { margin-left: auto; font-size: 12px; color: #6f6a61; }
 .akn-status.err { color: #f97066; }
+.akn-delete { display: none; padding: 4px 10px; border-radius: 6px; color: #b8b2a7 !important; }
+.akn.has-note .akn-delete { display: block; }
+.akn-delete:hover { background: #211f1c !important; color: #f97066 !important; }
 .akn-close { padding: 4px 10px; border-radius: 6px; color: #b8b2a7 !important; }
 .akn-close:hover, .akn-back:hover { background: #211f1c !important; color: #f5f1ea !important; }
 

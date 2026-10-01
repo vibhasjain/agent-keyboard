@@ -34,7 +34,7 @@ import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMIN
 import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
-import { listNotes, notesNote, readNote, validNoteName, writeNote } from "./notes.js";
+import { deleteNote, listNotes, notesNote, readNote, validNoteName, writeNote } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
@@ -99,7 +99,7 @@ app.use(
   cors({
     origin: corsOrigin,
     allowedHeaders: ["Authorization", "Content-Type", "X-Auth-Kind"],
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
 app.use(express.json({ limit: "1mb" })); // attachments go via multipart, so 1mb is plenty
@@ -705,6 +705,22 @@ app.put("/sites/:siteId/notes/:name", authed, async (req, res) => {
     res.status(409).json({ error: "a note with that name already exists" });
     return;
   }
+  res.json({ name });
+});
+
+app.delete("/sites/:siteId/notes/:name", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const name = req.params.name;
+  if (!validNoteName(name)) {
+    res.status(400).json({ error: "invalid note name" });
+    return;
+  }
+  await deleteNote(site.id, name);
   res.json({ name });
 });
 
