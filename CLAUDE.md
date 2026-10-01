@@ -168,6 +168,14 @@ actually shipped is narrower and real: the prompt bar in this repo that edits th
 app you're using via its own git repo. When editing, describe the **shipped** product, not the old SDK pitch.
 
 ## Working agreements
+- **Pixel art requests** (Make Me Pixels style, from anyone in this session) → the `make-me-pixels` skill
+  (`.claude/skills/make-me-pixels/`): make it here, in this job, visible in the requester's thread. Never route it to the
+  owner's `makemepixels` Agent Keyboard session; that queue is his alone.
+- **Guest pushes that redeploy the server** (anything under `server/` or `widget/`, from anyone other than
+  vibhas111@gmail.com): a push there restarts the Fly server and kills every running job on every site. Before pushing,
+  check that no other site has a job running (`agent_keyboard_jobs` where `status='running'` and `site_id` is not this
+  site, via the service key in the server env); if one is running, wait for it to finish (poll every 30 s, up to 20 min),
+  then push. `site/`-only pushes don't restart the server and need no wait.
 - **Plan first** for non-trivial (3+ step) tasks; verify before marking done — prove it works, don't
   assume. Root-cause fixes, minimal impact, touch only what's necessary.
 - **Browser testing** — headless (the `browse`/dev-browser Playwright skill), never chrome MCP tools.
