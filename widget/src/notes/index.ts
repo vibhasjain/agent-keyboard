@@ -607,13 +607,21 @@ export async function open(opts: NotesOptions): Promise<void> {
     if (current !== name) return // another note was picked while loading
 
     const inner = h('div', 'akn-page-inner')
-    const title = h('input', 'akn-title')
+    // A textarea (not an input) so long names wrap instead of scrolling out of view.
+    const title = h('textarea', 'akn-title')
+    title.rows = 1
     title.value = name
     title.placeholder = 'Untitled'
     title.setAttribute('aria-label', 'Note name')
+    const fitTitle = () => {
+      title.style.height = 'auto'
+      title.style.height = `${title.scrollHeight}px`
+    }
+    title.oninput = fitTitle
     const host = h('div')
     inner.append(title, host)
     page.replaceChildren(inner)
+    fitTitle()
 
     markdown = content
     crepe = new CrepeBuilder({ root: host, defaultValue: content })
@@ -667,7 +675,7 @@ export async function open(opts: NotesOptions): Promise<void> {
         setStatus(`Not renamed — ${(e as Error).message}`, true)
       }
     }
-    title.onchange = () => void rename()
+    title.onchange = () => void rename().finally(fitTitle)
     title.onkeydown = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault()

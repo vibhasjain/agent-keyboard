@@ -93,7 +93,7 @@
 .akn-page-inner { max-width: 760px; margin: 0 auto; padding: 48px 0 120px; }
 .akn-title {
   display: block; width: 100%; padding: 0 48px; margin: 0 0 8px;
-  background: none; border: 0; outline: none; color: #f5f1ea;
+  background: none; border: 0; outline: none; color: #f5f1ea; resize: none; overflow: hidden;
   font: 500 36px/1.2 'JetBrains Mono', ui-monospace, Menlo, monospace; letter-spacing: 0;
 }
 .akn-title::placeholder { color: #6f6a61; }
