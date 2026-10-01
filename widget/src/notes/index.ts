@@ -104,9 +104,14 @@ export async function open(opts: NotesOptions): Promise<void> {
   })
   const side = h('nav', 'akn-side')
   const sideHead = h('div', 'akn-side-head')
-  const newBtn = h('button', 'akn-new', '+ New note')
+  const newBtn = h('button', 'akn-new', '+ New')
   newBtn.type = 'button'
-  sideHead.append(h('h2', undefined, 'Notes'), newBtn)
+  newBtn.setAttribute('aria-haspopup', 'menu')
+  newBtn.setAttribute('aria-expanded', 'false')
+  const newMenu = h('div', 'akn-newmenu')
+  newMenu.setAttribute('role', 'menu')
+  newMenu.hidden = true
+  sideHead.append(h('h2', undefined, 'Notes'), newBtn, newMenu)
   const list = h('ul', 'akn-list')
   side.append(sideHead, list)
 
@@ -157,7 +162,18 @@ export async function open(opts: NotesOptions): Promise<void> {
   }
 
   // -- state --
+  // The sidebar: loose notes, then one level of folders. `names` is every note, flat.
+  type Item = string | { folder: string; notes: string[] }
+  let tree: Item[] = []
   let names: string[] = []
+  const setTree = (t: Item[]) => {
+    tree = [...t.filter((i) => typeof i === 'string'), ...t.filter((i) => typeof i !== 'string')]
+    names = tree.flatMap((i) => (typeof i === 'string' ? [i] : i.notes))
+  }
+  const mapNotes = (fn: (n: string) => string[]) =>
+    setTree(tree.flatMap((i): Item[] => (typeof i === 'string' ? fn(i) : [{ ...i, notes: i.notes.flatMap(fn) }])))
+  // Folder and note names are unique together, so a name always means one thing.
+  const taken = (n: string) => names.includes(n) || tree.some((i) => typeof i !== 'string' && i.folder === n)
   let current: string | null = null
   let crepe: CrepeBuilder | null = null
   let markdown = ''
@@ -170,84 +186,206 @@ export async function open(opts: NotesOptions): Promise<void> {
     status.className = 'akn-status' + (err ? ' err' : '')
   }
 
-  const renderList = () => {
+  const renderList = (renaming?: string) => {
     list.replaceChildren()
-    if (!names.length) list.appendChild(h('li', 'akn-empty', 'No notes yet'))
-    for (const name of names) {
-      const li = h('li')
-      li.dataset.name = name
-      const b = h('button', undefined, name)
-      b.type = 'button'
-      b.setAttribute('aria-current', String(name === current))
-      b.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown')
-      // Alt+↑/↓ moves the note, the keyboard twin of dragging it.
-      b.onkeydown = (e) => {
-        const to = names.indexOf(name) + (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : NaN)
-        if (!e.altKey || !(to >= 0 && to < names.length)) return
-        e.preventDefault()
-        names = names.filter((n) => n !== name)
-        names.splice(to, 0, name)
-        renderList()
-        list.querySelectorAll('button')[to]?.focus()
-        saveOrder()
+    if (!tree.length) list.appendChild(h('li', 'akn-empty', 'No notes yet'))
+    for (const i of tree) {
+      if (typeof i === 'string') noteRow(i, false)
+      else {
+        folderRow(i.folder, i.folder === renaming)
+        for (const n of i.notes) noteRow(n, true)
       }
-      // The whole row drags: a mouse after a few px of movement, a finger after a
-      // short hold (so a plain swipe still scrolls the list). A drag eats the click.
-      let dragging = false
-      let dragged = false
-      li.addEventListener('touchmove', (e) => dragging && e.preventDefault(), { passive: false })
-      b.onclick = () => {
-        if (dragged) dragged = false
-        else void openNote(name)
-      }
-      b.oncontextmenu = (e) => dragging && e.preventDefault()
-      b.onpointerdown = (e) => {
-        if (e.button !== 0) return
-        const y0 = e.clientY
-        const hold = e.pointerType === 'touch' ? setTimeout(() => start(), 300) : undefined
-        const start = () => {
-          dragging = dragged = true
-          li.classList.add('dragging')
-        }
-        // Listen on window: moving the row in the DOM would drop pointer capture.
-        const move = (ev: PointerEvent) => {
-          if (!dragging) {
-            if (e.pointerType === 'touch' || Math.abs(ev.clientY - y0) < 4) return
-            start()
-          }
-          const others = [...list.children].filter((c) => c !== li)
-          const ref = others[others.filter((c) => {
-            const r = c.getBoundingClientRect()
-            return r.top + r.height / 2 < ev.clientY
-          }).length]
-          if (ref ? li.nextElementSibling !== ref : list.lastElementChild !== li) list.insertBefore(li, ref ?? null)
-        }
-        const drop = () => {
-          clearTimeout(hold)
-          window.removeEventListener('pointermove', move)
-          window.removeEventListener('pointerup', drop)
-          window.removeEventListener('pointercancel', drop)
-          if (!dragging) return
-          dragging = false
-          li.classList.remove('dragging')
-          // Touch fires no click after a hold, so nothing is left to swallow.
-          if (e.pointerType === 'touch') dragged = false
-          const next = [...list.children].map((c) => (c as HTMLElement).dataset.name!)
-          if (next.join('\n') === names.join('\n')) return
-          names = next
-          saveOrder()
-        }
-        window.addEventListener('pointermove', move)
-        window.addEventListener('pointerup', drop)
-        window.addEventListener('pointercancel', drop)
-      }
-      li.append(b)
-      list.appendChild(li)
     }
   }
 
+  // Rows are flat: a note belongs to the folder row above it, and loose notes sit
+  // above every folder, so the DOM order alone says where everything is.
+  const isFolder = (c: Element | null) => (c as HTMLElement | null)?.dataset.folder !== undefined
+  const fromDom = () => {
+    const t: Item[] = []
+    let f: { folder: string; notes: string[] } | null = null
+    for (const c of list.children as HTMLCollectionOf<HTMLElement>) {
+      if (c.dataset.folder !== undefined) t.push((f = { folder: c.dataset.folder, notes: [] }))
+      else if (c.dataset.name !== undefined) (f ? f.notes : t).push(c.dataset.name)
+    }
+    return t
+  }
+  const markIndent = () => {
+    let inFolder = false
+    for (const c of list.children) {
+      if (isFolder(c)) inFolder = true
+      else c.classList.toggle('in', inFolder)
+    }
+  }
+  /** A folder row drags with its notes; a note row alone. */
+  const blockOf = (li: HTMLElement) => {
+    const rows = [li]
+    if (isFolder(li)) for (let n = li.nextElementSibling; n && !isFolder(n); n = n.nextElementSibling) rows.push(n as HTMLElement)
+    return rows
+  }
+  const place = (rows: HTMLElement[], ref: Element | null) => {
+    if (rows[rows.length - 1]!.nextElementSibling !== ref) for (const r of rows) list.insertBefore(r, ref)
+    markIndent()
+  }
+  const commitDom = () => {
+    const next = fromDom()
+    if (JSON.stringify(next) === JSON.stringify(tree)) return
+    setTree(next)
+    saveOrder()
+  }
+
+  /** The whole row drags: a mouse after a few px of movement, a finger after a
+   *  short hold (so a plain swipe still scrolls the list). Alt+↑/↓ is the keyboard
+   *  twin. Returns whether the last press was a drag, so the click can be eaten. */
+  const draggable = (li: HTMLElement, b: HTMLButtonElement) => {
+    let dragging = false
+    let dragged = false
+    li.addEventListener('touchmove', (e) => dragging && e.preventDefault(), { passive: false })
+    b.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown')
+    b.addEventListener('keydown', (e) => {
+      if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+      e.preventDefault()
+      const rows = blockOf(li)
+      if (isFolder(li)) {
+        // Folders hop over a whole folder; they never land among the loose notes.
+        let ref: Element | null
+        if (e.key === 'ArrowUp') {
+          for (ref = li.previousElementSibling; ref && !isFolder(ref); ) ref = ref.previousElementSibling
+          if (!ref) return
+        } else {
+          ref = rows[rows.length - 1]!.nextElementSibling
+          if (!ref) return
+          do ref = ref.nextElementSibling
+          while (ref && !isFolder(ref))
+        }
+        place(rows, ref)
+      } else if (e.key === 'ArrowUp') {
+        // A note steps over a folder row: out of its folder, or into the one above's end.
+        if (!li.previousElementSibling) return
+        place(rows, li.previousElementSibling)
+      } else {
+        if (!li.nextElementSibling) return
+        place(rows, li.nextElementSibling.nextElementSibling)
+      }
+      b.focus()
+      commitDom()
+    })
+    b.oncontextmenu = (e) => dragging && e.preventDefault()
+    b.onpointerdown = (e) => {
+      if (e.button !== 0) return
+      dragged = false // a drag released off its row got no click to eat
+      const y0 = e.clientY
+      const hold = e.pointerType === 'touch' ? setTimeout(() => start(), 300) : undefined
+      let rows: HTMLElement[] = []
+      const start = () => {
+        dragging = dragged = true
+        rows = blockOf(li)
+        for (const r of rows) r.classList.add('dragging')
+      }
+      // Listen on window: moving the row in the DOM would drop pointer capture.
+      const move = (ev: PointerEvent) => {
+        if (!dragging) {
+          if (e.pointerType === 'touch' || Math.abs(ev.clientY - y0) < 4) return
+          start()
+        }
+        const others = [...list.children].filter((c) => !rows.includes(c as HTMLElement))
+        let i = others.filter((c) => {
+          const r = c.getBoundingClientRect()
+          return r.top + r.height / 2 < ev.clientY
+        }).length
+        if (isFolder(li)) while (i < others.length && !isFolder(others[i]!)) i++
+        place(rows, others[i] ?? null)
+      }
+      const drop = () => {
+        clearTimeout(hold)
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', drop)
+        window.removeEventListener('pointercancel', drop)
+        if (!dragging) return
+        dragging = false
+        for (const r of rows) r.classList.remove('dragging')
+        // Touch fires no click after a hold, so nothing is left to swallow.
+        if (e.pointerType === 'touch') dragged = false
+        commitDom()
+      }
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', drop)
+      window.addEventListener('pointercancel', drop)
+    }
+    return () => {
+      const was = dragged
+      dragged = false
+      return was
+    }
+  }
+
+  const noteRow = (name: string, inFolder: boolean) => {
+    const li = h('li', inFolder ? 'in' : undefined)
+    li.dataset.name = name
+    const b = h('button', undefined, name)
+    b.type = 'button'
+    b.setAttribute('aria-current', String(name === current))
+    const wasDrag = draggable(li, b)
+    b.onclick = () => wasDrag() || void openNote(name)
+    li.append(b)
+    list.appendChild(li)
+  }
+
+  // A folder renames in place: click its name, Enter (or clicking away) saves,
+  // Esc cancels. An empty name removes the folder and keeps its notes.
+  const folderRow = (folder: string, renaming: boolean) => {
+    const li = h('li', 'akn-folder')
+    li.dataset.folder = folder
+    const b = h('button')
+    b.type = 'button'
+    b.title = 'Rename folder'
+    b.append(icon('folder', 15), h('span', undefined, folder))
+    const wasDrag = draggable(li, b)
+    const edit = () => {
+      const input = h('input', 'akn-folder-name')
+      input.value = folder
+      input.setAttribute('aria-label', 'Folder name')
+      let done = false
+      const commit = (save: boolean) => {
+        if (done) return
+        done = true
+        if (save) renameFolder(folder, cleanName(input.value))
+        else renderList()
+      }
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          commit(true)
+        } else if (e.key === 'Escape') commit(false)
+      }
+      input.onblur = () => commit(true)
+      b.replaceWith(input)
+      input.focus()
+      input.select()
+    }
+    b.onclick = () => wasDrag() || edit()
+    li.append(b)
+    list.appendChild(li)
+    if (renaming) edit()
+  }
+
+  const renameFolder = (from: string, to: string) => {
+    if (to && to !== from && taken(to)) {
+      setStatus(`"${to}" already exists`, true)
+      renderList()
+      return
+    }
+    setTree(
+      to
+        ? tree.map((i) => (typeof i !== 'string' && i.folder === from ? { ...i, folder: to } : i))
+        : tree.flatMap((i) => (typeof i !== 'string' && i.folder === from ? i.notes : [i])),
+    )
+    renderList()
+    if (to !== from) saveOrder()
+  }
+
   const saveOrder = () =>
-    void enqueue(() => call('-order', { method: 'PUT', body: JSON.stringify({ names }) })).catch((e) =>
+    void enqueue(() => call('-order', { method: 'PUT', body: JSON.stringify({ names: tree }) })).catch((e) =>
       setStatus(`Order not saved — ${(e as Error).message}`, true),
     )
 
@@ -439,7 +577,7 @@ export async function open(opts: NotesOptions): Promise<void> {
         title.value = current ?? ''
         return
       }
-      if (names.includes(next)) {
+      if (taken(next)) {
         setStatus(`"${next}" already exists`, true)
         title.value = current
         return
@@ -454,7 +592,7 @@ export async function open(opts: NotesOptions): Promise<void> {
         current = next
         setUrlNote(next)
         title.value = next
-        names = names.map((n) => (n === from ? next : n))
+        mapNotes((n) => [n === from ? next : n])
         renderList()
         setStatus('Saved')
       } catch (e) {
@@ -490,14 +628,14 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   const newNote = async () => {
     let name = 'Untitled'
-    for (let i = 2; names.includes(name); i++) name = `Untitled ${i}`
+    for (let i = 2; taken(name); i++) name = `Untitled ${i}`
     try {
       await call(`/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ content: '' }) })
     } catch (e) {
       setStatus(`Couldn't create — ${(e as Error).message}`, true)
       return
     }
-    names = [...names, name]
+    setTree([...tree, name])
     saveOrder()
     await openNote(name, true)
   }
@@ -530,10 +668,50 @@ export async function open(opts: NotesOptions): Promise<void> {
   }
   openInstance = { close }
 
-  newBtn.onclick = () => {
-    const release = holdKeyboard()
-    void newNote().finally(release)
+  const newFolder = () => {
+    let name = 'New folder'
+    for (let i = 2; taken(name); i++) name = `New folder ${i}`
+    setTree([...tree, { folder: name, notes: [] }])
+    renderList(name)
+    saveOrder()
   }
+  const showMenu = (show: boolean) => {
+    newMenu.hidden = !show
+    newBtn.setAttribute('aria-expanded', String(show))
+    if (show) (newMenu.firstElementChild as HTMLElement).focus()
+  }
+  for (const [label, name, run] of [
+    ['Note', 'note', () => {
+      const release = holdKeyboard()
+      void newNote().finally(release)
+    }],
+    ['Folder', 'folder', newFolder],
+  ] as const) {
+    const b = h('button')
+    b.type = 'button'
+    b.setAttribute('role', 'menuitem')
+    b.append(icon(name, 16), label)
+    b.onclick = () => {
+      showMenu(false)
+      run()
+    }
+    newMenu.append(b)
+  }
+  newMenu.onkeydown = (e) => {
+    const items = [...newMenu.children] as HTMLElement[]
+    const at = items.indexOf(document.activeElement as HTMLElement)
+    if (e.key === 'Escape') {
+      showMenu(false)
+      newBtn.focus()
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      items[(at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]!.focus()
+    }
+  }
+  newBtn.onclick = () => showMenu(newMenu.hidden)
+  root.addEventListener('pointerdown', (e) => {
+    if (!newMenu.hidden && !sideHead.contains(e.target as Node)) showMenu(false)
+  })
   closeBtn.onclick = () => void close()
   const closeNote = () => {
     crepe?.destroy()
@@ -558,7 +736,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       setStatus(`Not deleted — ${(e as Error).message}`, true)
       return
     }
-    names = names.filter((n) => n !== name)
+    mapNotes((n) => (n === name ? [] : [n]))
     if (current === name) closeNote()
     else renderList()
     setStatus('Deleted')
@@ -566,7 +744,7 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   showBlank()
   try {
-    names = ((await call('')) as { name: string }[]).map((n) => n.name)
+    setTree((await call('-order')) as Item[])
   } catch (e) {
     setStatus(`Couldn't load notes — ${(e as Error).message}`, true)
   }
