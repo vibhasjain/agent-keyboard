@@ -21,6 +21,20 @@ function notePath(siteId: string, name: string): string {
   return join(checkoutPath(siteId), NOTES_REL, `${name}.md`);
 }
 
+/** The owner's drag order, as a list of names (a dotfile, so never a note). */
+const orderPath = (siteId: string) => join(checkoutPath(siteId), NOTES_REL, ".order.json");
+
+async function readOrder(siteId: string): Promise<string[]> {
+  const order: unknown = await readFile(orderPath(siteId), "utf8").then(JSON.parse).catch(() => []);
+  return Array.isArray(order) ? order.filter(validNoteName) : [];
+}
+
+export async function writeOrder(siteId: string, names: string[]): Promise<void> {
+  await mkdir(join(checkoutPath(siteId), NOTES_REL), { recursive: true });
+  await writeFile(orderPath(siteId), JSON.stringify(names));
+}
+
+/** Notes in the saved order; ones not in it yet (new) go on top, newest first. */
 export async function listNotes(siteId: string): Promise<{ name: string; updatedAt: number }[]> {
   const dir = join(checkoutPath(siteId), NOTES_REL);
   const files = await readdir(dir).catch(() => [] as string[]);
@@ -29,7 +43,8 @@ export async function listNotes(siteId: string): Promise<{ name: string; updated
       .filter((f) => f.endsWith(".md"))
       .map(async (f) => ({ name: f.slice(0, -3), updatedAt: (await stat(join(dir, f))).mtimeMs })),
   );
-  return notes.sort((a, b) => b.updatedAt - a.updatedAt);
+  const order = await readOrder(siteId);
+  return notes.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name) || b.updatedAt - a.updatedAt);
 }
 
 export async function readNote(siteId: string, name: string): Promise<string | null> {
@@ -43,6 +58,8 @@ export async function writeNote(siteId: string, name: string, content: string, f
   if (from && from !== name) {
     if (existsSync(notePath(siteId, name))) return false;
     await rename(notePath(siteId, from), notePath(siteId, name)).catch(() => {});
+    const order = await readOrder(siteId);
+    if (order.includes(from)) await writeOrder(siteId, order.map((n) => (n === from ? name : n)));
   }
   await writeFile(notePath(siteId, name), content);
   return true;

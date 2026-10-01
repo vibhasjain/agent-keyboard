@@ -37,7 +37,7 @@ import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, sta
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { addTeamNote, handleOf } from "./team.js";
-import { deleteNote, listNotes, notesNote, readNote, validNoteName, writeNote } from "./notes.js";
+import { deleteNote, listNotes, notesNote, readNote, validNoteName, writeNote, writeOrder } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
@@ -671,6 +671,24 @@ app.get("/sites/:siteId/notes", authed, async (req, res) => {
   }
   if (denySite(req, res, site.id)) return;
   res.json(await listNotes(site.id));
+});
+
+/** Save the sidebar order (body {names}), set by dragging notes up or down. */
+app.put("/sites/:siteId/notes-order", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const { names } = (req.body ?? {}) as { names?: unknown };
+  if (!Array.isArray(names) || names.length > 1000 || !names.every(validNoteName)) {
+    res.status(400).json({ error: "invalid note order" });
+    return;
+  }
+  await ensureCheckout(site);
+  await writeOrder(site.id, names);
+  res.json({ ok: true });
 });
 
 app.get("/sites/:siteId/notes/:name", authed, async (req, res) => {

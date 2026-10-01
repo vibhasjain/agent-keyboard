@@ -175,14 +175,61 @@ export async function open(opts: NotesOptions): Promise<void> {
     if (!names.length) list.appendChild(h('li', 'akn-empty', 'No notes yet'))
     for (const name of names) {
       const li = h('li')
+      li.dataset.name = name
       const b = h('button', undefined, name)
       b.type = 'button'
       b.setAttribute('aria-current', String(name === current))
+      b.setAttribute('aria-keyshortcuts', 'Alt+ArrowUp Alt+ArrowDown')
       b.onclick = () => void openNote(name)
-      li.appendChild(b)
+      // Alt+↑/↓ moves the note, the keyboard twin of dragging the grip.
+      b.onkeydown = (e) => {
+        const to = names.indexOf(name) + (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : NaN)
+        if (!e.altKey || !(to >= 0 && to < names.length)) return
+        e.preventDefault()
+        names = names.filter((n) => n !== name)
+        names.splice(to, 0, name)
+        renderList()
+        list.querySelectorAll('button')[to]?.focus()
+        saveOrder()
+      }
+      const grip = h('span', 'akn-grip')
+      grip.title = 'Drag to reorder'
+      grip.appendChild(icon('grip', 14))
+      // Listen on window: moving the row in the DOM would drop pointer capture.
+      grip.onpointerdown = (e) => {
+        e.preventDefault()
+        li.classList.add('dragging')
+        const move = (ev: PointerEvent) => {
+          const others = [...list.children].filter((c) => c !== li)
+          const ref = others[others.filter((c) => {
+            const r = c.getBoundingClientRect()
+            return r.top + r.height / 2 < ev.clientY
+          }).length]
+          if (ref ? li.nextElementSibling !== ref : list.lastElementChild !== li) list.insertBefore(li, ref ?? null)
+        }
+        const drop = () => {
+          window.removeEventListener('pointermove', move)
+          window.removeEventListener('pointerup', drop)
+          window.removeEventListener('pointercancel', drop)
+          li.classList.remove('dragging')
+          const next = [...list.children].map((c) => (c as HTMLElement).dataset.name!)
+          if (next.join('\n') === names.join('\n')) return
+          names = next
+          saveOrder()
+        }
+        window.addEventListener('pointermove', move)
+        window.addEventListener('pointerup', drop)
+        window.addEventListener('pointercancel', drop)
+      }
+      li.append(b, grip)
       list.appendChild(li)
     }
   }
+
+  const saveOrder = () =>
+    void enqueue(() => call('-order', { method: 'PUT', body: JSON.stringify({ names }) })).catch((e) =>
+      setStatus(`Order not saved — ${(e as Error).message}`, true),
+    )
 
   // Saves run one at a time, in order, so a slow request can't land after a newer one.
   const enqueue = <T>(fn: () => Promise<T>): Promise<T> => {
@@ -387,7 +434,7 @@ export async function open(opts: NotesOptions): Promise<void> {
         current = next
         setUrlNote(next)
         title.value = next
-        names = [next, ...names.filter((n) => n !== from)]
+        names = names.map((n) => (n === from ? next : n))
         renderList()
         setStatus('Saved')
       } catch (e) {
