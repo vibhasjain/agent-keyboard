@@ -421,7 +421,9 @@ export async function open(opts: NotesOptions): Promise<void> {
     del.title = 'Delete folder (keeps its notes)'
     del.setAttribute('aria-label', `Delete folder ${folder}, keeping its notes`)
     del.append(icon('trash', 14))
-    del.onclick = () => renameFolder(folder, '')
+    del.onclick = () =>
+      confirm(`Delete the folder "${folder}"? Its notes are kept and move out of it. This can't be undone.`) &&
+      renameFolder(folder, '')
     li.append(toggle, b, del)
     list.appendChild(li)
     if (renaming) edit()
