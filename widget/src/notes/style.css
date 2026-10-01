@@ -47,12 +47,8 @@
 .akn-list li.in button { padding-left: 30px; }
 .akn-list .akn-toggle { flex: none; padding: 7px 2px 7px 4px; color: #6f6a61; line-height: 0; }
 .akn-list .akn-toggle:hover { background: none; color: #f5f1ea; }
-.akn-toggle svg { transition: transform .15s; }
-.akn-toggle[aria-expanded='false'] svg { transform: rotate(-90deg); }
-@media (prefers-reduced-motion: reduce) { .akn-toggle svg { transition: none; } }
 .akn-list .akn-folder { margin-top: 6px; }
 .akn-list .akn-folder button:not(.akn-toggle) { display: flex; align-items: center; gap: 8px; color: #f5f1ea; }
-.akn-folder button svg { flex: none; color: #6f6a61; }
 .akn-folder button span { overflow: hidden; text-overflow: ellipsis; }
 .akn-folder-name {
   flex: 1; min-width: 0; font: inherit; color: #f5f1ea; background: #0a0a0a;

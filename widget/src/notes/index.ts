@@ -366,12 +366,13 @@ export async function open(opts: NotesOptions): Promise<void> {
     localStorage.setItem(collapsedKey, JSON.stringify([...collapsed]))
     const toggle = list.querySelector(`[data-folder="${CSS.escape(folder)}"] .akn-toggle`)
     toggle?.setAttribute('aria-expanded', String(!close))
+    toggle?.replaceChildren(icon(close ? 'folder' : 'folder-open', 15))
     markRows()
   }
 
   // A folder renames in place: click its name, Enter (or clicking away) saves,
   // Esc cancels. An empty name removes the folder and keeps its notes. The
-  // chevron collapses it.
+  // folder icon collapses it (open folder icon while expanded).
   const folderRow = (folder: string, renaming: boolean) => {
     const li = h('li', 'akn-folder')
     li.dataset.folder = folder
@@ -379,12 +380,12 @@ export async function open(opts: NotesOptions): Promise<void> {
     toggle.type = 'button'
     toggle.setAttribute('aria-label', `Show notes in ${folder}`)
     toggle.setAttribute('aria-expanded', String(!collapsed.has(folder)))
-    toggle.append(icon('chevron-down', 14))
+    toggle.append(icon(collapsed.has(folder) ? 'folder' : 'folder-open', 15))
     toggle.onclick = () => toggleFolder(folder)
     const b = h('button')
     b.type = 'button'
     b.title = 'Rename folder'
-    b.append(icon('folder', 15), h('span', undefined, folder))
+    b.append(h('span', undefined, folder))
     const wasDrag = draggable(li, b)
     const edit = () => {
       const input = h('input', 'akn-folder-name')
