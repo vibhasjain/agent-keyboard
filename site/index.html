@@ -71,7 +71,6 @@ body{
   line-height:1.6; -webkit-font-smoothing:antialiased;
   overflow-x:hidden;
   background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,184,107,.10), transparent 60%),
     radial-gradient(ellipse 90% 60% at 50% 110%, rgba(255,184,107,.06), transparent 60%),
     var(--bg);
   background-attachment:fixed;
@@ -80,6 +79,16 @@ body::before{
   content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
   background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   opacity:.035; mix-blend-mode:overlay;
+}
+/* background drifts slower than the page as you scroll (JS sets --y = scrollY):
+   the top amber glow at half speed, a faint dot grid at a quarter */
+body::after{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(255,184,107,.10), transparent 60%) 0 calc(var(--y, 0) * -.5px) / 100% 100% no-repeat,
+    radial-gradient(circle, rgba(245,241,234,.07) 1px, transparent 1.6px) 0 calc(var(--y, 0) * -.25px) / 28px 28px;
+  -webkit-mask-image:radial-gradient(ellipse 120% 100% at 50% 30%, #000 30%, transparent 100%);
+          mask-image:radial-gradient(ellipse 120% 100% at 50% 30%, #000 30%, transparent 100%);
 }
 ::selection{ background:var(--amber); color:#1a1208; }
 a{ color:var(--amber-2); text-decoration:none; }
@@ -499,6 +508,15 @@ footer .meta a:hover{ color:var(--amber); }
 </footer>
 
 <script>
+  // Background parallax: feed scroll position to CSS (body::after), once per frame.
+  (function(){
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var root = document.documentElement, raf = 0;
+    addEventListener('scroll', function(){
+      if (!raf) raf = requestAnimationFrame(function(){ raf = 0; root.style.setProperty('--y', scrollY); });
+    }, { passive: true });
+  })();
+
   // Hero headline types out each input mode, then backspaces to the next.
   (function(){
     var el = document.querySelector('h1 .mode');
