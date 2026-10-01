@@ -72,7 +72,7 @@ headers).
 | `POST /sites/:id/restart` | Clean slate: stop active work, discard local checkout changes, reset to latest `origin/<branch>`, and rotate to a fresh conversation. |
 | `POST /sites/:id/uploads` | Upload one attachment (multipart, field `photo` or `file`, ≤15 MB) → `{id, path}` to attach. |
 | `GET /sites/:id/conversation` | Chat history (`?limit`, `?before`) from the agent's durable session. User turns carry `sender` (the email that typed them, parsed from the server's `[Sent from … by <email>]` prompt header); the widget renders it as a color-coded name tag. |
-| `GET /sites/:id/notes` · `GET`/`PUT /sites/:id/notes/:name` | Notes: list (newest first), read `{name, content}`, save `{content, from?}` (`from` renames; 409 if taken). One `.md` per note in the checkout's `.tmp/notes/`; a prompt's `[[name]]` points the agent at it. The editor is a separate lazy bundle, `GET /notes.js`. |
+| `GET /sites/:id/notes` · `GET`/`PUT /sites/:id/notes/:name` | Notes: list (newest first), read `{name, content}`, save `{content, from?}` (`from` renames; 409 if taken). One `.md` per note in the checkout's `.tmp/notes/`; a prompt's `#name` (or `[[name]]`) points the agent at it. The editor is a separate lazy bundle, `GET /notes.js`. |
 | `POST /realtime/token` | Mint a short-lived OpenAI realtime token for voice dictation. |
 
 ### SSE frames

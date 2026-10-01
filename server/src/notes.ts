@@ -5,7 +5,7 @@
 // Restart's `git clean -fdx` excludes `.tmp/notes` (resetCheckoutToOrigin).
 
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkoutPath } from "./checkouts.js";
 
@@ -52,14 +52,23 @@ export async function deleteNote(siteId: string, name: string): Promise<void> {
   await rm(notePath(siteId, name), { force: true });
 }
 
-/** Point the agent at every existing note the prompt mentions as [[name]],
- *  and at the notes those notes mention in turn. */
+/** Point the agent at every existing note the prompt mentions as #name or
+ *  [[name]], and at the notes those notes mention in turn. */
 export function notesNote(siteId: string, text: string): string {
   const names: string[] = [];
   const queue = [text];
+  // Names may hold spaces, so #mentions are matched against the existing notes.
+  const all = text.includes("#")
+    ? (existsSync(join(checkoutPath(siteId), NOTES_REL)) ? readdirSync(join(checkoutPath(siteId), NOTES_REL), { withFileTypes: true }) : [])
+        .filter((f) => f.isFile() && f.name.endsWith(".md"))
+        .map((f) => f.name.slice(0, -3))
+    : [];
   while (queue.length) {
-    for (const m of queue.shift()!.matchAll(/\[\[([^\[\]]+)\]\]/g)) {
-      const n = m[1]!.trim();
+    const t = queue.shift()!;
+    const found = [...t.matchAll(/\[\[([^\[\]]+)\]\]/g)].map((m) => m[1]!.trim());
+    const lower = t.toLowerCase();
+    for (const n of all) if (lower.includes(`#${n.toLowerCase()}`)) found.push(n);
+    for (const n of found) {
       if (names.includes(n) || !validNoteName(n) || !existsSync(notePath(siteId, n))) continue;
       names.push(n);
       queue.push(readFileSync(notePath(siteId, n), "utf8"));

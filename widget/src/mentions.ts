@@ -1,7 +1,7 @@
-// Obsidian-style [[note]] mentions in the composer. Typing `[` auto-closes it;
-// once the caret sits inside `[[…` a listbox of the site's notes pops up above
-// the input and filters as you type. Enter/Tab/click picks, Esc dismisses. The
-// server expands a sent [[name]] into a pointer to that note's .md file.
+// #note mentions in the composer. Once the caret sits after a `#` that starts a
+// word, a listbox of the site's notes pops up above the input and filters as
+// you type. Enter/Tab/click picks, Esc dismisses. The server expands a sent
+// #name (or the older [[name]]) into a pointer to that note's .md file.
 
 import { el, on, show } from './dom'
 
@@ -32,11 +32,11 @@ export function attachMentions(
 
   const changed = () => ta.dispatchEvent(new Event('input', { bubbles: true }))
 
-  /** The `[[query` the caret is in, if any. */
+  /** The `#query` the caret is in, if any. */
   const context = (): { start: number; query: string } | null => {
     if (ta.selectionStart !== ta.selectionEnd) return null
-    const m = ta.value.slice(0, ta.selectionStart).match(/\[\[([^[\]\n]*)$/)
-    return m ? { start: ta.selectionStart - m[0].length, query: m[1]!.toLowerCase() } : null
+    const m = ta.value.slice(0, ta.selectionStart).match(/(?:^|\s)#([^#\n]*)$/)
+    return m ? { start: ta.selectionStart - m[1]!.length - 1, query: m[1]!.toLowerCase() } : null
   }
 
   const close = () => {
@@ -80,6 +80,8 @@ export function attachMentions(
       ...notes.filter((n) => n.toLowerCase().startsWith(q)),
       ...notes.filter((n) => !n.toLowerCase().startsWith(q) && n.toLowerCase().includes(q)),
     ]
+    // Names can hold spaces, so the query can too, until it stops matching a note.
+    if (!matches.length && notes.length && /\s/.test(q)) return close()
     active = Math.min(active, Math.max(0, matches.length - 1))
     if (!isOpen) {
       isOpen = true
@@ -98,9 +100,7 @@ export function attachMentions(
   const pick = (name: string) => {
     const ctx = context()
     if (!ctx) return close()
-    const caret = ta.selectionStart
-    const end = ta.value.slice(caret).startsWith(']]') ? caret + 2 : caret
-    ta.setRangeText(`[[${name}]]`, ctx.start, end, 'end')
+    ta.setRangeText(`#${name} `, ctx.start, ta.selectionStart, 'end')
     close()
     changed()
   }
@@ -125,21 +125,7 @@ export function attachMentions(
         e.stopPropagation()
         return true
       }
-      const s = ta.selectionStart
-      const collapsed = s === ta.selectionEnd
-      // Auto-close brackets, skip over a closing one, delete an empty pair together.
-      if (e.key === '[' && collapsed) {
-        ta.setRangeText('[]', s, s, 'start')
-        ta.setSelectionRange(s + 1, s + 1)
-      } else if (e.key === ']' && collapsed && ta.value[s] === ']') {
-        ta.setSelectionRange(s + 1, s + 1)
-        return (e.preventDefault(), true)
-      } else if (e.key === 'Backspace' && collapsed && s > 0 && ta.value[s - 1] === '[' && ta.value[s] === ']') {
-        ta.setRangeText('', s - 1, s + 1, 'start')
-      } else return false
-      e.preventDefault()
-      changed()
-      return true
+      return false
     },
   }
 }

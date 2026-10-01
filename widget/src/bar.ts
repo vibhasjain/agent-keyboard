@@ -75,7 +75,7 @@ function filesFromTransfer(dt: DataTransfer | null): File[] {
 // server the first time Notes opens, never on page load.
 type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void }) => Promise<void> }
 // Notes are new: the empty composer points at how to reference one.
-const HINT = 'Type [[ to add a note'
+const HINT = '#note'
 
 let notesBundle: Promise<NotesApi> | null = null
 function loadNotes(): Promise<NotesApi> {

@@ -65,7 +65,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 - **SSE protocol** — the contract the widget speaks: `POST /sites/:id/messages` (response IS the
   stream), `GET /jobs/:id/stream` (re-attach), `GET /jobs?siteId=`, `POST /sites/:id/uploads`
   (multipart `photo`), `GET /sites/:id/conversation`, `GET|PUT /sites/:id/notes[/:name]` (Notes — full-screen
-  Milkdown editor, lazy `/notes.js`; `.md` files in `.tmp/notes/`, referenced in prompts as `[[name]]`), `POST /realtime/token` (OpenAI ephemeral for
+  Milkdown editor, lazy `/notes.js`; `.md` files in `.tmp/notes/`, referenced in prompts as `#name`), `POST /realtime/token` (OpenAI ephemeral for
   voice dictation), and `GET /sites/:id/screen` (view-only live browser). Frames: `job` ·
   `status{phase,detail,browser}` · `screen{jpeg,w,h,url,title}` · `assistant{text}` (full replace) ·
   `result{reply,git,…}` · `error`. Full spec lives in `widget/README.md`.
