@@ -151,6 +151,7 @@ export async function open(opts: NotesOptions): Promise<void> {
   vv?.addEventListener('scroll', fit)
 
   const prevOverflow = document.documentElement.style.overflow
+  const prevScroll = window.scrollY
   document.documentElement.style.overflow = 'hidden'
   document.body.appendChild(root)
   // Top layer, like the bar: escapes the transform the docked transcript can put
@@ -734,10 +735,14 @@ export async function open(opts: NotesOptions): Promise<void> {
     window.removeEventListener('pagehide', onUnload)
     vv?.removeEventListener('resize', fit)
     vv?.removeEventListener('scroll', fit)
+    // Drop the editor's focus first so iOS dismisses the keyboard, then undo the
+    // layout-viewport scroll it caused, or the bar's taps land offset from what's drawn.
+    ;(document.activeElement as HTMLElement | null)?.blur()
     crepe?.destroy()
     setUrlNote(null)
     root.remove()
     document.documentElement.style.overflow = prevOverflow
+    window.scrollTo(0, prevScroll)
     openInstance = null
     opts.onClose?.()
   }

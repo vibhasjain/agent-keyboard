@@ -318,7 +318,9 @@ function makeComposer(onTeamNote: () => void): Composer {
           note,
           onClose: () => {
             host.style.visibility = ''
-            ta.focus()
+            // Not on phones: a programmatic focus there pops the keyboard (or half-focuses
+            // on iOS, scrolling the viewport out from under the bar's buttons).
+            if (matchMedia('(pointer:fine)').matches) ta.focus()
           },
         })
       })
