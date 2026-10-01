@@ -51,7 +51,7 @@ interface Composer {
   hasContent: () => boolean
   setDisabled: (d: boolean) => void
   setNote: (text: string, isError?: boolean) => void
-  openNotes: () => void
+  openNotes: (note?: string) => void
   flashConfirm: (text: string) => void
   reset: () => void
   addFiles: (files: File[]) => void
@@ -74,7 +74,7 @@ function filesFromTransfer(dt: DataTransfer | null): File[] {
 
 // The notes editor is its own bundle (Milkdown, ~240 KB gzip) — fetched from the
 // server the first time Notes opens, never on page load.
-type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void }) => Promise<void> }
+type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void; note?: string }) => Promise<void> }
 
 let notesBundle: Promise<NotesApi> | null = null
 function loadNotes(): Promise<NotesApi> {
@@ -304,7 +304,7 @@ function makeComposer(onTeamNote: () => void): Composer {
     blurButton(cam)
     photos.openPicker()
   })
-  const openNotes = () => {
+  const openNotes = (note?: string) => {
     // Full-screen focus mode: the bar steps aside (it sits in the top layer, so it
     // would otherwise cover the editor) and comes back when the note closes.
     const host = (root.getRootNode() as ShadowRoot).host as HTMLElement
@@ -315,6 +315,7 @@ function makeComposer(onTeamNote: () => void): Composer {
           api: CONFIG.api,
           site: CONFIG.site,
           getToken,
+          note,
           onClose: () => {
             host.style.visibility = ''
             ta.focus()
@@ -552,6 +553,17 @@ export function mountBar(shadow: ShadowRoot): void {
     ;(shadow.activeElement as HTMLElement | null)?.blur?.()
     const { phase } = getState().job
     patchUi({ mode: phase === 'streaming' || phase === 'sending' ? 'collapsed' : 'mini' })
+  }
+
+  // A shared note link (?ak-note=Name) opens that note once signed in; a signed-out
+  // visitor gets the transcript's login form first. The notes API is owner-only.
+  const sharedNote = new URLSearchParams(location.search).get('ak-note')
+  if (sharedNote) {
+    const openShared = () => getState().auth === 'authed' && (composer.openNotes(sharedNote), true)
+    if (!openShared()) {
+      patchUi({ mode: 'expanded' })
+      const stop = subscribe(() => openShared() && stop())
+    }
   }
 
   const chat: Chat = mountChat(shadow, { composerEl: composer.el, collapse: collapseToCorner, openNotes: composer.openNotes })

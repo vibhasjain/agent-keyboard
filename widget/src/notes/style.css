@@ -111,3 +111,4 @@
   .akn-title { padding: 0 20px; font-size: 28px; }
   .akn .milkdown .ProseMirror { padding: 8px 20px 40px; }
 }
+.akn .akn-ref { color: #ffb86b; cursor: pointer; text-decoration: underline; text-decoration-color: #c4651a; text-underline-offset: 3px; }

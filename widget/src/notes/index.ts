@@ -11,7 +11,7 @@ import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { linkSchema } from '@milkdown/kit/preset/commonmark'
 import { InputRule } from '@milkdown/kit/prose/inputrules'
 import { Plugin } from '@milkdown/kit/prose/state'
-import type { EditorView } from '@milkdown/kit/prose/view'
+import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import { $inputRule, $prose } from '@milkdown/kit/utils'
 import { blockEdit } from '@milkdown/crepe/feature/block-edit'
 import { cursor } from '@milkdown/crepe/feature/cursor'
@@ -29,6 +29,8 @@ export interface NotesOptions {
   site: string
   getToken: () => Promise<string | null>
   onClose?: () => void
+  /** Open straight to this note (a shared ?ak-note= link). */
+  note?: string
 }
 
 const SAVE_DELAY_MS = 300
@@ -56,6 +58,16 @@ const linkRule = $inputRule(
 /** remark escapes `[` in text; keep [[mentions]] readable in the saved .md. */
 const unescapeMentions = (md: string) =>
   md.replace(/\\\[\\\[([^\]\n]+?)\\?\]\\?\]/g, (_, n: string) => `[[${n.replace(/\\(.)/g, '$1')}]]`)
+
+const MENTION_RE = /\[\[([^[\]\n]+)\]\]/g
+
+/** Mirror the open note into ?ak-note= so the address bar is a shareable link. */
+function setUrlNote(name: string | null) {
+  const u = new URL(location.href)
+  if (name) u.searchParams.set('ak-note', name)
+  else u.searchParams.delete('ak-note')
+  history.replaceState(history.state, '', u)
+}
 
 let openInstance: { close: () => Promise<void> } | null = null
 
@@ -196,6 +208,7 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   // [[note]] mentions inside a note, like the bar's composer: `[[` pops a list of
   // the other notes that filters as you type; Enter/Tab/click picks, Esc dismisses.
+  // A finished [[mention]] renders as a link; clicking it opens that note.
   const mentions = () => {
     const box = h('div', 'akn-mention')
     box.setAttribute('role', 'listbox')
@@ -272,6 +285,27 @@ export async function open(opts: NotesOptions): Promise<void> {
               return true
             },
             handleDOMEvents: { blur: () => (hide(), false) },
+            decorations: (state) => {
+              const decos: Decoration[] = []
+              state.doc.descendants((node, pos) => {
+                if (!node.isText) return
+                for (const m of node.text!.matchAll(MENTION_RE)) {
+                  decos.push(Decoration.inline(pos + m.index, pos + m.index + m[0].length, { class: 'akn-ref' }))
+                }
+              })
+              return DecorationSet.create(state.doc, decos)
+            },
+            handleClick: (v, pos) => {
+              const $pos = v.state.doc.resolve(pos)
+              const text = $pos.parent.textBetween(0, $pos.parent.content.size, undefined, '\ufffc')
+              const at = $pos.parentOffset
+              const m = [...text.matchAll(MENTION_RE)].find((m) => m.index < at && at < m.index + m[0].length)
+              if (!m) return false
+              const name = m[1]!
+              if (names.includes(name)) void openNote(name)
+              else setStatus(`No note named "${name}"`, true)
+              return true
+            },
           },
         }),
     )
@@ -287,6 +321,7 @@ export async function open(opts: NotesOptions): Promise<void> {
     crepe?.destroy()
     crepe = null
     current = name
+    setUrlNote(name)
     renderList()
     root.classList.add('has-note')
     setStatus('')
@@ -350,6 +385,7 @@ export async function open(opts: NotesOptions): Promise<void> {
           call(`/${encodeURIComponent(next)}`, { method: 'PUT', body: JSON.stringify({ content: markdown, from }) }),
         )
         current = next
+        setUrlNote(next)
         title.value = next
         names = [next, ...names.filter((n) => n !== from)]
         renderList()
@@ -418,6 +454,7 @@ export async function open(opts: NotesOptions): Promise<void> {
     vv?.removeEventListener('resize', fit)
     vv?.removeEventListener('scroll', fit)
     crepe?.destroy()
+    setUrlNote(null)
     root.remove()
     document.documentElement.style.overflow = prevOverflow
     openInstance = null
@@ -434,6 +471,7 @@ export async function open(opts: NotesOptions): Promise<void> {
     crepe?.destroy()
     crepe = null
     current = null
+    setUrlNote(null)
     renderList()
     showBlank()
   }
@@ -466,6 +504,10 @@ export async function open(opts: NotesOptions): Promise<void> {
   }
   renderList()
   closeBtn.focus()
+  if (opts.note) {
+    if (names.includes(opts.note)) await openNote(opts.note)
+    else setStatus(`No note named "${opts.note}"`, true)
+  }
 }
 
 ;(window as unknown as { AgentKeyboardNotes: { open: typeof open } }).AgentKeyboardNotes = { open }
