@@ -37,7 +37,7 @@ import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, sta
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { addTeamNote, handleOf } from "./team.js";
-import { deleteNote, listNotes, notesNote, readNote, validNoteName, writeNote, writeOrder } from "./notes.js";
+import { deleteNote, listNotes, noteTree, notesNote, readNote, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
@@ -673,7 +673,19 @@ app.get("/sites/:siteId/notes", authed, async (req, res) => {
   res.json(await listNotes(site.id));
 });
 
-/** Save the sidebar order (body {names}), set by dragging notes up or down. */
+/** The sidebar layout: note names and one level of {folder, notes} (see notes.ts). */
+app.get("/sites/:siteId/notes-order", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  res.json(await noteTree(site.id));
+});
+
+/** Save the sidebar layout (body {names}: the same shape GET returns), set by
+ *  dragging notes and folders, and by creating or renaming folders. */
 app.put("/sites/:siteId/notes-order", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   if (!site) {
@@ -682,7 +694,7 @@ app.put("/sites/:siteId/notes-order", authed, async (req, res) => {
   }
   if (denySite(req, res, site.id)) return;
   const { names } = (req.body ?? {}) as { names?: unknown };
-  if (!Array.isArray(names) || names.length > 1000 || !names.every(validNoteName)) {
+  if (!validOrder(names)) {
     res.status(400).json({ error: "invalid note order" });
     return;
   }
@@ -723,7 +735,7 @@ app.put("/sites/:siteId/notes/:name", authed, async (req, res) => {
   }
   await ensureCheckout(site);
   if (!(await writeNote(site.id, name, content, from))) {
-    res.status(409).json({ error: "a note with that name already exists" });
+    res.status(409).json({ error: "a note or folder with that name already exists" });
     return;
   }
   res.json({ name });

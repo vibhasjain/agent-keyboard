@@ -44,6 +44,7 @@ const ICON_PATHS: Record<string, string> = {
   camera:
     '<path d="M14.5 4h-5L7.4 6.4 4 7v13h16V7l-3.4-.6L14.5 4z" fill="none"/><circle cx="12" cy="13" r="3.4" fill="none"/>',
   note: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" fill="none"/><path d="M14 3v6h6M8 13h8M8 17h5" fill="none"/>',
+  folder: '<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z" fill="none"/>',
   paperclip: '<path d="M21.4 11.6 12 21a6 6 0 0 1-8.5-8.5l9.4-9.4a4 4 0 0 1 5.7 5.7l-9.5 9.5a2 2 0 1 1-2.8-2.8l8.8-8.8" fill="none"/>',
   mic: '<rect x="9" y="3" width="6" height="11" rx="3" fill="none"/><path d="M5 11.5a7 7 0 0 0 14 0M12 18.5V21" fill="none"/>',
   stop: '<rect x="7" y="7" width="10" height="10" rx="2" stroke="none" fill="currentColor"/>',
