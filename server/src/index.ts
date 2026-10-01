@@ -194,7 +194,7 @@ app.get("/widget.js", (_req, res) => {
     res.status(404).type("text/plain").send("// widget.js is not built yet");
     return;
   }
-  res.setHeader("Content-Type", "text/javascript");
+  res.setHeader("Content-Type", "text/javascript; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
   res.setHeader("Content-Length", String(buf.length));
   res.send(buf);
@@ -276,7 +276,7 @@ app.get("/notes.js", (_req, res) => {
     res.status(404).type("text/plain").send("// notes.js is not built yet");
     return;
   }
-  res.setHeader("Content-Type", "text/javascript");
+  res.setHeader("Content-Type", "text/javascript; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
   res.sendFile(p);
 });
@@ -295,7 +295,7 @@ app.get("/demo.js", (_req, res) => {
     res.status(404).type("text/plain").send("// demo.js is not built yet");
     return;
   }
-  res.setHeader("Content-Type", "text/javascript");
+  res.setHeader("Content-Type", "text/javascript; charset=utf-8");
   res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
   res.sendFile(p);
 });

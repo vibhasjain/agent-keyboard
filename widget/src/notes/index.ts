@@ -20,6 +20,7 @@ import { listItem } from '@milkdown/crepe/feature/list-item'
 import { placeholder } from '@milkdown/crepe/feature/placeholder'
 import { table } from '@milkdown/crepe/feature/table'
 import { toolbar } from '@milkdown/crepe/feature/toolbar'
+import { icon } from '../dom'
 
 declare const __AKN_CSS__: string
 
@@ -98,19 +99,39 @@ export async function open(opts: NotesOptions): Promise<void> {
   side.append(sideHead, list)
 
   const main = h('div', 'akn-main')
+  // The bar's pattern: round buttons in the top corners. Top-left steps back to
+  // the list (phones, inside a note); top-right deletes the note / closes Notes.
   const top = h('div', 'akn-top')
-  const back = h('button', 'akn-back', '‹ Notes')
-  back.type = 'button'
+  const iconBtn = (cls: string, name: string, label: string) => {
+    const b = h('button', `akn-btn ${cls}`)
+    b.type = 'button'
+    b.setAttribute('aria-label', label)
+    b.title = label
+    b.appendChild(icon(name, 18))
+    return b
+  }
+  const back = iconBtn('akn-back', 'chevron-left', 'All notes')
   const status = h('span', 'akn-status')
   status.setAttribute('aria-live', 'polite')
-  const delBtn = h('button', 'akn-delete', 'Delete')
-  delBtn.type = 'button'
-  const closeBtn = h('button', 'akn-close', 'Close')
-  closeBtn.type = 'button'
+  const delBtn = iconBtn('akn-delete', 'trash', 'Delete note')
+  const closeBtn = iconBtn('akn-close', 'x', 'Close notes')
   top.append(back, status, delBtn, closeBtn)
   const page = h('div', 'akn-page')
-  main.append(top, page)
-  root.append(side, main)
+  main.append(page)
+  const body = h('div', 'akn-body')
+  body.append(side, main)
+  root.append(top, body)
+
+  // Keyboard up: iOS doesn't shrink the layout viewport, it scrolls it, which
+  // pushed the title off-screen. Pin the overlay to the visible viewport instead.
+  const vv = window.visualViewport
+  const fit = () => {
+    if (!vv) return
+    root.style.top = `${vv.offsetTop}px`
+    root.style.height = `${vv.height}px`
+  }
+  vv?.addEventListener('resize', fit)
+  vv?.addEventListener('scroll', fit)
 
   const prevOverflow = document.documentElement.style.overflow
   document.documentElement.style.overflow = 'hidden'
@@ -352,6 +373,18 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
   }
 
+  // iOS only raises the keyboard for a focus() inside the tap itself, and creating
+  // a note is async. Focus a stand-in input now; focus moving to the title later
+  // keeps the keyboard up.
+  const holdKeyboard = () => {
+    const proxy = h('input', 'akn-proxy')
+    proxy.setAttribute('aria-hidden', 'true')
+    proxy.tabIndex = -1
+    root.appendChild(proxy)
+    proxy.focus()
+    return () => proxy.remove()
+  }
+
   const newNote = async () => {
     let name = 'Untitled'
     for (let i = 2; names.includes(name); i++) name = `Untitled ${i}`
@@ -382,6 +415,8 @@ export async function open(opts: NotesOptions): Promise<void> {
   const close = async () => {
     await flush()
     window.removeEventListener('pagehide', onUnload)
+    vv?.removeEventListener('resize', fit)
+    vv?.removeEventListener('scroll', fit)
     crepe?.destroy()
     root.remove()
     document.documentElement.style.overflow = prevOverflow
@@ -390,7 +425,10 @@ export async function open(opts: NotesOptions): Promise<void> {
   }
   openInstance = { close }
 
-  newBtn.onclick = () => void newNote()
+  newBtn.onclick = () => {
+    const release = holdKeyboard()
+    void newNote().finally(release)
+  }
   closeBtn.onclick = () => void close()
   const closeNote = () => {
     crepe?.destroy()
