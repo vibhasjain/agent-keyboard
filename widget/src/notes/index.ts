@@ -111,7 +111,7 @@ export async function open(opts: NotesOptions): Promise<void> {
   const newMenu = h('div', 'akn-newmenu')
   newMenu.setAttribute('role', 'menu')
   newMenu.hidden = true
-  sideHead.append(h('h2', undefined, 'Notes'), newBtn, newMenu)
+  sideHead.append(newBtn, newMenu)
   const list = h('ul', 'akn-list')
   side.append(sideHead, list)
 
