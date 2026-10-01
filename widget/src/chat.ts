@@ -72,6 +72,17 @@ function unlockBody(): void {
   window.scrollTo(0, bodyLockTop)
   bodyLockTop = null
 }
+// iOS scrolls the window to lift the composer over the keyboard, and with the body
+// locked it can leave that scroll behind once the keyboard closes. The bar is then
+// drawn in one place but takes taps in another (stuck until reload). While locked
+// the window has nothing to scroll, so snap it back as soon as the keyboard is gone.
+function snapBack(): void {
+  const vv = window.visualViewport
+  if (bodyLockTop == null || !vv || !window.scrollY) return
+  if (vv.height >= window.innerHeight - 1) window.scrollTo(0, 0)
+}
+globalThis.visualViewport?.addEventListener('resize', snapBack)
+globalThis.visualViewport?.addEventListener('scroll', snapBack)
 
 // -- lightbox (tap a thumb → full-screen; tap or Esc closes) -------------------
 let lbHost: ShadowRoot | null = null
