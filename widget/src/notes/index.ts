@@ -497,7 +497,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       setStatus(`Couldn't create — ${(e as Error).message}`, true)
       return
     }
-    names = [name, ...names]
+    names = [...names, name]
     saveOrder()
     await openNote(name, true)
   }

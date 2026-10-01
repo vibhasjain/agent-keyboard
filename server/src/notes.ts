@@ -34,7 +34,7 @@ export async function writeOrder(siteId: string, names: string[]): Promise<void>
   await writeFile(orderPath(siteId), JSON.stringify(names));
 }
 
-/** Notes in the saved order; ones not in it yet (new) go on top, newest first. */
+/** Notes in the saved order; ones not in it yet (new) go at the bottom, oldest first. */
 export async function listNotes(siteId: string): Promise<{ name: string; updatedAt: number }[]> {
   const dir = join(checkoutPath(siteId), NOTES_REL);
   const files = await readdir(dir).catch(() => [] as string[]);
@@ -44,7 +44,8 @@ export async function listNotes(siteId: string): Promise<{ name: string; updated
       .map(async (f) => ({ name: f.slice(0, -3), updatedAt: (await stat(join(dir, f))).mtimeMs })),
   );
   const order = await readOrder(siteId);
-  return notes.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name) || b.updatedAt - a.updatedAt);
+  const rank = (n: string) => (order.includes(n) ? order.indexOf(n) : Infinity);
+  return notes.sort((a, b) => rank(a.name) - rank(b.name) || a.updatedAt - b.updatedAt);
 }
 
 export async function readNote(siteId: string, name: string): Promise<string | null> {
