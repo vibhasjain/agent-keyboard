@@ -415,7 +415,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-t{ display:flex; gap:9px; font-size:13px; line-height:1.6; margin:0 0 10px; word-wrap:break-word; overflow-wrap:anywhere; }
 .ak-t-mark{ flex:none; width:13px; text-align:center; user-select:none; }
 .ak-t-body{ flex:1; min-width:0; white-space:pre-wrap; }
-.ak-t.user{ color:var(--ak-ink3); margin-top:18px; }
+.ak-t.user{ color:var(--ak-ink2); margin-top:18px; }
 .ak-t.user .ak-t-mark{ color:var(--ak-ink3); }
 .ak-t-who{ font-size:10.5px; letter-spacing:.02em; margin-right:8px; opacity:.9; }
 .ak-t.asst{ color:var(--ak-ink); }
