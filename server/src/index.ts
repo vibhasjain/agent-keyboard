@@ -195,7 +195,7 @@ app.get("/widget.js", (_req, res) => {
     return;
   }
   res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
+  res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Content-Length", String(buf.length));
   res.send(buf);
 });
@@ -277,7 +277,7 @@ app.get("/notes.js", (_req, res) => {
     return;
   }
   res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
+  res.setHeader("Cache-Control", "no-cache");
   res.sendFile(p);
 });
 
@@ -296,7 +296,7 @@ app.get("/demo.js", (_req, res) => {
     return;
   }
   res.setHeader("Content-Type", "text/javascript; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=300, stale-while-revalidate=86400");
+  res.setHeader("Cache-Control", "no-cache");
   res.sendFile(p);
 });
 app.get("/demo/:scene", (req, res) => {
