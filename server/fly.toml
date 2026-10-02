@@ -7,7 +7,7 @@
 #   fly secrets set CLAUDE_CODE_OAUTH_TOKEN=... SUPABASE_URL=... SUPABASE_ANON_KEY=... \
 #     SUPABASE_SERVICE_KEY=... ALLOWED_EMAIL=... GH_TOKEN=... \
 #     SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
-# Optional: OPENAI_API_KEY (voice), GEMINI_API_KEY (image-gen skill),
+# Optional: OPENAI_API_KEY (voice),
 # ALLOWED_USER_ID, EXTRA_ORIGINS. See SELF_HOSTING.md.
 # Google viewers: GOOGLE_OAUTH_CLIENT_ID accepts one or comma-separated client IDs (with SESSION_SECRET).
 # They may be Workspace (hd) accounts or ALLOWED_EMAIL/provisioned users; provisioned sites scopes apply

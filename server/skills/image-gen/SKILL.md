@@ -1,21 +1,23 @@
 ---
 name: image-gen
-description: Generate or edit images with Google Gemini and place them in the site repo. Use when the owner asks to generate, create, or illustrate an image, icon, hero graphic, or artwork for the site.
+description: Generate or edit images with Codex's built-in image tool and place them in the site repo. Use when the owner asks to generate, create, or illustrate an image, icon, hero graphic, or artwork for the site.
 ---
 
 # image-gen
 
-Generate images with Gemini and drop them into the site checkout. Requires the
-`GEMINI_API_KEY` environment variable — it is already in your environment on
-deployments that configured it (it is a Fly secret; it never lives in this
-repo). If it is unset, say so plainly: "Image generation isn't configured on
-this deployment — the owner needs to set the GEMINI_API_KEY secret."
+Generate images with Codex's built-in image tool (billed to the box's ChatGPT
+subscription — no API key) and drop them into the site checkout. If the helper
+fails, run `codex login status`; if it isn't "Logged in using ChatGPT", say
+plainly: "Image generation isn't available — Codex on this deployment isn't
+logged in to ChatGPT."
 
 ## How
 
 ```bash
-node ~/.claude/skills/image-gen/generate.mjs "<prompt>" <output.png> [input-image ...]
+sh ~/.claude/skills/image-gen/generate.sh "<prompt>" <output.png> [input-image ...]
 ```
+
+Takes ~1 minute per image.
 
 - `<prompt>` — what to generate. Optional input images (paths) are sent along
   for editing/variation.

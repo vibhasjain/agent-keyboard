@@ -138,7 +138,6 @@ listing any missing *required* var.
 | `ALLOWED_USER_ID` | Extra pin to specific Supabase user UUID(s), comma-separated. |
 | `SUPABASE_SERVICE_KEY` | Enables durable job history / re-attach. Works without it; boot warns. |
 | `OPENAI_API_KEY` | Voice dictation (ephemeral realtime tokens minted server-side). Absent = the mic button errors with "voice not configured". |
-| `GEMINI_API_KEY` | The baked-in image-generation skill. Read by the skill inside the CLI child, never by server code. Absent = the agent reports image generation as not configured. |
 | `TS_AUTHKEY` | Tailscale auth key (reusable, tagged, pre-approved). With `TS_EXIT_NODE` (fly.toml), boot starts a userspace `tailscaled` pinned to that exit node and exposes SOCKS5 `127.0.0.1:1055` — a residential egress a site's LinkedIn browser can opt into. Absent = nothing starts. |
 | `AK_PUBLIC_URL` | This server's public base URL; invite emails from user provisioning land on `$AK_PUBLIC_URL/welcome`. |
 | `FLY_API_TOKEN` | App-scoped Fly deploy token (`fly tokens create deploy -a <app>`). Enables the `self-ops` skill — the agent can read its own logs/status and set secrets. |
@@ -217,7 +216,7 @@ volume at boot — deploys update them, agent-installed ones persist:
 
 | Skill | What it does | Needs |
 |-------|--------------|-------|
-| `image-gen` | Generates images with Gemini and places them in the site repo. | `GEMINI_API_KEY` |
+| `image-gen` | Generates images with Codex's built-in image tool and places them in the site repo. | Codex logged in to ChatGPT |
 | `verify-in-browser` | Serves the checkout locally, screenshots it with the preinstalled headless Chromium, and inspects the render. | nothing (baked into the image) |
 | `provision-user` | Invites a new user by email + allow-lists them. | `SUPABASE_SERVICE_KEY` |
 | `self-ops` | The agent operates its own deployment: logs, status, secrets, deploy flow, Supabase auth config. Knows a restart kills its own turn. | `FLY_API_TOKEN` (optionally `SUPABASE_ACCESS_TOKEN`) |

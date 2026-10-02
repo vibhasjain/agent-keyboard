@@ -143,9 +143,9 @@ Everything runs in one small Fly app with one volume.
      OPENAI_API_KEY="sk-..." \
      SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
    ```
-   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. `GEMINI_API_KEY` is optional
-   too — set it to enable the built-in image-generation skill (`fly secrets set -a YOUR-APP
-   GEMINI_API_KEY="AIza..."`). Non-secret tuning vars (`CLAUDE_MODEL`, `AK_PUBLIC_URL`, `PORT`, …)
+   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. The built-in image-generation
+   skill uses Codex's image tool, so it works once Codex on the box is logged in to ChatGPT
+   (`fly ssh console` → `HOME=/data codex login --device-auth`). Non-secret tuning vars (`CLAUDE_MODEL`, `AK_PUBLIC_URL`, `PORT`, …)
    can go in the `[env]` block of `server/fly.toml` instead — set `AK_PUBLIC_URL` to
    `https://YOUR-APP.fly.dev` so user-provisioning invite emails land on your `/welcome` page.
 
@@ -283,7 +283,7 @@ There is no settings UI. The agent's own runtime is steered in the same chat:
   conversation) *and* a wiped chat history. The agent confirms once before it does it.
 - **Skills** — "install a skill that does X" writes to `/data/.claude/skills`; it loads next turn and
   survives deploys. Six ship built in (committed in `server/skills/`, so every fork inherits them):
-  `image-gen` (needs `GEMINI_API_KEY`), `verify-in-browser` (headless Chromium is preinstalled),
+  `image-gen` (needs Codex logged in to ChatGPT), `verify-in-browser` (headless Chromium is preinstalled),
   `provision-user` (below), `self-ops` (needs `FLY_API_TOKEN`), `frontend-design`, and `ponytail`
   (lazy-senior-dev discipline, on by default).
 
@@ -377,7 +377,7 @@ the PR is on you.
 | Job runs but push is rejected | `GH_TOKEN` lacks the repo, lacks Contents write, or the push touched `.github/workflows/` | Add the repo to the token's selection / grant Contents write. Workflow files are blocked by design. |
 | Job history / re-attach doesn't persist across restarts | No `SUPABASE_SERVICE_KEY` | Set the service_role key and redeploy; re-run `server/sql/jobs.sql` if you skipped it. |
 | Everything works but the agent errors immediately | `CLAUDE_CODE_OAUTH_TOKEN` missing or expired | Re-run `claude setup-token` and update the secret. |
-| "Image generation isn't configured" | No `GEMINI_API_KEY` | `fly secrets set GEMINI_API_KEY=...` and redeploy. |
+| "Image generation isn't available" | Codex on the box isn't logged in to ChatGPT | `fly ssh console` → `HOME=/data codex login --device-auth`. |
 | Agent stuck in plan mode / weird settings | Its `settings.json` got wedged | Ask it to "go back to dangerously bypass permissions" (works from plan mode), or `fly ssh console -C "rm /data/agent-keyboard/sites/<id>/settings.json"`. |
 | Invite email link lands on a page with no bar | The invited site domain isn't in Supabase's allowed redirect URLs (so it fell back to the Site URL) | Add the site's domain to Auth → URL Configuration → Redirect URLs. The bar on any of your sites can still complete the flow. |
 | Invited user gets 401 after setting a password | `ALLOWED_USER_ID` is set — it pins auth to specific user ids and blocks provisioned users | `fly secrets unset ALLOWED_USER_ID` (email allow-list stays the gate). |
