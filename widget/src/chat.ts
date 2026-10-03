@@ -4,7 +4,7 @@
 
 import { api, type ConversationMessage } from './api'
 import { getSessionEmail, logout } from './auth'
-import { CONFIG, lsKey } from './config'
+import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { chooseGuestDemo, getGuestDemoMessages, getGuestDemoRevision, isGuestDemo, resetGuestDemo, subscribeGuestDemo } from './guest-demo'
 import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, getSendEpoch, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
@@ -526,12 +526,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   })
   on(refreshItem, 'click', () => {
     if (busyAction) return
-    // Land back in the expanded chat after the reload (one-shot flag read at boot).
-    try {
-      localStorage.setItem(lsKey('reopen-expanded'), '1')
-    } catch {
-      /* storage blocked */
-    }
+    // bar.ts reopens the expanded chat after the reload (pagehide → sessionStorage).
     location.reload()
   })
   on(logoutItem, 'click', () => {

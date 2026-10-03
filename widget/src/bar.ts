@@ -835,15 +835,21 @@ export function mountBar(shadow: ShadowRoot): void {
   const unsub = subscribe(render)
   void unsub // retained for the lifetime of the page
 
-  // A refresh from the settings menu asked to land back in the expanded chat.
+  // Remember an open transcript across reloads: sessionStorage survives a
+  // refresh of this tab but not a new tab, so only reloads reopen it.
   try {
-    if (localStorage.getItem(lsKey('reopen-expanded')) === '1') {
-      localStorage.removeItem(lsKey('reopen-expanded'))
-      patchUi({ mode: 'expanded' })
-    }
+    if (sessionStorage.getItem(lsKey('expanded')) === '1') patchUi({ mode: 'expanded' })
   } catch {
     /* storage blocked */
   }
+  window.addEventListener('pagehide', () => {
+    try {
+      if (getState().ui.mode === 'expanded') sessionStorage.setItem(lsKey('expanded'), '1')
+      else sessionStorage.removeItem(lsKey('expanded'))
+    } catch {
+      /* storage blocked */
+    }
+  })
 
   render()
 }
