@@ -118,6 +118,14 @@ export function spawnEnv(site: Site, extra: Record<string, string> = {}): NodeJS
   return { ...env, AK_CDP_PORT: String(cdpPortFor(site.id)) };
 }
 
+/** Blame: commits are authored by whoever asked (git prefers these env vars over
+ *  the checkout's user.* config, which stays the committer, "Agent Keyboard").
+ *  No sender (cron) → the checkout identity, as before. A streaming session
+ *  keeps the author of the turn that spawned it. */
+export function authorEnv(sender?: string): Record<string, string> {
+  return sender ? { GIT_AUTHOR_NAME: sender.split("@")[0]!, GIT_AUTHOR_EMAIL: sender } : {};
+}
+
 /** Extra CLI args for a guest site: a --settings blob of deny rules. */
 export function guestArgs(site: Site): string[] {
   if (!site.guest) return [];
@@ -912,7 +920,7 @@ export async function* runMessageJob(
             queue.push(["status", { phase: "tool", detail: e.detail }]);
           }
         },
-        { env: spawnEnv(site, harness.env), ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
+        { env: spawnEnv(site, { ...harness.env, ...authorEnv(opts.sender) }), ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
       );
       child = c;
       const settled = done.finally(() => queue.close());
@@ -1281,7 +1289,7 @@ export async function* runStreamingSession(
           onResult(e.result);
         }
       },
-      { env: spawnEnv(site, harness.env), stdin: userMessageLine(prompt), keepStdinOpen: true },
+      { env: spawnEnv(site, { ...harness.env, ...authorEnv(opts.sender) }), stdin: userMessageLine(prompt), keepStdinOpen: true },
     );
     child = spawned.child;
     closeInput = spawned.closeInput;

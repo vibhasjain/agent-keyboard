@@ -37,7 +37,7 @@ import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, sta
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { addTeamNote, handleOf } from "./team.js";
-import { deleteNote, listNotes, noteTree, notesNote, readNote, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
+import { deleteNote, listNotes, noteMeta, noteTree, notesNote, readNote, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
@@ -716,7 +716,7 @@ app.get("/sites/:siteId/notes/:name", authed, async (req, res) => {
     res.status(404).json({ error: "no such note" });
     return;
   }
-  res.json({ name, content });
+  res.json({ name, content, meta: await noteMeta(site.id, name!) });
 });
 
 /** Save a note (body {content, from?}); `from` renames that note to :name first. */
@@ -734,7 +734,7 @@ app.put("/sites/:siteId/notes/:name", authed, async (req, res) => {
     return;
   }
   await ensureCheckout(site);
-  if (!(await writeNote(site.id, name, content, from))) {
+  if (!(await writeNote(site.id, name, content, from, authedUser(req)?.email))) {
     res.status(409).json({ error: "a note or folder with that name already exists" });
     return;
   }

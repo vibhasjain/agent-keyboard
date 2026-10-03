@@ -103,6 +103,8 @@
   font: 500 36px/1.2 'JetBrains Mono', ui-monospace, Menlo, monospace; letter-spacing: 0;
 }
 .akn-title::placeholder { color: #6f6a61; }
+.akn-byline { margin: 0 0 16px; padding: 0 48px; color: #6f6a61; font: 12px/1.4 'JetBrains Mono', ui-monospace, Menlo, monospace; }
+.akn-byline:empty { display: none; }
 .akn-blank { padding: 80px 24px; text-align: center; color: #6f6a61; }
 
 .akn .milkdown {
@@ -148,6 +150,7 @@
   .akn-list .akn-del { padding-right: 12px; } /* trash centre 27px from the edge = the close button's */
   .akn-page-inner { padding-top: 56px; }
   .akn-title { padding: 0 20px; font-size: 28px; }
+  .akn-byline { padding: 0 20px; }
   .akn .milkdown .ProseMirror { padding: 8px 20px 40px; }
 }
 .akn .akn-ref { color: #ffb86b; cursor: pointer; text-decoration: underline; text-decoration-color: #c4651a; text-underline-offset: 3px; }

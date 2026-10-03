@@ -589,6 +589,18 @@ export async function open(opts: NotesOptions): Promise<void> {
     root.classList.remove('has-note')
   }
 
+  // Blame: "xia · edited by vibhas111, 2h ago". The file changing after the last
+  // recorded save means the agent edited it on disk.
+  type NoteMeta = { createdBy?: string; editors?: { email: string; at: string }[]; updatedAt: number }
+  const who = (email: string) => email.split('@')[0]
+  const byline = (m: NoteMeta) => {
+    const last = m.editors?.[0]
+    const editor = !last || m.updatedAt - Date.parse(last.at) > 10_000 ? 'the agent' : who(last.email)
+    const mins = Math.round((Date.now() - m.updatedAt) / 60_000)
+    const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.round(mins / 60)}h ago` : `${Math.round(mins / 1440)}d ago`
+    return `${m.createdBy ? `${who(m.createdBy)} · ` : ''}edited by ${editor}, ${ago}`
+  }
+
   const openNote = async (name: string, focusTitle = false) => {
     await flush()
     crepe?.destroy()
@@ -599,8 +611,9 @@ export async function open(opts: NotesOptions): Promise<void> {
     root.classList.add('has-note')
     setStatus('')
     let content = ''
+    let meta: NoteMeta | null = null
     try {
-      content = ((await call(`/${encodeURIComponent(name)}`)) as { content: string }).content
+      ;({ content, meta } = (await call(`/${encodeURIComponent(name)}`)) as { content: string; meta: NoteMeta | null })
     } catch (e) {
       setStatus(`Couldn't open — ${(e as Error).message}`, true)
       return
@@ -620,7 +633,9 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
     title.oninput = fitTitle
     const host = h('div')
-    inner.append(title, host)
+    const by = h('p', 'akn-byline')
+    by.textContent = meta ? byline(meta) : ''
+    inner.append(title, by, host)
     page.replaceChildren(inner)
     fitTitle()
 

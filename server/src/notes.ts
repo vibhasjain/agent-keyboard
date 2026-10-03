@@ -80,10 +80,35 @@ export async function readNote(siteId: string, name: string): Promise<string | n
   return readFile(notePath(siteId, name), "utf8").catch(() => null);
 }
 
+/** Blame, in a sidecar so notes stay plain markdown: who created each note and
+ *  who edited it, most recent first. Agent edits bypass this (they write the
+ *  file directly); the editor infers them from an mtime newer than the last
+ *  recorded edit. */
+const metaPath = (siteId: string) => join(checkoutPath(siteId), NOTES_REL, ".meta.json");
+
+export type NoteMeta = { createdBy: string; createdAt: string; editors: { email: string; at: string }[] };
+
+async function readMeta(siteId: string): Promise<Record<string, NoteMeta>> {
+  const meta: unknown = await readFile(metaPath(siteId), "utf8").then(JSON.parse).catch(() => ({}));
+  return meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as Record<string, NoteMeta>) : {};
+}
+
+async function updateMeta(siteId: string, fn: (meta: Record<string, NoteMeta>) => void): Promise<void> {
+  const meta = await readMeta(siteId);
+  fn(meta);
+  await writeFile(metaPath(siteId), JSON.stringify(meta));
+}
+
+/** A note's blame plus its file mtime (ms), or null if unknown. */
+export async function noteMeta(siteId: string, name: string): Promise<(Partial<NoteMeta> & { updatedAt: number }) | null> {
+  const st = await stat(notePath(siteId, name)).catch(() => null);
+  return st && { ...(await readMeta(siteId))[name], updatedAt: st.mtimeMs };
+}
+
 /** Write a note; with `from`, rename that note to `name` first. Returns false if
  *  the name is taken: by another note (rename) or by a folder, since folder and
  *  note names are unique together. */
-export async function writeNote(siteId: string, name: string, content: string, from?: string): Promise<boolean> {
+export async function writeNote(siteId: string, name: string, content: string, from?: string, by?: string): Promise<boolean> {
   await mkdir(join(checkoutPath(siteId), NOTES_REL), { recursive: true });
   const exists = existsSync(notePath(siteId, name));
   if (!exists && (await readOrder(siteId)).some((i) => typeof i !== "string" && i.folder === name)) return false;
@@ -95,11 +120,22 @@ export async function writeNote(siteId: string, name: string, content: string, f
     await writeOrder(siteId, order.map((i) => (typeof i === "string" ? swap(i) : { ...i, notes: i.notes.map(swap) })));
   }
   await writeFile(notePath(siteId, name), content);
+  await updateMeta(siteId, (meta) => {
+    if (from && from !== name && meta[from]) {
+      meta[name] = meta[from];
+      delete meta[from];
+    }
+    if (!by) return;
+    const at = new Date().toISOString();
+    const m = (meta[name] ??= { createdBy: by, createdAt: at, editors: [] });
+    m.editors = [{ email: by, at }, ...m.editors.filter((e) => e.email !== by)];
+  });
   return true;
 }
 
 export async function deleteNote(siteId: string, name: string): Promise<void> {
   await rm(notePath(siteId, name), { force: true });
+  await updateMeta(siteId, (meta) => delete meta[name]);
 }
 
 /** Point the agent at every existing note the prompt mentions as #name or
