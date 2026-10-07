@@ -38,7 +38,7 @@ import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMIN
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
-import { addTeamNote, handleOf } from "./team.js";
+import { addTeamNote, emailMention, handleOf, markClicked, noticeUrl } from "./team.js";
 import { deleteNote, listNotes, noteMeta, noteTree, notesNote, readNote, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
@@ -924,8 +924,8 @@ app.get("/sites/:siteId/teammates", authed, async (req, res) => {
   res.json((await siteMembers(site.id)).filter((e) => e !== me).map((email) => ({ email, handle: handleOf(email) })));
 });
 
-/** Leave a note for the teammates @mentioned in `text`: saved to the transcript
- *  (not emailed) — no Claude turn. 400 if it mentions nobody on the site. */
+/** Leave a note for the teammates @mentioned in `text`: saved to the transcript,
+ *  and emailed only if `notify` — no Claude turn. 400 if it mentions nobody on the site. */
 app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   if (!site) {
@@ -933,7 +933,7 @@ app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
-  const { text, page } = (req.body ?? {}) as { text?: unknown; page?: unknown };
+  const { text, page, notify } = (req.body ?? {}) as { text?: unknown; page?: unknown; notify?: unknown };
   const from = authedUser(req)?.email ?? "";
   const mentioned = new Set(typeof text === "string" ? [...text.matchAll(/(?:^|\s)@([\w.+-]+)/g)].map((m) => m[1]!.toLowerCase()) : []);
   const to = (await siteMembers(site.id)).filter((e) => e !== from.toLowerCase() && (mentioned.has(handleOf(e)) || mentioned.has(e)));
@@ -944,8 +944,38 @@ app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
   const path = typeof page === "string" && page.startsWith("/") ? page : "/";
   const conversationId = await conversationIdFor(site.id, pageSlugFor(site, path));
   const note = { id: randomUUID(), role: "user" as const, text: text.trim(), tools: [], ts: new Date().toISOString(), sender: from, to };
+  if (notify === true) {
+    try {
+      const { messages } = await readConversation(site.id, { limit: 5, pageSlug: pageSlugFor(site, path) });
+      const publicUrl = process.env.AK_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+      await emailMention({ site, from, to, text: note.text, url: `https://${site.domain}${path}`, excerpt: messages, publicUrl });
+    } catch (err) {
+      console.error("[teamnotes] email failed", err);
+      res.status(502).json({ error: "couldn't send the email — note not saved" });
+      return;
+    }
+  }
   await addTeamNote(site.id, conversationId, note);
   res.json(note);
+});
+
+// A mention email's button: count the click only once this page's script runs
+// (link scanners fetch without running JS), then go to the chat.
+app.get("/n/:id", (req, res) => {
+  const url = noticeUrl(req.params.id ?? "");
+  if (!url) {
+    res.status(404).type("text").send("This link has expired.");
+    return;
+  }
+  const js = (v: string) => JSON.stringify(v).replace(/</g, "\\u003c");
+  res.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Opening the chat…</title>
+<body style="margin:0;background:#0a0a0a;color:#b8b2a7;font:15px -apple-system,'Segoe UI',Helvetica,Arial,sans-serif;display:grid;place-items:center;min-height:100vh">
+<p>Opening the chat… <a href="${url.replace(/"/g, "&quot;")}" style="color:#ffb86b">continue</a></p>
+<script>fetch(location.pathname,{method:"POST",keepalive:true}).finally(function(){location.replace(${js(url)})})</script>`);
+});
+app.post("/n/:id", (req, res) => {
+  markClicked(req.params.id ?? "").catch((err) => console.error("[notice] click follow-up failed", err));
+  res.status(204).end();
 });
 
 /** Forcefully stop a running job (kills the CLI child, releases the lock). The

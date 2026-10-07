@@ -197,11 +197,11 @@ export const api = {
   teammates: (siteId: string): Promise<{ email: string; handle: string }[]> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/teammates`),
 
-  /** Leave a note for the @mentioned teammates: saved to the chat, no agent turn. */
-  teamNote: (siteId: string, text: string): Promise<ConversationMessage> =>
+  /** Leave a note for the @mentioned teammates: saved to the chat (and emailed if `notify`), no agent turn. */
+  teamNote: (siteId: string, text: string, notify = false): Promise<ConversationMessage> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/teamnotes`, {
       method: 'POST',
-      body: JSON.stringify({ text, page: location.pathname }),
+      body: JSON.stringify({ text, page: location.pathname, notify }),
     }),
 
   listJobs: (siteId: string): Promise<{ jobs: JobRow[] }> =>

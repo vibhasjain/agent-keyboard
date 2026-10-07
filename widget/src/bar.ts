@@ -97,6 +97,14 @@ function makeComposer(onTeamNote: () => void): Composer {
   const root = el('div', 'ak-composer')
   const photos: Photos = makePhotos(() => syncSend())
   const note = el('div', 'ak-note')
+  // Shown while the draft @mentions someone: off = a note in the chat only
+  // (the default), on = also email them. Resets after every send.
+  let notify = false
+  const notifyBtn = el('button', 'ak-notify', (n) => {
+    n.type = 'button'
+    n.append(icon('mail', 13), 'Email them')
+    n.setAttribute('aria-pressed', 'false')
+  })
 
   const row = el('div', 'ak-input-row')
   const cam = el('button', 'ak-icon-btn', (n) => {
@@ -130,8 +138,9 @@ function makeComposer(onTeamNote: () => void): Composer {
   row.append(taWrap, cam, attach, mic, sendBtn)
   const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => [...new Set(l.flatMap((n) => (n.folder ? [n.name, n.folder] : [n.name])))]))
   const people = attachMentions(ta, taWrap, () => api.teammates(CONFIG.site).then((l) => l.map((t) => t.handle)), '@', 'teammates')
-  root.append(photos.el, row, note)
+  root.append(photos.el, row, notifyBtn, note)
   show(note, false)
+  show(notifyBtn, false)
 
   // -- voice / dictation --
   let baseText = ''
@@ -215,7 +224,15 @@ function makeComposer(onTeamNote: () => void): Composer {
 
   const syncSend = () => {
     sendBtn.disabled = false
+    const hasMention = /(?:^|\s)@[\w.+-]/.test(ta.value) && !photos.hasAttachments()
+    if (!hasMention) notify = false
+    show(notifyBtn, hasMention)
+    notifyBtn.setAttribute('aria-pressed', String(notify))
   }
+  on(notifyBtn, 'click', () => {
+    notify = !notify
+    syncSend()
+  })
 
   const setNote = (text: string, isError = false) => {
     note.textContent = text
@@ -247,17 +264,19 @@ function makeComposer(onTeamNote: () => void): Composer {
       await voice.flush()
       const text = ta.value.trim()
       if (!text && !photos.hasAttachments()) return
-      // @teammate → a note to them (saved in the chat), not an agent turn.
+      // @teammate → a note to them (saved in the chat, emailed if toggled), not an agent turn.
       // The server decides who's a teammate; 400 = nobody, so it's a normal prompt.
       if (/(?:^|\s)@[\w.+-]/.test(text) && !photos.hasAttachments()) {
         try {
-          await api.teamNote(CONFIG.site, text)
+          if (notify) setNote('Emailing…')
+          await api.teamNote(CONFIG.site, text, notify)
+          notify = false
           reset()
           onTeamNote()
           return
         } catch (e) {
           if (!(e instanceof HttpError && e.status === 400)) {
-            setNote("Couldn't send that note — try again", true)
+            setNote(e instanceof HttpError && e.status === 502 ? "Couldn't email that note — try again" : "Couldn't send that note — try again", true)
             return
           }
         }

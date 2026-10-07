@@ -259,6 +259,14 @@ button::-moz-focus-inner{ border:0; }
 }
 .ak-mic .ak-spin{ width:15px; height:15px; }
 @keyframes ak-ping{ 0%{ transform:scale(.7); opacity:.7; } 80%,100%{ transform:scale(1.9); opacity:0; } }
+.ak-notify{
+  align-self:flex-start; display:inline-flex; align-items:center; gap:5px; margin:0 4px 2px;
+  font:inherit; font-size:11px; color:var(--ak-ink3); background:transparent;
+  border:1px solid #3d372e; border-radius:999px; padding:3px 9px; cursor:pointer;
+}
+.ak-notify:hover{ color:var(--ak-ink2); }
+.ak-notify[aria-pressed="true"]{ color:var(--ak-amber); border-color:rgba(255,184,107,.55); background:rgba(255,184,107,.08); }
+.ak-notify:focus-visible{ outline:2px solid var(--ak-amber); outline-offset:2px; }
 .ak-note{ font-family:var(--ak-mono); font-size:10px; color:var(--ak-ink3); padding:0 6px 2px; }
 .ak-note.err{ color:var(--ak-err); }
 
