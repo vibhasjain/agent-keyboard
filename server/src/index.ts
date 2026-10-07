@@ -33,7 +33,7 @@ import {
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
-import { createSandbox, getSandbox, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
+import { closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
 import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
@@ -503,9 +503,9 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
-  const published = getSandbox(site.id)?.publishedAt;
-  if (published) {
-    res.status(410).json({ error: `This sandbox was published to live — continue at https://${site.sandboxOf!.domain}/` });
+  const closed = closedReason(getSandbox(site.id));
+  if (closed) {
+    res.status(410).json({ error: `This sandbox ${closed} — continue at https://${site.sandboxOf!.domain}/` });
     return;
   }
   const body = (req.body ?? {}) as {
@@ -630,6 +630,17 @@ app.post("/sites/:siteId/sandboxes", authed, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: `sandbox failed: ${String((e as Error)?.message ?? e).slice(0, 300)}` });
   }
+});
+
+/** A live site's open sandboxes, for the bar's switcher (empty inside a sandbox). */
+app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  res.json({ sandboxes: site.sandbox && !site.sandboxOf ? await listSandboxes(site.id) : [] });
 });
 
 // Who sent each site's latest message, so publishing knows who tapped
@@ -1156,6 +1167,22 @@ app.listen(port, () => {
   );
   if (process.env.JOBS_CRON_DISABLED !== "1") startJobsCron();
   startCheckoutPruning(SITES);
+  // Idle sandboxes: a note in the sandbox's own conversation first, then archived.
+  const sandboxPrune = () =>
+    void pruneSandboxes(
+      (id) => getSite(id),
+      async (sb) =>
+        addTeamNote(sb.id, await conversationIdFor(sb.id, ""), {
+          id: randomUUID(),
+          role: "user",
+          text: `This sandbox has been idle for 12 days. It will be archived in 2 days (branch deleted, notes kept on live) unless someone sends a message here.`,
+          tools: [],
+          ts: new Date().toISOString(),
+          sender: "Agent Keyboard",
+        }),
+    ).catch((e) => console.error("[sandbox] prune failed", e));
+  sandboxPrune();
+  setInterval(sandboxPrune, 6 * 3_600_000).unref();
   // Purge stale staged uploads, then reconcile any jobs the last process left
   // "running" (machine slept / crashed mid-job). Both tolerate an unreachable
   // Supabase / missing checkouts — log and continue, never block serving.

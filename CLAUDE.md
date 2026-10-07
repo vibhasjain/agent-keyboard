@@ -69,7 +69,11 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   The server squashes the branch into one commit authored by them (`Co-authored-by` for the others), opens a PR and
   rebase-merges it, deletes the branch, archives the notes to live's `.tmp/notes-archive/<slug>/`, notes it in the live
   conversation, waits for live to change, redirects the bar back, and deletes the checkout once the session ends (the
-  session files are kept). Switcher/idle cleanup are M3 (see the Sandboxes PRD note).
+  session files are kept). **M3:** the settings menu on the live site lists open sandboxes (`GET /sites/:id/sandboxes`:
+  name, owner, last activity); tapping one joins it via the same handoff. A sandbox idle 12 days gets a warning note in
+  its conversation and is archived 2 days later unless used (`pruneSandboxes`: branch deleted, notes archived, checkout
+  removed; messages then get a 410). The `sandbox` harness setting (`"off" | "offer" | "always"`) controls whether the
+  agent offers one, never does, or builds every change in one. See the Sandboxes PRD note.
 - **Auth** — `server/src/auth.ts`, `requireOwner()`: a Supabase JWT for the one allow-listed email.
   The widget hand-rolls GoTrue REST (no supabase-js) and stores its session under
   `localStorage['agent-keyboard-auth']`.

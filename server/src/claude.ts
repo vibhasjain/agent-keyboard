@@ -250,7 +250,7 @@ export function resolvePushBranch(site: Site): string {
 // else (how to make the change) is the agent's own judgment + the repo's files.
 // When pushBranch differs from the deploy branch, the push clause redirects the
 // commit to that review branch instead of the live one (nothing deploys).
-function scopeNote(site: Site, pushBranch: string = site.branch): string {
+function scopeNote(site: Site, pushBranch: string = site.branch, sandboxMode: string = "offer"): string {
   const path = checkoutPath(site.id);
   const lines = [
     site.sandboxOf
@@ -264,12 +264,18 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
       `This site is shared with invited guests: the owner's personal credentials and personal skills (${PERSONAL_SKILLS.join(", ")}) are deliberately unavailable in this session, and other sites' files are denied. If asked for them, say they are not available on this site.`,
     );
   }
-  if (site.sandbox && !site.guest) {
+  const alwaysSandbox = !!site.sandbox && !site.guest && sandboxMode === "always";
+  if (site.sandbox && !site.guest && sandboxMode !== "off") {
     lines.push(
-      `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live". To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. Give that Bash call a 10-minute timeout: it waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
+      (alwaysSandbox
+        ? `This site requires review: build every change in a sandbox — a private copy with its own preview URL — without asking, and never commit or push to "${site.branch}" here yourself.`
+        : `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live".`) +
+        ` To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. Give that Bash call a 10-minute timeout: it waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
     );
   }
-  if (pushBranch === site.branch) {
+  if (alwaysSandbox) {
+    // Every change goes through a sandbox, so no instructions to push here.
+  } else if (pushBranch === site.branch) {
     lines.push(
       `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (Netlify deploys the site from it).`,
       `If the push is rejected because the branch moved, run \`git pull --rebase\` and push again.`,
@@ -375,7 +381,7 @@ function streamArgs(
     "--setting-sources",
     "user,project",
     "--append-system-prompt",
-    scopeNote(site, pushBranch) + " " + harnessNote(site.id, harness, usage),
+    scopeNote(site, pushBranch, harness.settings.sandbox) + " " + harnessNote(site.id, harness, usage),
   ];
 }
 

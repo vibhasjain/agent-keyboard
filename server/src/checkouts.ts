@@ -157,7 +157,7 @@ const IDLE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Last time a job synced this checkout (every sync fetches → FETCH_HEAD). */
-async function lastUsed(dir: string): Promise<number> {
+export async function lastUsed(dir: string): Promise<number> {
   for (const f of [join(dir, ".git", "FETCH_HEAD"), join(dir, ".git")]) {
     const s = await stat(f).catch(() => null);
     if (s) return s.mtimeMs;

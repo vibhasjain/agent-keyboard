@@ -579,10 +579,13 @@ async function goToSandbox(url: string): Promise<void> {
   } catch {
     /* ignore */
   }
+  setTimeout(() => void joinSandbox(url), 1500) // let the reply land first
+}
+
+/** Go to a sandbox preview (or back to live), signed in via a one-time handoff. */
+export async function joinSandbox(url: string): Promise<void> {
   const { token_hash } = await api.handoff().catch(() => ({ token_hash: '' }))
-  setTimeout(() => {
-    location.href = token_hash ? `${url}#ak_handoff=${encodeURIComponent(token_hash)}` : url
-  }, 1500) // let the reply land first
+  location.href = token_hash ? `${url}#ak_handoff=${encodeURIComponent(token_hash)}` : url
 }
 
 function finishDone(data: Record<string, unknown>): void {

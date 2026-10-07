@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
-import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, git, writeDataFile } from "./checkouts.js";
+import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, git, lastUsed, removeCheckout, tryAcquireSiteLock, writeDataFile } from "./checkouts.js";
 import type { Site } from "./config.js";
 
 export interface Sandbox {
@@ -20,6 +20,8 @@ export interface Sandbox {
   createdAt: string;
   publishedAt?: string;
   pr?: string; // the merged PR's URL
+  warnedAt?: string; // told it'll be archived for being idle
+  abandonedAt?: string; // archived for being idle
 }
 
 const FILE = "agent-keyboard/sandboxes.json";
@@ -58,6 +60,76 @@ export function sandboxSite(id: string, getParent: (id: string) => Site | null):
 
 export const getSandbox = (id: string): Sandbox | undefined => registry.get(id);
 
+/** Why a sandbox no longer takes messages, or undefined while it's open. */
+export function closedReason(sb: Sandbox | undefined): string | undefined {
+  if (sb?.publishedAt) return "was published to live";
+  if (sb?.abandonedAt) return `was archived after ${IDLE_DAYS} idle days`;
+  return undefined;
+}
+
+/** A live site's open sandboxes, most recently used first (the bar's switcher). */
+export async function listSandboxes(parent: string) {
+  const open = [...registry.values()].filter((sb) => sb.parent === parent && !closedReason(sb));
+  const rows = await Promise.all(
+    open.map(async (sb) => ({
+      name: sb.id.split(SEP)[1]!,
+      url: sb.url,
+      createdBy: sb.createdBy ?? null,
+      lastActivity: new Date(await lastUsed(checkoutPath(sb.id))).toISOString(),
+    })),
+  );
+  return rows.sort((a, b) => b.lastActivity.localeCompare(a.lastActivity));
+}
+
+const save = () => writeDataFile(FILE, JSON.stringify([...registry.values()], null, 1));
+
+/** Close a sandbox: delete its branch, archive its notes on live, record why. */
+async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>): Promise<void> {
+  await gh(parent.repo, `/git/refs/heads/${sb.branch}`, { method: "DELETE" }).catch(() => {});
+  // Notes made or edited here are archived on live, not merged back into its notes.
+  const slug = sb.id.split(SEP)[1]!;
+  await cp(join(checkoutPath(sb.id), ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", slug), { recursive: true }).catch(() => {});
+  Object.assign(sb, mark);
+  await save();
+}
+
+const IDLE_DAYS = 14;
+const WARN_DAYS = 2;
+const DAY_MS = 86_400_000;
+
+/**
+ * Archive sandboxes nobody has used for IDLE_DAYS. Each is warned first (via
+ * `warn`, WARN_DAYS ahead); any activity after the warning restarts the clock.
+ * Skips a sandbox whose job is running.
+ */
+export async function pruneSandboxes(
+  getParent: (id: string) => Site | null,
+  warn: (sb: Sandbox) => Promise<void>,
+  now = Date.now(),
+): Promise<void> {
+  for (const sb of registry.values()) {
+    const parent = getParent(sb.parent);
+    if (!parent || closedReason(sb)) continue;
+    const used = await lastUsed(checkoutPath(sb.id));
+    const warned = sb.warnedAt ? Date.parse(sb.warnedAt) : 0;
+    if (warned > used && now - warned >= WARN_DAYS * DAY_MS) {
+      const release = tryAcquireSiteLock(sb.id);
+      if (!release) continue;
+      try {
+        await retire(sb, parent, { abandonedAt: new Date(now).toISOString() });
+        await removeCheckout(sb.id);
+        console.log(`[sandbox] ${sb.id}: archived after ${IDLE_DAYS} idle days`);
+      } finally {
+        release();
+      }
+    } else if (warned <= used && now - used >= (IDLE_DAYS - WARN_DAYS) * DAY_MS) {
+      await warn(sb).catch(() => {});
+      sb.warnedAt = new Date(now).toISOString();
+      await save();
+    }
+  }
+}
+
 /** The sandbox whose preview is served from this browser Origin. */
 export function sandboxForOrigin(origin: string | undefined): Sandbox | null {
   if (!origin) return null;
@@ -92,7 +164,7 @@ export async function createSandbox(
     createdAt: new Date().toISOString(),
   };
   registry.set(sb.id, sb);
-  await writeDataFile(FILE, JSON.stringify([...registry.values()], null, 1));
+  await save();
   await ensureCheckout(sandboxSite(sb.id, () => parent)!);
   const notes = (dir: string) => join(dir, ".tmp", "notes");
   await cp(notes(checkoutPath(parent.id)), notes(checkoutPath(sb.id)), { recursive: true }).catch(() => {});
@@ -175,12 +247,7 @@ export async function publishSandbox(
     const err = (await res.json().catch(() => null)) as { message?: string } | null;
     throw new Error(`GitHub couldn't merge ${pr.html_url}: ${err?.message ?? res.status} — if ${parent.branch} moved, rebase and publish again`);
   }
-  await gh(parent.repo, `/git/refs/heads/${sb.branch}`, { method: "DELETE" }).catch(() => {});
-  sb.publishedAt = new Date().toISOString();
-  sb.pr = pr.html_url;
-  await writeDataFile(FILE, JSON.stringify([...registry.values()], null, 1));
-  // Notes made or edited here are archived on live, not merged back into its notes.
-  await cp(join(dir, ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", sb.id.split(SEP)[1]!), { recursive: true }).catch(() => {});
+  await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: pr.html_url });
   let live = false;
   for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
     const now = await liveBody(parent);

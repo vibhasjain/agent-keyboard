@@ -207,6 +207,10 @@ export const api = {
   listJobs: (siteId: string): Promise<{ jobs: JobRow[] }> =>
     jsonFetch(`/jobs?siteId=${encodeURIComponent(siteId)}&page=${encodeURIComponent(location.pathname)}`),
 
+  /** The live site's open sandboxes (the menu's switcher). */
+  listSandboxes: (siteId: string): Promise<{ sandboxes: { name: string; url: string; createdBy: string | null; lastActivity: string }[] }> =>
+    jsonFetch(`/sites/${encodeURIComponent(siteId)}/sandboxes`),
+
   /** A single-use sign-in token to carry this session to a sandbox preview. */
   handoff: (): Promise<{ token_hash: string }> => jsonFetch('/auth/handoff', { method: 'POST' }),
 
