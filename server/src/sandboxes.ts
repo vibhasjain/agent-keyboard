@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
-import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, writeDataFile } from "./checkouts.js";
+import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, git, writeDataFile } from "./checkouts.js";
 import type { Site } from "./config.js";
 
 export interface Sandbox {
@@ -18,6 +18,8 @@ export interface Sandbox {
   forkFrom?: string;
   createdBy?: string;
   createdAt: string;
+  publishedAt?: string;
+  pr?: string; // the merged PR's URL
 }
 
 const FILE = "agent-keyboard/sandboxes.json";
@@ -53,6 +55,8 @@ export function sandboxSite(id: string, getParent: (id: string) => Site | null):
     sandboxOf: parent,
   };
 }
+
+export const getSandbox = (id: string): Sandbox | undefined => registry.get(id);
 
 /** The sandbox whose preview is served from this browser Origin. */
 export function sandboxForOrigin(origin: string | undefined): Sandbox | null {
@@ -94,6 +98,102 @@ export async function createSandbox(
   await cp(notes(checkoutPath(parent.id)), notes(checkoutPath(sb.id)), { recursive: true }).catch(() => {});
   return sb;
 }
+
+const gh = (repo: string, path: string, init: RequestInit = {}) =>
+  fetch(`https://api.github.com/repos/${new URL(repo).pathname.slice(1).replace(/\.git$/, "")}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${process.env.GH_TOKEN ?? ""}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" },
+    signal: AbortSignal.timeout(30_000),
+  });
+
+/**
+ * Publish a sandbox to live: squash its branch into one commit authored by `by`
+ * (everyone else who committed gets a Co-authored-by trailer), open a PR and
+ * rebase-merge it (which keeps that author), delete the branch, then wait for
+ * the live site to change. The branch must already be rebased onto live — the
+ * sandbox's agent does that (and resolves conflicts) before asking to publish.
+ */
+export async function publishSandbox(
+  site: Site,
+  by: string,
+  title: string,
+  summary: string,
+): Promise<{ pr: string; live: boolean }> {
+  const sb = registry.get(site.id)!;
+  const parent = site.sandboxOf!;
+  const dir = checkoutPath(site.id);
+  const base = `origin/${parent.branch}`;
+  const head = `origin/${sb.branch}`;
+  await git(dir, ["fetch", "origin", `+refs/heads/${parent.branch}:refs/remotes/${base}`, `+refs/heads/${sb.branch}:refs/remotes/${head}`]);
+  const rebased = await git(dir, ["merge-base", "--is-ancestor", base, head]).then(() => true, () => false);
+  if (!rebased) throw new Error(`"${sb.branch}" isn't rebased onto the latest "${parent.branch}" — rebase, push, then publish again`);
+  const commits = (await git(dir, ["log", "--reverse", "--format=%an <%ae>%x09%s", `${base}..${head}`])).trim().split("\n").filter(Boolean);
+  if (!commits.length) throw new Error("nothing to publish — the sandbox has no changes");
+  const agent = (await git(dir, ["config", "user.email"]).catch(() => "")).trim();
+  const coAuthors = [...new Set(commits.map((c) => c.split("\t")[0]!))].filter(
+    (a) => !a.includes(`<${by}>`) && !(agent && a.includes(`<${agent}>`)),
+  );
+  const message = [
+    title,
+    "",
+    summary,
+    "",
+    `Published from sandbox ${sb.branch}:`,
+    ...commits.map((c) => `- ${c.split("\t")[1]}`),
+    ...(coAuthors.length ? ["", ...coAuthors.map((a) => `Co-authored-by: ${a}`)] : []),
+  ].join("\n");
+  const tip = (await git(dir, ["rev-parse", head])).trim();
+  const sha = (
+    await git(dir, ["commit-tree", `${head}^{tree}`, "-p", base, "-m", message], {
+      ...process.env,
+      GIT_AUTHOR_NAME: by.split("@")[0]!,
+      GIT_AUTHOR_EMAIL: by,
+    })
+  ).trim();
+  await git(dir, ["push", `--force-with-lease=refs/heads/${sb.branch}:${tip}`, "origin", `${sha}:refs/heads/${sb.branch}`]);
+
+  const body = `${summary}\n\nPublished by ${by} from the Agent Keyboard sandbox ${sb.branch} (created by ${sb.createdBy ?? "unknown"}).`;
+  let res = await gh(parent.repo, "/pulls", { method: "POST", body: JSON.stringify({ title, head: sb.branch, base: parent.branch, body }) });
+  let pr = (await res.json().catch(() => null)) as { number?: number; html_url?: string } | null;
+  if (res.status === 422) {
+    // Already open (an earlier publish that failed later on): reuse it.
+    const owner = new URL(parent.repo).pathname.split("/")[1];
+    res = await gh(parent.repo, `/pulls?state=open&head=${owner}:${encodeURIComponent(sb.branch)}`);
+    pr = ((await res.json().catch(() => [])) as (typeof pr)[])[0] ?? null;
+  }
+  if (!pr?.number) throw new Error(`couldn't open the PR (GitHub ${res.status})`);
+  const before = await liveBody(parent);
+  res = await gh(parent.repo, `/pulls/${pr.number}/merge`, { method: "PUT", body: JSON.stringify({ merge_method: "rebase", sha }) });
+  if (res.status === 405) {
+    // Rebase merging is turned off on this repo: squash with our message instead.
+    res = await gh(parent.repo, `/pulls/${pr.number}/merge`, {
+      method: "PUT",
+      body: JSON.stringify({ merge_method: "squash", sha, commit_title: title, commit_message: message.split("\n").slice(2).join("\n") }),
+    });
+  }
+  if (!res.ok) {
+    const err = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(`GitHub couldn't merge ${pr.html_url}: ${err?.message ?? res.status} — if ${parent.branch} moved, rebase and publish again`);
+  }
+  await gh(parent.repo, `/git/refs/heads/${sb.branch}`, { method: "DELETE" }).catch(() => {});
+  sb.publishedAt = new Date().toISOString();
+  sb.pr = pr.html_url;
+  await writeDataFile(FILE, JSON.stringify([...registry.values()], null, 1));
+  // Notes made or edited here are archived on live, not merged back into its notes.
+  await cp(join(dir, ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", sb.id.split(SEP)[1]!), { recursive: true }).catch(() => {});
+  let live = false;
+  for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
+    const now = await liveBody(parent);
+    live = now !== null && now !== before;
+  }
+  return { pr: pr.html_url!, live };
+}
+
+/** The live home page's body, to notice when a new deploy is serving. */
+const liveBody = (site: Site) =>
+  fetch(`https://${site.domain}/`, { signal: AbortSignal.timeout(10_000) })
+    .then((r) => (r.ok ? r.text() : null))
+    .catch(() => null);
 
 /** Poll the preview until the host has deployed it, up to `ms`. A fresh Netlify
  *  branch deploy flaps 200/404 for a few seconds, so ready = 3 2xx in a row. */
