@@ -7,7 +7,7 @@ import { getSessionEmail, logout } from './auth'
 import { CONFIG } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { chooseGuestDemo, getGuestDemoMessages, getGuestDemoRevision, isGuestDemo, resetGuestDemo, subscribeGuestDemo } from './guest-demo'
-import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, getSendEpoch, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
+import { beginRestart, clearAfterRestart, discoverJobs, endRestartAttempt, joinSandbox, getActiveFiles, getActivePrompt, getActiveThumbs, getClearEpoch, getLiveTurns, getPendingFollowups, getQueued, getSendEpoch, isBusy, reconcileLiveTurns, start, stop } from './jobstore'
 import { renderMarkdown, renderUserText } from './markdown'
 import { getState, patchUi, subscribe, type Subagent, type TodoItem } from './state'
 
@@ -402,7 +402,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   const refreshItem = menuItem('retry', 'Refresh', 'Reload the page and reconnect to any active run.')
   const logoutItem = menuItem('logout', 'Log out')
   const demoResetItem = menuItem('restart', 'Start tour over')
-  menu.append(identity, notesItem, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem)
+  const sandboxBox = el('div') // the live site's open sandboxes, filled on open
+  menu.append(identity, sandboxBox, notesItem, stopItem, restartItem, compactItem, refreshItem, logoutItem, demoResetItem)
   show(menu, false)
 
   const scroll = el('div', 'ak-ov-scroll')
@@ -445,6 +446,23 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       for (const item of [notesItem, stopItem, restartItem, compactItem, refreshItem, logoutItem]) show(item, !guest)
       show(demoResetItem, guest) // no Login item: the form is already in the footer
       refreshBusyMenu()
+      clearNode(sandboxBox)
+      if (!guest && email) void fillSandboxes()
+    }
+  }
+  // Sandbox switcher: tap one to join it (signed in there via a handoff).
+  const fillSandboxes = async () => {
+    const { sandboxes } = await api.listSandboxes(CONFIG.site).catch(() => ({ sandboxes: [] }))
+    if (!menuOpen || !sandboxes.length) return
+    clearNode(sandboxBox)
+    sandboxBox.append(el('div', 'ak-menu-id', (n) => (n.textContent = 'Sandboxes')))
+    for (const sb of sandboxes) {
+      const mins = Math.max(0, Math.round((Date.now() - Date.parse(sb.lastActivity)) / 60_000))
+      const ago = mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.round(mins / 60)}h` : `${Math.round(mins / 1440)}d`
+      const who = sb.createdBy ? sb.createdBy.split('@')[0] : 'someone'
+      const item = menuItem('folder', `${sb.name} · ${who} · ${ago}`, `Join ${who}'s sandbox (last active ${ago} ago)`)
+      on(item, 'click', () => void joinSandbox(sb.url))
+      sandboxBox.append(item)
     }
   }
   on(settings, 'click', (e) => {

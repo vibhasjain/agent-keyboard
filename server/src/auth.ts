@@ -82,6 +82,8 @@ const csv = (v: string | undefined): Set<string> =>
       .filter(Boolean),
   );
 const ALLOWED_EMAILS = csv(process.env.ALLOWED_EMAIL);
+/** True for an env-listed owner (ALLOWED_EMAIL). */
+export const isOwnerEmail = (email: string): boolean => ALLOWED_EMAILS.has(email.toLowerCase());
 const ALLOWED_USER_IDS = csv(process.env.ALLOWED_USER_ID);
 // Case-preserving: client ids and site ids are compared exactly (csv() lower-cases
 // for email matching, which would silently mis-match a mixed-case site id).

@@ -51,6 +51,7 @@ export interface HarnessSettings extends ContextSettings {
   clearNow?: boolean;
   env?: Record<string, string>;
   cron?: CronSettings | CronSettings[];
+  sandbox?: "off" | "offer" | "always";
 }
 
 export interface ResolvedHarness {
@@ -148,6 +149,17 @@ const KNOBS: Knob[] = [
     describe: `"clearNow": true — DESTRUCTIVE: right after this turn the server starts a fresh session (wipes the agent's memory of this conversation) AND clears the chat history, then clears the flag. Unlike compact this keeps nothing. Because it can't be undone, confirm with the owner once before you set it`,
   },
 ];
+
+KNOBS.push({
+  key: "sandbox",
+  validate: (v, warn) => {
+    if (v === undefined || v === null || v === "") return undefined;
+    if (v === "off" || v === "offer" || v === "always") return v;
+    warn(`sandbox must be "off" | "offer" | "always", got ${JSON.stringify(v)} — using "offer"`);
+    return undefined;
+  },
+  describe: `"sandbox": "off" | "offer" | "always" (default "offer"; only on sites with sandboxes enabled) — whether you offer a sandbox for bigger changes, never do, or build every change in one so nothing reaches the live branch without a review`,
+});
 
 // The page knob reuses the site-level validators verbatim, so an override can
 // never accept a model or effort the site knob would reject.

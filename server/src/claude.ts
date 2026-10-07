@@ -250,11 +250,11 @@ export function resolvePushBranch(site: Site): string {
 // else (how to make the change) is the agent's own judgment + the repo's files.
 // When pushBranch differs from the deploy branch, the push clause redirects the
 // commit to that review branch instead of the live one (nothing deploys).
-function scopeNote(site: Site, pushBranch: string = site.branch): string {
+function scopeNote(site: Site, pushBranch: string = site.branch, sandboxMode: string = "offer"): string {
   const path = checkoutPath(site.id);
   const lines = [
     site.sandboxOf
-      ? `You are the Agent Keyboard, working in a sandbox of the live website ${site.sandboxOf.domain}: a private copy on the "${site.branch}" branch, previewed at https://${site.domain}/ and checked out at ${path} — that directory is your working copy and your cwd. Pushing deploys only that preview, never the live site; never push to "${site.sandboxOf.branch}" and never create another sandbox from here. Publishing to live isn't built yet.`
+      ? `You are the Agent Keyboard, working in a sandbox of the live website ${site.sandboxOf.domain}: a private copy on the "${site.branch}" branch, previewed at https://${site.domain}/ and checked out at ${path} — that directory is your working copy and your cwd. Pushing deploys only that preview, never the live site; never push to "${site.sandboxOf.branch}" and never create another sandbox from here. When asked to publish it to live: run \`git fetch origin ${site.sandboxOf.branch}\` and \`git rebase origin/${site.sandboxOf.branch}\`, resolve any conflicts yourself, re-run the repo's checks, push with \`git push --force-with-lease origin HEAD:${site.branch}\`, then reply with a short plain-English summary of what will go live and the options "Publish to live" / "Not yet". Only after the user sends "Publish to live", follow this repository's own rules for pushing to "${site.sandboxOf.branch}" (publishing is one), then run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/publish -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d @- <<'EOF'\` with the JSON \`{"title":"<one-line commit title>","summary":"<that summary>"}\` and a 10-minute Bash timeout. It squash-merges the sandbox into "${site.sandboxOf.branch}" through a PR authored by whoever tapped, waits for the live site to update, and sends the user back to live when your turn ends; say it's live (or, if \`live\` is false, that it's merged and still deploying) and link the PR. If it fails, explain why: rebase again if "${site.sandboxOf.branch}" moved, and only the sandbox's creator or the site owner may publish.`
       : `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
     `Modify only files inside this repository. Everything else under /data is off-limits — other checkouts, other sites' state, server config, auth files — with exactly two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")}, where you may install or edit skills to gain new capabilities (they load from the next turn).`,
     `One more allowance, controlled by the repository owner: if THIS repository's own instructions (CLAUDE.md, AGENTS.md, or a runbook such as CLOUD_WORKER.md) explicitly name another repository you may work on, clone it under .tmp/<name>/ inside this checkout (it survives turn resets), make the change there, run that repo's own checks, commit and push to the branch those instructions name, and remove nothing else. Never touch other sites' checkouts under /data/checkouts.`,
@@ -264,12 +264,18 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
       `This site is shared with invited guests: the owner's personal credentials and personal skills (${PERSONAL_SKILLS.join(", ")}) are deliberately unavailable in this session, and other sites' files are denied. If asked for them, say they are not available on this site.`,
     );
   }
-  if (site.sandbox && !site.guest) {
+  const alwaysSandbox = !!site.sandbox && !site.guest && sandboxMode === "always";
+  if (site.sandbox && !site.guest && sandboxMode !== "off") {
     lines.push(
-      `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live". To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. Give that Bash call a 10-minute timeout: it waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
+      (alwaysSandbox
+        ? `This site requires review: build every change in a sandbox — a private copy with its own preview URL — without asking, and never commit or push to "${site.branch}" here yourself.`
+        : `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live".`) +
+        ` To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. Give that Bash call a 10-minute timeout: it waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
     );
   }
-  if (pushBranch === site.branch) {
+  if (alwaysSandbox) {
+    // Every change goes through a sandbox, so no instructions to push here.
+  } else if (pushBranch === site.branch) {
     lines.push(
       `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (Netlify deploys the site from it).`,
       `If the push is rejected because the branch moved, run \`git pull --rebase\` and push again.`,
@@ -375,7 +381,7 @@ function streamArgs(
     "--setting-sources",
     "user,project",
     "--append-system-prompt",
-    scopeNote(site, pushBranch) + " " + harnessNote(site.id, harness, usage),
+    scopeNote(site, pushBranch, harness.settings.sandbox) + " " + harnessNote(site.id, harness, usage),
   ];
 }
 

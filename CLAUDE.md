@@ -63,7 +63,17 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   task in a fork of the conversation (`--resume <parent> --fork-session`), and the live bar redirects there with a
   single-use sign-in handoff (`POST /auth/handoff` → GoTrue magic-link `token_hash` → `#ak_handoff=`). A sandbox is a
   virtual site `<id>--sb-<slug>` (`server/src/sandboxes.ts`, registry in `/data/agent-keyboard/sandboxes.json`);
-  calls from a preview origin are routed to it. Publish/switcher/cleanup are M2–M3 (see the Sandboxes PRD note).
+  calls from a preview origin are routed to it. **Publish (M2):** asked to publish, the sandbox's agent rebases onto
+  live and force-pushes, shows a summary with a "Publish to live" option, then calls `POST /sites/<sandbox>/publish`
+  (internal secret): only the sandbox's creator or an `ALLOWED_EMAIL` owner (whoever sent the site's latest message) may.
+  The server squashes the branch into one commit authored by them (`Co-authored-by` for the others), opens a PR and
+  rebase-merges it, deletes the branch, archives the notes to live's `.tmp/notes-archive/<slug>/`, notes it in the live
+  conversation, waits for live to change, redirects the bar back, and deletes the checkout once the session ends (the
+  session files are kept). **M3:** the settings menu on the live site lists open sandboxes (`GET /sites/:id/sandboxes`:
+  name, owner, last activity); tapping one joins it via the same handoff. A sandbox idle 12 days gets a warning note in
+  its conversation and is archived 2 days later unless used (`pruneSandboxes`: branch deleted, notes archived, checkout
+  removed; messages then get a 410). The `sandbox` harness setting (`"off" | "offer" | "always"`) controls whether the
+  agent offers one, never does, or builds every change in one. See the Sandboxes PRD note.
 - **Auth** — `server/src/auth.ts`, `requireOwner()`: a Supabase JWT for the one allow-listed email.
   The widget hand-rolls GoTrue REST (no supabase-js) and stores its session under
   `localStorage['agent-keyboard-auth']`.
@@ -180,7 +190,7 @@ app you're using via its own git repo. When editing, describe the **shipped** pr
   (`.claude/skills/make-me-pixels/`): make it here, in this job, visible in the requester's thread. Never route it to the
   owner's `makemepixels` Agent Keyboard session; that queue is his alone.
 - **Guest pushes that redeploy the server** (anything under `server/` or `widget/`, from anyone other than
-  vibhas111@gmail.com): a push there restarts the Fly server and kills every running job on every site. Before pushing,
+  vibhas111@gmail.com): a push there restarts the Fly server and kills every running job on every site (publishing a sandbox that touches them counts). Before pushing,
   check that no other site has a job running (`agent_keyboard_jobs` where `status='running'` and `site_id` is not this
   site, via the service key in the server env); if one is running, wait for it to finish (poll every 30 s, up to 20 min),
   then push. `site/`-only pushes don't restart the server and need no wait.

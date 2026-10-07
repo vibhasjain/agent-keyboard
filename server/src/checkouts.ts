@@ -49,11 +49,11 @@ function scrubToken(e: unknown): unknown {
   return e;
 }
 
-async function git(cwd: string, args: string[]): Promise<string> {
+export async function git(cwd: string, args: string[], env: NodeJS.ProcessEnv = process.env): Promise<string> {
   try {
     const { stdout } = await execFileP("git", args, {
       cwd,
-      env: process.env,
+      env,
       maxBuffer: 16 * 1024 * 1024,
     });
     return stdout;
@@ -157,7 +157,7 @@ const IDLE_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Last time a job synced this checkout (every sync fetches → FETCH_HEAD). */
-async function lastUsed(dir: string): Promise<number> {
+export async function lastUsed(dir: string): Promise<number> {
   for (const f of [join(dir, ".git", "FETCH_HEAD"), join(dir, ".git")]) {
     const s = await stat(f).catch(() => null);
     if (s) return s.mtimeMs;
@@ -360,4 +360,10 @@ export async function createRemoteBranch(site: Site, branch: string): Promise<vo
   await git(dir, ["remote", "set-url", "origin", tokenizedRemote(site.repo)]);
   await git(dir, ["fetch", "origin", site.branch]);
   await git(dir, ["push", "origin", `origin/${site.branch}:refs/heads/${branch}`]);
+}
+
+/** Delete a checkout (a published sandbox's). Call with the site lock held. */
+export async function removeCheckout(siteId: string): Promise<void> {
+  await rm(checkoutPath(siteId), { recursive: true, force: true });
+  ensuring.delete(siteId);
 }

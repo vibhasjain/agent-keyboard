@@ -29,12 +29,13 @@ import {
   mintAgentKey,
   revokeAgentKey,
   siteMembers,
+  isOwnerEmail,
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
-import { createSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
+import { closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
 import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
-import { acquireSiteLock, checkoutPath, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
+import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { addTeamNote, handleOf } from "./team.js";
@@ -502,6 +503,11 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
+  const closed = closedReason(getSandbox(site.id));
+  if (closed) {
+    res.status(410).json({ error: `This sandbox ${closed} — continue at https://${site.sandboxOf!.domain}/` });
+    return;
+  }
   const body = (req.body ?? {}) as {
     text?: unknown;
     page?: unknown;
@@ -549,6 +555,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const promptText = text + notesNote(site.id, text) + pathScopeNote(authedUser(req), site.id);
   const internal = authedUser(req)?.id === "internal";
   const sender = internal && typeof (body as { sender?: unknown }).sender === "string" ? String((body as { sender?: unknown }).sender) : authedUser(req)?.email;
+  if (sender) lastSender.set(site.id, sender);
   const cron = internal && body.cron === true;
   const freshCron = cron && body.freshCron === true;
   const forceFresh = freshCron ? "fresh cron" : internal && body.forceFresh === true ? "boot requeue" : undefined;
@@ -625,6 +632,70 @@ app.post("/sites/:siteId/sandboxes", authed, async (req, res) => {
   }
 });
 
+/** A live site's open sandboxes, for the bar's switcher (empty inside a sandbox). */
+app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  res.json({ sandboxes: site.sandbox && !site.sandboxOf ? await listSandboxes(site.id) : [] });
+});
+
+// Who sent each site's latest message, so publishing knows who tapped
+// "Publish to live" without trusting the agent to say.
+const lastSender = new Map<string, string>();
+
+/**
+ * Publish a sandbox to live (its agent calls this, with the internal secret,
+ * once the user taps "Publish to live"). Only the sandbox's creator or a site
+ * owner may. Merges via a PR (see publishSandbox), leaves a note in the live
+ * conversation, sends the bar back to live when this turn ends, and deletes the
+ * sandbox's checkout once its session lets go of it.
+ */
+app.post("/sites/:siteId/publish", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  const sb = getSandbox(req.params.siteId ?? "");
+  if (!site?.sandboxOf || !sb) {
+    res.status(404).json({ error: "not a sandbox" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  if (sb.publishedAt) {
+    res.status(409).json({ error: `already published: ${sb.pr}` });
+    return;
+  }
+  const user = authedUser(req);
+  const by = user?.id === "internal" ? lastSender.get(site.id) : user?.email;
+  if (!by || !(by === sb.createdBy || isOwnerEmail(by))) {
+    res.status(403).json({ error: `only the sandbox's creator (${sb.createdBy ?? "unknown"}) or the site owner can publish it` });
+    return;
+  }
+  const { title, summary } = (req.body ?? {}) as { title?: unknown; summary?: unknown };
+  if (typeof title !== "string" || !title.trim()) {
+    res.status(400).json({ error: "title required" });
+    return;
+  }
+  try {
+    const out = await publishSandbox(site, by, title.trim(), typeof summary === "string" ? summary.trim() : "");
+    const live = site.sandboxOf;
+    await addTeamNote(live.id, await conversationIdFor(live.id, ""), {
+      id: randomUUID(),
+      role: "user",
+      text: `Published the sandbox ${sb.branch} to live: ${title.trim()} (${out.pr})`,
+      tools: [],
+      ts: new Date().toISOString(),
+      sender: by,
+    }).catch(() => {});
+    setSandboxRedirect(site.id, pageSlugFor(site, "/"), `https://${live.domain}/`);
+    void acquireSiteLock(site.id).then((release) => removeCheckout(site.id).catch(() => {}).finally(release));
+    res.json(out);
+  } catch (e) {
+    res.status(500).json({ error: `publish failed: ${String((e as Error)?.message ?? e).slice(0, 400)}` });
+  }
+});
+
 /**
  * Sign-in handoff to a sandbox preview on another domain: a single-use magic-link
  * token for the caller (GoTrue admin API). The widget redirects to
@@ -675,6 +746,7 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
   // Follow-ups get the same "[Sent from … by <email>]" header as opening turns so
   // the transcript can attribute them; the page is unknown here, "/" is fine.
   const user = authedUser(req);
+  if (user?.email) lastSender.set(site.id, user.email);
   const ok = appendToJob(
     req.params.jobId ?? "",
     buildPrompt(site, { text: text + notesNote(site.id, text) + pathScopeNote(user, site.id), page: "/", attachmentPaths: [], sender: user?.email }),
@@ -1095,6 +1167,22 @@ app.listen(port, () => {
   );
   if (process.env.JOBS_CRON_DISABLED !== "1") startJobsCron();
   startCheckoutPruning(SITES);
+  // Idle sandboxes: a note in the sandbox's own conversation first, then archived.
+  const sandboxPrune = () =>
+    void pruneSandboxes(
+      (id) => getSite(id),
+      async (sb) =>
+        addTeamNote(sb.id, await conversationIdFor(sb.id, ""), {
+          id: randomUUID(),
+          role: "user",
+          text: `This sandbox has been idle for 12 days. It will be archived in 2 days (branch deleted, notes kept on live) unless someone sends a message here.`,
+          tools: [],
+          ts: new Date().toISOString(),
+          sender: "Agent Keyboard",
+        }),
+    ).catch((e) => console.error("[sandbox] prune failed", e));
+  sandboxPrune();
+  setInterval(sandboxPrune, 6 * 3_600_000).unref();
   // Purge stale staged uploads, then reconcile any jobs the last process left
   // "running" (machine slept / crashed mid-job). Both tolerate an unreachable
   // Supabase / missing checkouts — log and continue, never block serving.
