@@ -463,7 +463,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       return
     }
     // Collapsed by default so a long list doesn't swamp the menu; tap to expand.
-    const list = el('div')
+    const list = el('div', 'ak-sb-list')
     show(list, false)
     const toggle = menuItem('chevron-down', `Sandboxes (${sandboxes.length})`)
     toggle.setAttribute('aria-expanded', 'false')
