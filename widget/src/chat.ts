@@ -462,14 +462,24 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       sandboxBox.append(back)
       return
     }
-    sandboxBox.append(el('div', 'ak-menu-id', (n) => (n.textContent = 'Sandboxes')))
+    // Collapsed by default so a long list doesn't swamp the menu; tap to expand.
+    const list = el('div')
+    show(list, false)
+    const toggle = menuItem('chevron-down', `Sandboxes (${sandboxes.length})`)
+    toggle.setAttribute('aria-expanded', 'false')
+    on(toggle, 'click', () => {
+      const open = toggle.getAttribute('aria-expanded') != 'true'
+      toggle.setAttribute('aria-expanded', '' + open)
+      show(list, open)
+    })
+    sandboxBox.append(toggle, list)
     for (const sb of sandboxes) {
       const mins = Math.max(0, Math.round((Date.now() - Date.parse(sb.lastActivity)) / 60_000))
       const ago = mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.round(mins / 60)}h` : `${Math.round(mins / 1440)}d`
       const who = sb.createdBy ? sb.createdBy.split('@')[0] : 'someone'
       const item = menuItem('folder', `${sb.name} · ${who} · ${ago}`, `Join ${who}'s sandbox (last active ${ago} ago)`)
       on(item, 'click', () => void joinSandbox(sb.url))
-      sandboxBox.append(item)
+      list.append(item)
     }
   }
   on(settings, 'click', (e) => {

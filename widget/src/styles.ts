@@ -382,6 +382,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-menu-item svg{ width:16px; height:16px; color:var(--ak-ink3); flex:none; }
 .ak-menu-item:hover{ background:rgba(255,255,255,.05); color:var(--ak-ink); }
 .ak-menu-item:hover svg{ color:var(--ak-amber); }
+.ak-menu-item[aria-expanded=true] svg{ transform:rotate(180deg); }
 .ak-menu-item[data-tip]::after{
   content:attr(data-tip); position:absolute; left:calc(100% + 8px); top:50%;
   width:max-content; max-width:238px; padding:7px 9px; border-radius:7px;
