@@ -262,7 +262,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch): string {
   }
   if (site.sandbox && !site.guest) {
     lines.push(
-      `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live". To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. It waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
+      `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live". To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. Give that Bash call a 10-minute timeout: it waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
     );
   }
   if (pushBranch === site.branch) {
