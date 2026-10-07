@@ -640,7 +640,12 @@ app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
-  res.json({ sandboxes: site.sandbox && !site.sandboxOf ? await listSandboxes(site.id) : [] });
+  // Inside a sandbox: which one this is, and where live is (the menu's "Back to live").
+  if (site.sandboxOf) {
+    res.json({ sandboxes: [], current: { name: site.id.split("--sb-")[1], liveUrl: `https://${site.sandboxOf.domain}` } });
+    return;
+  }
+  res.json({ sandboxes: site.sandbox ? await listSandboxes(site.id) : [] });
 });
 
 // Who sent each site's latest message, so publishing knows who tapped

@@ -452,9 +452,16 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   }
   // Sandbox switcher: tap one to join it (signed in there via a handoff).
   const fillSandboxes = async () => {
-    const { sandboxes } = await api.listSandboxes(CONFIG.site).catch(() => ({ sandboxes: [] }))
-    if (!menuOpen || !sandboxes.length) return
+    const { sandboxes, current } = await api.listSandboxes(CONFIG.site).catch(() => ({ sandboxes: [], current: undefined }))
+    if (!menuOpen || (!sandboxes.length && !current)) return
     clearNode(sandboxBox)
+    if (current) {
+      sandboxBox.append(el('div', 'ak-menu-id', (n) => (n.textContent = `Sandbox: ${current.name}`)))
+      const back = menuItem('chevron-left', 'Back to live', 'Leave this sandbox and return to the live site.')
+      on(back, 'click', () => void joinSandbox(current.liveUrl + location.pathname + location.search))
+      sandboxBox.append(back)
+      return
+    }
     sandboxBox.append(el('div', 'ak-menu-id', (n) => (n.textContent = 'Sandboxes')))
     for (const sb of sandboxes) {
       const mins = Math.max(0, Math.round((Date.now() - Date.parse(sb.lastActivity)) / 60_000))

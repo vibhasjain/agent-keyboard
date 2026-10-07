@@ -208,7 +208,7 @@ export const api = {
     jsonFetch(`/jobs?siteId=${encodeURIComponent(siteId)}&page=${encodeURIComponent(location.pathname)}`),
 
   /** The live site's open sandboxes (the menu's switcher). */
-  listSandboxes: (siteId: string): Promise<{ sandboxes: { name: string; url: string; createdBy: string | null; lastActivity: string }[] }> =>
+  listSandboxes: (siteId: string): Promise<{ sandboxes: { name: string; url: string; createdBy: string | null; lastActivity: string }[]; current?: { name: string; liveUrl: string } }> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/sandboxes`),
 
   /** A single-use sign-in token to carry this session to a sandbox preview. */
