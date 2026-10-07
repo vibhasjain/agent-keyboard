@@ -95,11 +95,14 @@ export async function createSandbox(
   return sb;
 }
 
-/** Poll the preview until the host has deployed it (any 2xx), up to `ms`. */
+/** Poll the preview until the host has deployed it, up to `ms`. A fresh Netlify
+ *  branch deploy flaps 200/404 for a few seconds, so ready = 3 2xx in a row. */
 export async function waitForPreview(url: string, ms = 6 * 60_000): Promise<boolean> {
+  let streak = 0;
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
     const res = await fetch(url, { signal: AbortSignal.timeout(10_000) }).catch(() => null);
-    if (res?.ok) return true;
+    streak = res?.ok ? streak + 1 : 0;
+    if (streak >= 3) return true;
   }
   return false;
 }
