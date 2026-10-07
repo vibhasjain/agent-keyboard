@@ -19,7 +19,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { v5 as uuidv5 } from "uuid";
-import { SITES, type Site } from "./sites.js";
+import { SITES, getSite, type Site } from "./sites.js";
 import { randomUUID } from "node:crypto";
 import {
   DATA_DIR,
@@ -101,11 +101,15 @@ export const PERSONAL_ENV = [
 ];
 export const PERSONAL_SKILLS = ["google-calendar"];
 
-/** Stable Chromium DevTools port for one allow-listed site. */
+/** Stable Chromium DevTools port for one allow-listed site; a sandbox (not in
+ *  SITES) hashes into 9400–9999 so it never shares its parent's browser. */
 export function cdpPortFor(siteId: string): number {
   const index = SITES.findIndex((site) => site.id === siteId);
-  if (index < 0) throw new Error(`unknown site ${JSON.stringify(siteId)}`);
-  return 9300 + index;
+  if (index >= 0) return 9300 + index;
+  if (!getSite(siteId)) throw new Error(`unknown site ${JSON.stringify(siteId)}`);
+  let h = 0;
+  for (const c of siteId) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return 9400 + (h % 600);
 }
 
 /** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites) + harness overrides. */
@@ -767,7 +771,7 @@ export async function compactSession(siteId: string, pageSlug = ""): Promise<boo
     const sessionId = sessionIdFor(conversationId);
     const dir = checkoutPath(siteId);
     const harness = await loadHarness(siteId);
-    const site = SITES.find((s) => s.id === siteId);
+    const site = getSite(siteId);
     if (!site) return false;
     return await runCompactTurn(site, sessionId, dir, harness);
   } finally {
