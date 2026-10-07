@@ -13,10 +13,10 @@
 // defensive: every fs op is in try/catch and the boot call is .catch'd, so with
 // the flag off — or if anything throws — boot and shutdown are unaffected.
 
-import { mkdirSync, writeFileSync, readFileSync, renameSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, renameSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR } from "./checkouts.js";
-import { SITES, getSite } from "./sites.js";
+import { getSite } from "./sites.js";
 import {
   conversationIdFor,
   markerPathFor,
@@ -30,10 +30,10 @@ const PENDING_DIR = join(DATA_DIR, "agent-keyboard", "pending-resume");
 
 // The ONLY continuation text the resumed turn receives — a nudge, not a new task.
 const CONTINUATION =
-  "[Agent Keyboard] The server just redeployed with the change you pushed and " +
-  "your session is back online. If your task was waiting on that deploy, " +
-  "continue now and finish it (verify it's live if that was the plan). If you " +
-  "were already done, reply with a one-line confirmation.";
+  "[Agent Keyboard] The server just redeployed (a change was pushed, maybe by " +
+  "you) and your session is back online. If your task was interrupted or waiting " +
+  "on that deploy, continue now and finish it (verify it's live if that was the " +
+  "plan). If you were already done, reply with a one-line confirmation.";
 
 /** Filesystem-safe marker filename component. */
 function safe(id: string): string {
@@ -95,9 +95,15 @@ export function writePendingResume(jobs: ResumeInput[]): void {
 export async function resumeAfterRedeploy(): Promise<void> {
   if (process.env.AK_AUTO_RESUME !== "1" || !process.env.FLY_IMAGE_REF) return;
 
-  for (const site of SITES) {
-    const path = join(PENDING_DIR, `${safe(site.id)}.json`);
-    if (!existsSync(path)) continue;
+  // Every marker, not just SITES: sandbox jobs (virtual sites) resume too.
+  let files: string[] = [];
+  try {
+    files = readdirSync(PENDING_DIR).filter((f) => f.endsWith(".json"));
+  } catch {
+    return;
+  }
+  for (const file of files) {
+    const path = join(PENDING_DIR, file);
 
     let marker: {
       jobId?: string;
