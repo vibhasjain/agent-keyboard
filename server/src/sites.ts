@@ -6,6 +6,7 @@
 // checkouts, never an arbitrary repo.
 
 import { loadSites, type Site } from "./config.js";
+import { sandboxSite } from "./sandboxes.js";
 
 export type { Site };
 
@@ -26,7 +27,7 @@ function safeLoadSites(): Site[] {
 const BY_ID = new Map(SITES.map((s) => [s.id, s]));
 
 export function getSite(siteId: string): Site | null {
-  return BY_ID.get(siteId) ?? null;
+  return BY_ID.get(siteId) ?? sandboxSite(siteId, (id) => BY_ID.get(id) ?? null);
 }
 
 /** Public shape for GET /sites. */

@@ -351,3 +351,13 @@ export async function writeDataFile(relPath: string, content: string): Promise<v
   await writeFile(tmp, content, "utf8");
   await rename(tmp, path);
 }
+
+/** Create `branch` on origin at the head of the site's deploy branch (a sandbox's
+ *  start point). Refs only — the site's working tree is never touched, so it is
+ *  safe while a job holds the site lock. */
+export async function createRemoteBranch(site: Site, branch: string): Promise<void> {
+  const dir = await ensureCheckout(site);
+  await git(dir, ["remote", "set-url", "origin", tokenizedRemote(site.repo)]);
+  await git(dir, ["fetch", "origin", site.branch]);
+  await git(dir, ["push", "origin", `origin/${site.branch}:refs/heads/${branch}`]);
+}

@@ -22,6 +22,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { createHash, createHmac, createPublicKey, randomBytes, createVerify, timingSafeEqual, type JsonWebKey } from "node:crypto";
 import { readDataFile, writeDataFile } from "./checkouts.js";
+import { parentId } from "./sandboxes.js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY ?? "";
@@ -179,7 +180,7 @@ export async function siteMembers(siteId: string): Promise<string[]> {
 
 /** True when this user may operate on the given site (unscoped users always may). */
 export function allowsSite(user: AuthedUser, siteId: string): boolean {
-  return !user.scope || user.scope.sites.includes(siteId);
+  return !user.scope || user.scope.sites.includes(parentId(siteId)); // a sandbox follows its site
 }
 
 /** 403 + true when the caller is a scoped user and this site isn't theirs. */

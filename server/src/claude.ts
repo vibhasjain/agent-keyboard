@@ -216,7 +216,7 @@ export function markerPathFor(conversationId: string): string {
  *  and every later spawn with --session-id fails "already in use" forever
  *  (this bricked makemepixels for 10 days). Path mirrors the CLI's project-dir
  *  convention (cwd, non-alnum → "-"); cwds are fixed per site so it's stable. */
-function sessionFileExists(cwd: string, sessionId: string): boolean {
+export function sessionFileExists(cwd: string, sessionId: string): boolean {
   const proj = cwd.replace(/[^a-zA-Z0-9]/g, "-");
   return existsSync(join(CLAUDE_HOME, ".claude", "projects", proj, `${sessionId}.jsonl`));
 }
@@ -249,13 +249,20 @@ export function resolvePushBranch(site: Site): string {
 function scopeNote(site: Site, pushBranch: string = site.branch): string {
   const path = checkoutPath(site.id);
   const lines = [
-    `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
+    site.sandboxOf
+      ? `You are the Agent Keyboard, working in a sandbox of the live website ${site.sandboxOf.domain}: a private copy on the "${site.branch}" branch, previewed at https://${site.domain}/ and checked out at ${path} — that directory is your working copy and your cwd. Pushing deploys only that preview, never the live site; never push to "${site.sandboxOf.branch}" and never create another sandbox from here. Publishing to live isn't built yet.`
+      : `You are the Agent Keyboard, editing the live website ${site.domain}, which is checked out at ${path} — that directory is your working copy and your cwd.`,
     `Modify only files inside this repository. Everything else under /data is off-limits — other checkouts, other sites' state, server config, auth files — with exactly two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")}, where you may install or edit skills to gain new capabilities (they load from the next turn).`,
     `One more allowance, controlled by the repository owner: if THIS repository's own instructions (CLAUDE.md, AGENTS.md, or a runbook such as CLOUD_WORKER.md) explicitly name another repository you may work on, clone it under .tmp/<name>/ inside this checkout (it survives turn resets), make the change there, run that repo's own checks, commit and push to the branch those instructions name, and remove nothing else. Never touch other sites' checkouts under /data/checkouts.`,
   ];
   if (site.guest) {
     lines.push(
       `This site is shared with invited guests: the owner's personal credentials and personal skills (${PERSONAL_SKILLS.join(", ")}) are deliberately unavailable in this session, and other sites' files are denied. If asked for them, say they are not available on this site.`,
+    );
+  }
+  if (site.sandbox && !site.guest) {
+    lines.push(
+      `For a bigger change (e.g. the request quotes a #note), or when asked, offer to build it in a sandbox first — a private copy with its own preview URL — as the options "Build in a sandbox" / "Just do it live". To create one, run \`curl -sS --max-time 600 -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${site.id}/sandboxes -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d '{"name":"<2-4 word name>","page":"<path you were sent from>","sender":"<requester email>","task":"<the full task, self-contained>"}'\`. It waits until the preview is live, then a fork of this conversation starts the task there, and the user is taken there when your turn ends — so don't do the task here; just say it's on its way.`,
     );
   }
   if (pushBranch === site.branch) {
@@ -342,6 +349,8 @@ function streamArgs(
 ): string[] {
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
+    // A sandbox's first turn forks the live conversation it was created from.
+    ...(!resume && site.forkFrom && sessionId === sessionIdFor(`site:${site.id}`) ? ["--resume", site.forkFrom, "--fork-session"] : []),
     // Streaming-input: the turn arrives as a stream-json line on stdin (-p with no
     // prompt). Classic one-shot: the prompt is passed inline via -p.
     ...(streaming ? ["-p", "--input-format", "stream-json"] : ["-p", prompt]),

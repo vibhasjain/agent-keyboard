@@ -207,6 +207,9 @@ export const api = {
   listJobs: (siteId: string): Promise<{ jobs: JobRow[] }> =>
     jsonFetch(`/jobs?siteId=${encodeURIComponent(siteId)}&page=${encodeURIComponent(location.pathname)}`),
 
+  /** A single-use sign-in token to carry this session to a sandbox preview. */
+  handoff: (): Promise<{ token_hash: string }> => jsonFetch('/auth/handoff', { method: 'POST' }),
+
   /** Forcefully stop a running job. The job's stream then delivers a terminal error. */
   cancelJob: (jobId: string): Promise<{ stopped: boolean }> =>
     jsonFetch(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),

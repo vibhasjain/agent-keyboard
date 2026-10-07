@@ -19,6 +19,7 @@ import type { Frame, InputChannel } from "./claude.js";
 import { insertJob, updateJob, type JobStatus } from "./jobstore.js";
 import { tryAcquireSiteLock } from "./checkouts.js";
 import { withBrowserStatus } from "./screen.js";
+import { takeSandboxRedirect } from "./sandboxes.js";
 
 const TERMINAL = new Set<JobStatus>(["done", "error", "interrupted"]);
 const DB_THROTTLE_MS = 2_000;
@@ -237,8 +238,9 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
         publish(job, event, payload);
         break;
       } else if (event === "result") {
-        job.result = payload as Record<string, unknown>;
-        publish(job, event, payload);
+        const sandboxUrl = takeSandboxRedirect(job.siteId, job.pageSlug);
+        job.result = { ...(payload as Record<string, unknown>), ...(sandboxUrl ? { sandbox_url: sandboxUrl } : {}) };
+        publish(job, event, job.result);
         if (!job.streaming) {
           job.status = "done";
           break;

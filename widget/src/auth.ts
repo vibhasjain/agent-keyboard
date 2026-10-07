@@ -100,6 +100,37 @@ export function consumeInviteToken(): boolean {
   }
 }
 
+// ── sandbox handoff ──────────────────────────────────────────────────────────
+// The live bar sends you to a sandbox preview (often another domain) with
+// #ak_handoff=<single-use token>; redeem it for this origin's own session.
+let pendingHandoff = ''
+export function consumeHandoff(): void {
+  const m = location.hash.match(/^#ak_handoff=([^&]+)/)
+  if (!m) return
+  pendingHandoff = decodeURIComponent(m[1]!)
+  try {
+    history.replaceState(null, '', location.pathname + location.search)
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function redeemHandoff(): Promise<boolean> {
+  const token_hash = pendingHandoff
+  pendingHandoff = ''
+  if (!token_hash) return false
+  const res = await fetch(`${SB_URL}/auth/v1/verify`, {
+    method: 'POST',
+    headers: { apikey: SB_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'magiclink', token_hash }),
+  }).catch(() => null)
+  const data = (await res?.json().catch(() => null)) as GrantResponse | null
+  if (!res?.ok || !data?.access_token) return false
+  writeSession(toSession(data, emailFromJwt(data.access_token)))
+  setAuth('authed')
+  return true
+}
+
 export function getPendingInvite(): InviteToken | null {
   return pendingInvite
 }

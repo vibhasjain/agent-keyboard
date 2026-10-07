@@ -473,6 +473,7 @@ function onFrame(name: string, data: Record<string, unknown>): void {
       break
     }
     case 'result':
+      if (typeof data.sandbox_url === 'string') void goToSandbox(data.sandbox_url)
       // A streaming session's `result` is a TURN boundary (session stays open);
       // a classic result ends the job.
       if (data.open === true && jobFinished) {
@@ -566,6 +567,22 @@ function finishSession(): void {
     if (j.phase === 'done' && j.jobId === finishedId) setJob({ phase: 'idle' })
   }, DONE_LINGER_MS)
   dispatchQueue()
+}
+
+// The agent moved this request into a sandbox: carry the session over and go
+// there once (a replayed result on a later visit doesn't redirect again).
+async function goToSandbox(url: string): Promise<void> {
+  const key = lsKey(`sandbox:${url}`)
+  try {
+    if (localStorage.getItem(key)) return
+    localStorage.setItem(key, '1')
+  } catch {
+    /* ignore */
+  }
+  const { token_hash } = await api.handoff().catch(() => ({ token_hash: '' }))
+  setTimeout(() => {
+    location.href = token_hash ? `${url}#ak_handoff=${encodeURIComponent(token_hash)}` : url
+  }, 1500) // let the reply land first
 }
 
 function finishDone(data: Record<string, unknown>): void {

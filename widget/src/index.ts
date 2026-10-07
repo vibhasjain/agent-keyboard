@@ -3,14 +3,14 @@
 // Renders a collapsed bar synchronously; makes ZERO network requests at boot
 // unless there is a persisted active job AND a stored session to re-attach with.
 
-import { consumeInviteToken, getPendingInvite, initAuth } from './auth'
+import { consumeHandoff, consumeInviteToken, getPendingInvite, initAuth, redeemHandoff } from './auth'
 import { screenStream } from './api'
 import { mountBar } from './bar'
 import { CONFIG, initConfig, shouldMountHere } from './config'
 import { el, icon, on, show } from './dom'
 import { injectFonts } from './fonts'
 import { isGuestDemo, loadGuestDemo } from './guest-demo'
-import { bootRehydrate } from './jobstore'
+import { bootRehydrate, discoverJobs } from './jobstore'
 import { getState, patchUi, subscribe } from './state'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
@@ -230,6 +230,12 @@ function mount(): void {
   // holds the set-a-password form. Otherwise rest as the corner rectangle.
   if (getPendingInvite()) patchUi({ mode: 'expanded' })
   bootRehydrate() // re-attach only if active-job key + stored session exist
+  // Arrived from the live bar into a sandbox: sign in, open, and attach to its job.
+  void redeemHandoff().then((ok) => {
+    if (!ok) return
+    patchUi({ mode: 'expanded' })
+    void discoverJobs()
+  })
 
   // Page-controlled visibility. hide() collapses the transcript FIRST: when
   // expanded, chat.ts holds a body scroll lock (position:fixed), and hiding
@@ -310,6 +316,7 @@ function mount(): void {
   // data-only-paths on the <script> tag scope it without editing each page.
   if (!shouldMountHere(script)) return
   consumeInviteToken() // stash + strip any invite/recovery token from the URL hash
+  consumeHandoff() // …or a sandbox sign-in handoff
   window.__agentKeyboard = true
   if (document.body) mount()
   else document.addEventListener('DOMContentLoaded', mount, { once: true })

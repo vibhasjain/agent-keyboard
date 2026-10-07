@@ -32,8 +32,9 @@ import {
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
-import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, compactSession } from "./claude.js";
-import { acquireSiteLock, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
+import { createSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
+import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
+import { acquireSiteLock, checkoutPath, commitFile, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { addTeamNote, handleOf } from "./team.js";
@@ -94,7 +95,7 @@ function corsOrigin(
   cb: (err: Error | null, allow?: boolean) => void,
 ): void {
   if (!origin) return cb(null, true); // non-browser / same-origin (curl, server-to-server)
-  if (STATIC_ORIGINS.has(origin)) return cb(null, true);
+  if (STATIC_ORIGINS.has(origin) || sandboxForOrigin(origin)) return cb(null, true);
   if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) return cb(null, true);
   return cb(null, false); // disallowed: no CORS headers, browser blocks the read
 }
@@ -105,6 +106,16 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
+// The widget on a sandbox's preview still says data-site="<site>": route its
+// calls to the sandbox, so a preview can never edit the live site.
+app.use((req, _res, next) => {
+  const sb = sandboxForOrigin(req.header("origin"));
+  if (sb) {
+    req.url = req.url.replace(`/sites/${sb.parent}/`, `/sites/${sb.id}/`);
+    if (req.query.siteId === sb.parent) req.query.siteId = sb.id;
+  }
+  next();
+});
 app.use(express.json({ limit: "1mb" })); // attachments go via multipart, so 1mb is plenty
 // A body that isn't valid JSON is a 400 in JSON (express's default is an HTML page).
 app.use((err: Error, _req: Request, res: Response, next: (e?: unknown) => void) => {
@@ -536,8 +547,8 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   // Path-scoped users: the constraint travels with the turn itself; the stored
   // job prompt stays the user's own words.
   const promptText = text + notesNote(site.id, text) + pathScopeNote(authedUser(req), site.id);
-  const sender = authedUser(req)?.email;
   const internal = authedUser(req)?.id === "internal";
+  const sender = internal && typeof (body as { sender?: unknown }).sender === "string" ? String((body as { sender?: unknown }).sender) : authedUser(req)?.email;
   const cron = internal && body.cron === true;
   const freshCron = cron && body.freshCron === true;
   const forceFresh = freshCron ? "fresh cron" : internal && body.forceFresh === true ? "boot requeue" : undefined;
@@ -566,6 +577,78 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     resumeCount: 0,
   });
   await streamJobTail(req, res, job);
+});
+
+/**
+ * Create a sandbox of a live site (the agent calls this with the internal secret).
+ * Pushes `ak/<slug>`, waits for its preview to deploy, starts `task` there in a
+ * fork of the caller's conversation, and redirects the caller's bar to the
+ * preview when its current turn ends. Responds once the preview is live.
+ */
+app.post("/sites/:siteId/sandboxes", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  if (!site.sandbox || site.sandboxOf) {
+    res.status(400).json({ error: site.sandboxOf ? "already in a sandbox" : "sandboxes are not enabled for this site (SITES sandbox)" });
+    return;
+  }
+  const body = (req.body ?? {}) as { name?: unknown; task?: unknown; page?: unknown; sender?: unknown };
+  const user = authedUser(req);
+  const internal = user?.id === "internal";
+  const sender = internal ? (typeof body.sender === "string" ? body.sender : undefined) : user?.email;
+  const page = typeof body.page === "string" ? body.page : "/";
+  const pageSlug = pageSlugFor(site, page);
+  const parentSession = sessionIdFor(await conversationIdFor(site.id, pageSlug));
+  try {
+    const sb = await createSandbox(site, typeof body.name === "string" ? body.name : "", {
+      forkFrom: sessionFileExists(checkoutPath(site.id), parentSession) ? parentSession : undefined,
+      createdBy: sender,
+    });
+    const ready = await waitForPreview(sb.url);
+    const task = typeof body.task === "string" ? body.task.trim() : "";
+    if (task && process.env.AK_INTERNAL_SECRET) {
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${sb.id}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-ak-internal": process.env.AK_INTERNAL_SECRET },
+        body: JSON.stringify({ text: task, page: "/", sender }),
+      });
+      await r.body?.cancel(); // durable job — don't hold its stream open
+    }
+    setSandboxRedirect(site.id, pageSlug, sb.url);
+    res.json({ siteId: sb.id, branch: sb.branch, url: sb.url, ready, forked: !!sb.forkFrom });
+  } catch (e) {
+    res.status(500).json({ error: `sandbox failed: ${String((e as Error)?.message ?? e).slice(0, 300)}` });
+  }
+});
+
+/**
+ * Sign-in handoff to a sandbox preview on another domain: a single-use magic-link
+ * token for the caller (GoTrue admin API). The widget redirects to
+ * `<preview>#ak_handoff=<token_hash>`, where the bar redeems it for its own session.
+ */
+app.post("/auth/handoff", authed, async (req, res) => {
+  const user = authedUser(req);
+  const key = process.env.SUPABASE_SERVICE_KEY ?? "";
+  if (!user?.email || user.agentKey || ["internal", "relay"].includes(user.id) || !key) {
+    res.status(400).json({ error: "handoff needs a signed-in user and SUPABASE_SERVICE_KEY" });
+    return;
+  }
+  const r = await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "magiclink", email: user.email }),
+  }).catch(() => null);
+  const data = (await r?.json().catch(() => null)) as { hashed_token?: string; properties?: { hashed_token?: string } } | null;
+  const token = data?.hashed_token ?? data?.properties?.hashed_token;
+  if (!token) {
+    res.status(502).json({ error: "couldn't mint a handoff token" });
+    return;
+  }
+  res.json({ token_hash: token });
 });
 
 /** Inject a follow-up message into a running streaming session (M2). 404/409 if

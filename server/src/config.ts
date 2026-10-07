@@ -25,7 +25,19 @@ export interface Site {
    *  worker pauses between items; the interactive default closes its session
    *  mid-queue. */
   sessionIdleMs?: number;
+  /** Opt-in sandboxes: the agent may build a bigger change on its own `ak/<slug>`
+   *  branch, previewed at `preview` ({branch} = the branch with every char outside
+   *  [a-z0-9-] as "-", {domain} = this site's domain). Default preview
+   *  "https://{branch}.{domain}" (branch subdomains, e.g. Netlify's). */
+  sandbox?: { preview: string };
+  // Set only on a sandbox's virtual site (sandboxes.ts), never from SITES:
+  /** Parent session to fork on the sandbox's first turn. */
+  forkFrom?: string;
+  /** The live site this sandbox will publish to. */
+  sandboxOf?: Site;
 }
+
+export const DEFAULT_PREVIEW = "https://{branch}.{domain}";
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/i;
 // A bare host: dot-separated alnum/hyphen labels — no scheme, no slash, no port.
@@ -84,7 +96,7 @@ export function loadSites(): Site[] {
     if (typeof entry !== "object" || entry === null) {
       throw new Error(`${at} must be an object, e.g. ${SITES_EXAMPLE}`);
     }
-    const { id, repo, branch, domain, pushBranch, sessionScope, guest, sessionIdleMs } = entry as Record<string, unknown>;
+    const { id, repo, branch, domain, pushBranch, sessionScope, guest, sessionIdleMs, sandbox } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !ID_RE.test(id)) {
       throw new Error(`${at}.id ${JSON.stringify(id)} must be a slug like "blog" (letters, digits, hyphens)`);
     }
@@ -120,6 +132,17 @@ export function loadSites(): Site[] {
         `${at}.sessionScope, if set, must be "site" or "page", got ${JSON.stringify(sessionScope)}`,
       );
     }
+    let preview: string | undefined;
+    if (sandbox !== undefined) {
+      const p = (sandbox as { preview?: unknown } | null)?.preview ?? DEFAULT_PREVIEW;
+      const probe = typeof p === "string" ? p.replace(/\{branch\}/g, "ak-x").replace(/\{domain\}/g, domain) : "";
+      if (typeof sandbox !== "object" || sandbox === null || typeof p !== "string" || !p.includes("{branch}") || !/^https:\/\/[^/]+/.test(probe) || !isUrl(probe)) {
+        throw new Error(
+          `${at}.sandbox, if set, must be {} (previews at ${DEFAULT_PREVIEW}) or {"preview":"https://{branch}--mysite.netlify.app"} — an https URL containing {branch}, got ${JSON.stringify(sandbox)}`,
+        );
+      }
+      preview = p;
+    }
     let pushBranchClean: string | undefined;
     if (pushBranch !== undefined && pushBranch !== null && pushBranch !== "") {
       if (typeof pushBranch !== "string" || !pushBranch.trim()) {
@@ -149,6 +172,7 @@ export function loadSites(): Site[] {
       ...(sessionScope === "page" ? { sessionScope } : {}),
       ...(guest === true ? { guest: true } : {}),
       ...(typeof sessionIdleMs === "number" ? { sessionIdleMs } : {}),
+      ...(preview ? { sandbox: { preview } } : {}),
     });
   });
   return sites;

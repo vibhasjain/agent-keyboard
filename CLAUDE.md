@@ -56,6 +56,14 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   (`PERSONAL_ENV` in `server/src/claude.ts`) and under deny rules for the personal skills, the auth
   file, and every other site's checkout/state (`guestArgs`). closeout-jobs (data + daily answers-sync for closeoutcopilot.com/answers and /job; no bar on that site) is `guest`.
   This project's own site is served with `data-site="halo"`, so the page edits its own repo.
+- **Sandboxes (M1)** — opt in per site with `sandbox:{}` in its SITES entry (previews at the default
+  `https://{branch}.{domain}`, i.e. branch subdomains) or `sandbox:{"preview":"https://{branch}--mysite.netlify.app"}`
+  for any other host's pattern (`{branch}` = `ak/<slug>` with `/` → `-`). The agent offers one for bigger changes and
+  creates it via `POST /sites/:id/sandboxes` (internal secret): pushes `ak/<slug>`, waits for the preview, starts the
+  task in a fork of the conversation (`--resume <parent> --fork-session`), and the live bar redirects there with a
+  single-use sign-in handoff (`POST /auth/handoff` → GoTrue magic-link `token_hash` → `#ak_handoff=`). A sandbox is a
+  virtual site `<id>--sb-<slug>` (`server/src/sandboxes.ts`, registry in `/data/agent-keyboard/sandboxes.json`);
+  calls from a preview origin are routed to it. Publish/switcher/cleanup are M2–M3 (see the Sandboxes PRD note).
 - **Auth** — `server/src/auth.ts`, `requireOwner()`: a Supabase JWT for the one allow-listed email.
   The widget hand-rolls GoTrue REST (no supabase-js) and stores its session under
   `localStorage['agent-keyboard-auth']`.
