@@ -12,8 +12,13 @@ export function initViewport(hostEl: HTMLElement): void {
 function measure(): void {
   const vv = window.visualViewport
   if (!vv || !host) return
-  // Gap between the bottom of the visual viewport and the bottom of the layout viewport.
-  const gap = Math.max(0, window.innerHeight - (vv.height + vv.offsetTop))
+  // Gap between the bottom of the visual viewport and the bottom of the panel
+  // we lift (100dvh). Measured against the panel itself, not innerHeight: iOS
+  // (notably home-screen apps) can shrink innerHeight with the keyboard while the
+  // panel stays full height, which read as no gap and left the composer hidden.
+  const panel = host.shadowRoot?.querySelector('.ak-overlay')?.getBoundingClientRect()
+  const bottom = Math.max(window.innerHeight, panel?.height ? panel.bottom : 0)
+  const gap = Math.max(0, bottom - (vv.height + vv.offsetTop))
   host.style.setProperty('--ak-kb', `${Math.round(gap)}px`)
   // How far the visual viewport has scrolled down inside the layout viewport
   // (iOS scrolls it when the keyboard opens). Anything pinned to the VISIBLE
@@ -34,6 +39,8 @@ export function trackKeyboard(): () => void {
   attached++
   host?.classList.add('ak-kbd')
   measure()
+  // iOS can finish the keyboard animation without a final resize event.
+  for (const ms of [150, 400, 800]) setTimeout(() => attached && measure(), ms)
   vv.addEventListener('resize', measure)
   vv.addEventListener('scroll', measure)
   return () => {
