@@ -920,11 +920,10 @@ app.get("/sites/:siteId/teammates", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
-  const me = authedUser(req)?.email.toLowerCase();
-  res.json((await siteMembers(site.id)).filter((e) => e !== me).map((email) => ({ email, handle: handleOf(email) })));
+  res.json((await siteMembers(site.id)).map((email) => ({ email, handle: handleOf(email) })));
 });
 
-/** Leave a note for the teammates @mentioned in `text`: saved to the transcript,
+/** Leave a note for the people (you included) @mentioned in `text`: saved to the transcript,
  *  and emailed only if `notify` — no Claude turn. 400 if it mentions nobody on the site. */
 app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
@@ -936,7 +935,7 @@ app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
   const { text, page, notify } = (req.body ?? {}) as { text?: unknown; page?: unknown; notify?: unknown };
   const from = authedUser(req)?.email ?? "";
   const mentioned = new Set(typeof text === "string" ? [...text.matchAll(/(?:^|\s)@([\w.+-]+)/g)].map((m) => m[1]!.toLowerCase()) : []);
-  const to = (await siteMembers(site.id)).filter((e) => e !== from.toLowerCase() && (mentioned.has(handleOf(e)) || mentioned.has(e)));
+  const to = (await siteMembers(site.id)).filter((e) => mentioned.has(handleOf(e)) || mentioned.has(e));
   if (typeof text !== "string" || !text.trim() || text.length > 10_000 || !to.length) {
     res.status(400).json({ error: "mention a teammate with @name" });
     return;

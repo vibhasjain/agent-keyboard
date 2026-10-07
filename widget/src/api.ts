@@ -193,7 +193,7 @@ export const api = {
   listNotes: (siteId: string): Promise<{ name: string; folder?: string }[]> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/notes`),
 
-  /** Everyone else with access to this site, for @mention autocomplete. */
+  /** Everyone with access to this site (you included), for @mention autocomplete. */
   teammates: (siteId: string): Promise<{ email: string; handle: string }[]> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/teammates`),
 
