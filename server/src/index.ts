@@ -33,7 +33,7 @@ import {
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
-import { closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
+import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
 import { buildPrompt, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
@@ -699,6 +699,31 @@ app.post("/sites/:siteId/publish", authed, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: `publish failed: ${String((e as Error)?.message ?? e).slice(0, 400)}` });
   }
+});
+
+/** Archive a sandbox without publishing (creator or owner; internal callers name the `sender`). */
+app.post("/sites/:siteId/archive", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  const sb = getSandbox(req.params.siteId ?? "");
+  if (!site?.sandboxOf || !sb) {
+    res.status(404).json({ error: "not a sandbox" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  if (closedReason(sb)) {
+    res.status(409).json({ error: `already closed: it ${closedReason(sb)}` });
+    return;
+  }
+  const user = authedUser(req);
+  const sender = (req.body as { sender?: unknown } | undefined)?.sender;
+  const by = user?.id === "internal" ? (typeof sender === "string" ? sender : undefined) : user?.email;
+  if (!by || !(by === sb.createdBy || isOwnerEmail(by))) {
+    res.status(403).json({ error: `only the sandbox's creator (${sb.createdBy ?? "unknown"}) or the site owner can archive it` });
+    return;
+  }
+  await archiveSandbox(site);
+  void acquireSiteLock(site.id).then((release) => removeCheckout(site.id).catch(() => {}).finally(release));
+  res.json({ archived: sb.id });
 });
 
 /**

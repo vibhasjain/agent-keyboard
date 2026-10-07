@@ -63,7 +63,7 @@ export const getSandbox = (id: string): Sandbox | undefined => registry.get(id);
 /** Why a sandbox no longer takes messages, or undefined while it's open. */
 export function closedReason(sb: Sandbox | undefined): string | undefined {
   if (sb?.publishedAt) return "was published to live";
-  if (sb?.abandonedAt) return `was archived after ${IDLE_DAYS} idle days`;
+  if (sb?.abandonedAt) return "was archived";
   return undefined;
 }
 
@@ -91,6 +91,11 @@ async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>): Promis
   await cp(join(checkoutPath(sb.id), ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", slug), { recursive: true }).catch(() => {});
   Object.assign(sb, mark);
   await save();
+}
+
+/** Archive a sandbox by hand (its creator or an owner asked): same as an idle archive. */
+export async function archiveSandbox(site: Site): Promise<void> {
+  await retire(registry.get(site.id)!, site.sandboxOf!, { abandonedAt: new Date().toISOString() });
 }
 
 const IDLE_DAYS = 14;
