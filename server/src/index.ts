@@ -326,11 +326,14 @@ app.get("/demo/:scene", (req, res) => {
 // Images the agent shows in the chat load via <img>, which can't carry the auth
 // header — so this route is open, gated only by the unguessable uuid filename
 // (single-owner product; the id only ever reaches the owner via an authed frame).
-app.get("/sites/:siteId/assets/:name", (req, res) => {
+// An <img> sends no Origin, so on a sandbox preview the request still names the
+// live site: fall back to that site's open sandboxes (the uuid picks the right one).
+app.get("/sites/:siteId/assets/:name", async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   const name = String(req.params.name ?? "");
-  const abs = site ? outputPath(site.id, name) : null;
-  if (!abs || !existsSync(abs)) {
+  const ids = site ? [site.id, ...(await listSandboxes(site.id)).map((sb) => `${site.id}--sb-${sb.name}`)] : [];
+  const abs = ids.map((id) => outputPath(id, name)).find((p) => p && existsSync(p));
+  if (!abs) {
     res.status(404).type("text/plain").send("not found");
     return;
   }
