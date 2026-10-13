@@ -23,13 +23,11 @@ Use the fleet registry through the seeded helper at
 | `menuplusplus` | `mpp / mpp` | no | `#6dd396` | menuplusplus.com (live agent, fork server) |
 | `estherandvibes` | `main / estherandvibhas /` | no | `#b794f6` | estherandvibhas.com |
 | `estherfell` | `main / estherfell /` | yes | `#e8c95a` | estherfell.com |
-| `closeoutcopilot` | `main / closeout /` | yes | `#e7d3b8` | closeoutcopilot.com deck |
-| `closeoutjobs` | `main / closeout-jobs` | yes | `#9aa7c7` | closeout jobs worker |
 | `menuplusplusserver` | `mpp / keyboard` | no | `#ef8e7d` | the Menu Plus Plus Agent Keyboard — edits the MPP fork's own bar/server code |
 
 `nutrition`, `movies`, `movieclub`, and `vanlife` are page agents — fixed
-sub-page sessions of their site. `home`, `estherandvibes`, `estherfell`, and
-`closeoutcopilot` are page-scoped sites: add `:/path` to target any other page
+sub-page sessions of their site. `home`, `estherandvibes`, and `estherfell` are
+page-scoped sites: add `:/path` to target any other page
 session; `/` is the default.
 
 ## Mentions
@@ -77,9 +75,9 @@ Callback turns arrive like normal messages beginning `[relay:done <handle>]`.
 When one arrives, summarize it for the owner. Do **not** relay it onward unless
 the prompt explicitly asks you to.
 
-Guest handles `estherfell`, `closeoutcopilot`, and `closeoutjobs` have both
+The guest handle `estherfell` has both
 relay secrets stripped. They cannot run callbacks: use `--wait` or poll `--jobs`
-for work sent to them, and never use a guest handle as `--reply-to`.
+for work sent to it, and never use a guest handle as `--reply-to`.
 
 `home` is the master orchestrator and a ROUTER: any request that belongs to
 another agent's site — any handle, not just its own page agents — gets relayed

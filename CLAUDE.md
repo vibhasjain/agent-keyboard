@@ -54,7 +54,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   Optional per-entry fields: `sessionScope:"page"` (one conversation per page) and `guest:true` — the
   site is shared with invited people, so its agent is spawned without the owner's personal secrets
   (`PERSONAL_ENV` in `server/src/claude.ts`) and under deny rules for the personal skills, the auth
-  file, and every other site's checkout/state (`guestArgs`). closeout-jobs (data + daily answers-sync for closeoutcopilot.com/answers and /job; no bar on that site) is `guest`.
+  file, and every other site's checkout/state (`guestArgs`). HyperTrack's sites (closeout, closeout-jobs) don't run here: they run on HyperTrack's own instance inside the `closeout-payroll` app (org hypertrack), served at closeout-payroll.fly.dev/ak.
   This project's own site is served with `data-site="halo"`, so the page edits its own repo.
 - **Sandboxes (M1)** — opt in per site with `sandbox:{}` in its SITES entry (previews at the default
   `https://{branch}.{domain}`, i.e. branch subdomains) or `sandbox:{"preview":"https://{branch}--mysite.netlify.app"}`
