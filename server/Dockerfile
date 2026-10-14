@@ -49,8 +49,8 @@ RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg \
 # The real Claude Code CLI (pinned).
 RUN npm install -g @anthropic-ai/claude-code@2.1.296
 
-# OpenAI Codex CLI (pinned) — the GPT lane for the fable-subagents skill and the
-# codex plugin (/codex:rescue). Login lives on the volume: /data/.codex/auth.json.
+# OpenAI Codex CLI (pinned) — image generation only (the image-gen skill and repo
+# image commands; owner 2026-10-14). Login lives on the volume: /data/.codex/auth.json.
 RUN npm install -g @openai/codex@0.162.1
 
 # Supabase CLI (pinned). Logged in per site via SUPABASE_ACCESS_TOKEN in that
@@ -84,7 +84,7 @@ COPY server/tsconfig.json ./
 COPY server/src ./src
 
 # Repo-shipped agent skills (image-gen, verify-in-browser, provision-user,
-# self-ops, frontend-design, ponytail, fable-subagents) — seeded into /data/.claude/skills at boot
+# self-ops, frontend-design, ponytail) — seeded into /data/.claude/skills at boot
 # (see src/skills.ts). Below npm ci so a skill edit doesn't bust the dependency
 # layer (sharp's native build).
 COPY server/skills /app/skills

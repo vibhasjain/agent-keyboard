@@ -1,5 +1,5 @@
-# Headless Codex CLI defaults for the Fly box — the GPT lane behind the
-# fable-subagents skill and /codex:rescue. Written to $HOME/.codex/config.toml on
+# Headless Codex CLI defaults for the Fly box — image generation only (the
+# image-gen skill and repo image commands; owner 2026-10-14). Written to $HOME/.codex/config.toml on
 # EVERY boot (src/skills.ts seedCodexConfig), so edit it here, not on the volume:
 # the volume copy is overwritten by the next deploy. Login (auth.json) is
 # untouched. Owner decision 2026-09-05: GPT-6 Astra, medium effort, regular speed.
