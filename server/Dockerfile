@@ -47,7 +47,7 @@ RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # The real Claude Code CLI (pinned).
-RUN npm install -g @anthropic-ai/claude-code@2.1.302
+RUN npm install -g @anthropic-ai/claude-code@2.1.303
 
 # OpenAI Codex CLI (pinned) — image generation only (the image-gen skill and repo
 # image commands; owner 2026-10-14). Login lives on the volume: /data/.codex/auth.json.
