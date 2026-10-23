@@ -149,7 +149,8 @@ h1{
 @media (max-width:439px){ h1{ font-size:min(36px, calc((100vw - 48px) / 10)); } }
 h1 em, h2 em{ font-style:normal; color:var(--accent);
   background:var(--rainbow) 0 0 / 200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
-  animation:rainbow-drift 8s linear infinite; }
+  animation:rainbow-drift 8s linear infinite; filter:url(#neon); }
+/* #neon (inline SVG after <body>) blurs a copy of the text under itself, so the glow takes each letter's own moving colour */
 /* the gradient loops (ends where it starts), so sliding one tile width is seamless; left to right like the keys */
 @keyframes rainbow-drift{ to{ background-position:-200% 0; } }
 h1 .mode{ white-space:nowrap; }
@@ -337,6 +338,13 @@ footer .meta a:hover{ color:var(--ink); }
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="neon" x="-25%" y="-100%" width="150%" height="300%">
+    <feGaussianBlur stdDeviation="9"/>
+    <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .55 0" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</svg>
 
 <div class="wrap">
   <div class="top">
