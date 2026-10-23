@@ -68,14 +68,14 @@ button:focus, button:focus-visible,
 a:focus, a:focus-visible,
 summary:focus, summary:focus-visible{ outline:none; }
 button::-moz-focus-inner{ border:0; }
-html{ -webkit-text-size-adjust:100%; scroll-behavior:smooth; touch-action:pan-x pan-y; }
+html{ overflow-x:hidden; -webkit-text-size-adjust:100%; scroll-behavior:smooth; touch-action:pan-x pan-y; }
 body{
   min-height:100vh;
   /* room for the fixed widget bar at the bottom */
   padding-bottom:calc(96px + env(safe-area-inset-bottom,0px));
   font-family:var(--sans); color:var(--ink);
   line-height:1.6; -webkit-font-smoothing:antialiased;
-  overflow-x:hidden;
+  overflow-x:clip; /* hidden on body becomes the viewport's, which phones still let you swipe sideways; clip doesn't */
   background:var(--bg);
 }
 /* a faint dot grid drifts at a quarter of scroll speed (JS sets --y = scrollY) */
