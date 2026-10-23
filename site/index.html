@@ -136,7 +136,8 @@ a{ color:var(--accent); text-decoration:none; }
   background:repeating-linear-gradient(90deg, #f4a7a7, #f6c99a 100px, #efe19c 200px, #a9dcb0 300px, #9fc8ea 400px, #c1abe6 500px, #f4a7a7 600px)
     0 0 / 600px 100%;
   transform-origin:50% 72%;
-  transform:translateY(calc(var(--s) * 380px)) scale(calc(1 + var(--s) * 2.2));
+  /* pushed back down by however much the hero padding was trimmed, so the glow stays where it was while the keyboard sits higher */
+  transform:translateY(calc(var(--s) * 380px + clamp(130px, 20vw, 220px) - clamp(100px, 14vw, 150px))) scale(calc(1 + var(--s) * 2.2));
   opacity:calc(.9 - var(--s) * .45); animation:glow-drift 8s linear infinite;
 }
 /* the .kbd is positioned (and transformed), so the hero text after it must be positioned too to paint above the glow */
