@@ -121,7 +121,7 @@ a:hover{ color:var(--amber); }
   filter:drop-shadow(0 10px 36px rgba(255,134,60,.32)) drop-shadow(0 0 60px rgba(255,184,107,.25));
   animation:breathe 3s ease-in-out infinite;
 }
-.hero .kbd img{ display:block; width:220px; height:auto; }
+.hero .kbd img{ display:block; width:168px; height:auto; }
 @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
 .eyebrow{ font-size:12px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--amber); margin-bottom:20px; }
 h1{
@@ -331,7 +331,8 @@ footer .meta a:hover{ color:var(--amber); }
 
   <header class="hero">
     <picture class="kbd" aria-hidden="true">
-      <img src="agent-keyboard-hello.webp?v=2" width="364" height="190" alt="" fetchpriority="high">
+      <source srcset="typewriter-still.webp" media="(prefers-reduced-motion: reduce)">
+      <img src="typewriter.webp" width="168" height="90" alt="" fetchpriority="high">
     </picture>
     <div class="eyebrow">This page edits itself</div>
     <h1 aria-label="Change your app by talking to it, texting it, or sharing a note with it.">Change your app by<br><em class="mode" aria-hidden="true">talking to it.</em></h1>
