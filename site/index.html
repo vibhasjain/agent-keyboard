@@ -113,29 +113,35 @@ a{ color:var(--accent); text-decoration:none; }
 .gh-pill:hover{ color:var(--accent); border-color:rgba(23,23,28,.3); }
 
 /* ---- hero ---- */
-.hero{ padding:72px 0 0; text-align:center; }
+.hero{ padding:clamp(130px, 20vw, 220px) 0 0; text-align:center; }
 .hero .kbd{
   position:relative; isolation:isolate;
   display:block; line-height:0; margin:0 auto 52px; width:fit-content;
   animation:breathe 3s ease-in-out infinite;
 }
 /* a muted rainbow glow behind the typewriter: its colours drift left to right like the keys.
-   At rest only its top half shows, a rainbow fan over the keys; scrolling down swells it and
-   fades in the lower half into a full oval (--y = scrollY, set by JS; unset under reduced motion) */
+   At rest only its upper part shows, a tall rainbow fan rising from the keys; scrolling down
+   fades in the lower half, drifts it down with you and swells it past the edges of the screen while
+   it thins out, so the colour seems to wash over the page (--y = scrollY, set by JS; unset under reduced motion) */
 .hero .kbd::before{
-  --open:calc(min(var(--y, 0), 300) / 300 * 60%);
-  content:""; position:absolute; z-index:-1; inset:-90px -90px -50px;
-  -webkit-mask-image:radial-gradient(closest-side, #000 50%, transparent),
-    linear-gradient(to bottom, #000 calc(42% + var(--open)), transparent calc(58% + var(--open)));
+  --s:min(var(--y, 0), 500) / 500;
+  --open:calc(var(--s) * 40%);
+  content:""; position:absolute; z-index:-1; inset:-280px -240px -60px;
+  -webkit-mask-image:radial-gradient(closest-side, #000 8%, rgba(0,0,0,.45) 50%, transparent),
+    linear-gradient(to bottom, #000 calc(58% + var(--open)), transparent calc(76% + var(--open)));
   -webkit-mask-composite:source-in;
-          mask-image:radial-gradient(closest-side, #000 50%, transparent),
-    linear-gradient(to bottom, #000 calc(42% + var(--open)), transparent calc(58% + var(--open)));
+          mask-image:radial-gradient(closest-side, #000 8%, rgba(0,0,0,.45) 50%, transparent),
+    linear-gradient(to bottom, #000 calc(58% + var(--open)), transparent calc(76% + var(--open)));
           mask-composite:intersect;
   background:repeating-linear-gradient(90deg, #f4a7a7, #f6c99a 100px, #efe19c 200px, #a9dcb0 300px, #9fc8ea 400px, #c1abe6 500px, #f4a7a7 600px)
     0 0 / 600px 100%;
-  transform:scale(calc(1 + min(var(--y, 0), 400) / 500));
-  opacity:.85; animation:glow-drift 8s linear infinite;
+  transform-origin:50% 72%;
+  transform:translateY(calc(var(--s) * 380px)) scale(calc(1 + var(--s) * 2.2));
+  opacity:calc(.9 - var(--s) * .45); animation:glow-drift 8s linear infinite;
 }
+/* the .kbd is positioned (and transformed), so the hero text after it must be positioned too to paint above the glow */
+.hero > :not(.kbd){ position:relative; }
+@media (max-width:720px){ .hero .kbd::before{ inset:-200px -90px -40px; } }
 @keyframes glow-drift{ to{ background-position-x:600px; } }
 .hero .kbd img{ display:block; width:min(300px, 80vw); height:auto; }
 @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
