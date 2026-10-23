@@ -116,14 +116,22 @@ a{ color:var(--accent); text-decoration:none; }
   display:block; line-height:0; margin:0 auto 52px; width:fit-content;
   animation:breathe 3s ease-in-out infinite;
 }
-/* a muted rainbow glow under the typewriter: its colours drift left to right like the keys,
-   and it swells as you scroll (--y = scrollY, set by JS; unset under reduced motion) */
+/* a muted rainbow glow behind the typewriter: its colours drift left to right like the keys.
+   At rest only its top half shows, a rainbow fan over the keys; scrolling down swells it and
+   fades in the lower half into a full oval (--y = scrollY, set by JS; unset under reduced motion) */
 .hero .kbd::before{
-  content:""; position:absolute; z-index:-1; inset:-30px -40px; border-radius:50%;
+  --open:calc(min(var(--y, 0), 300) / 300 * 60%);
+  content:""; position:absolute; z-index:-1; inset:-90px -90px -50px;
+  -webkit-mask-image:radial-gradient(closest-side, #000 50%, transparent),
+    linear-gradient(to bottom, #000 calc(42% + var(--open)), transparent calc(58% + var(--open)));
+  -webkit-mask-composite:source-in;
+          mask-image:radial-gradient(closest-side, #000 50%, transparent),
+    linear-gradient(to bottom, #000 calc(42% + var(--open)), transparent calc(58% + var(--open)));
+          mask-composite:intersect;
   background:repeating-linear-gradient(90deg, #f4a7a7, #f6c99a 100px, #efe19c 200px, #a9dcb0 300px, #9fc8ea 400px, #c1abe6 500px, #f4a7a7 600px)
     0 0 / 600px 100%;
   transform:scale(calc(1 + min(var(--y, 0), 400) / 500));
-  filter:blur(34px); opacity:.6; animation:glow-drift 8s linear infinite;
+  opacity:.85; animation:glow-drift 8s linear infinite;
 }
 @keyframes glow-drift{ to{ background-position-x:600px; } }
 .hero .kbd img{ display:block; width:min(300px, 80vw); height:auto; }
