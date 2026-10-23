@@ -262,12 +262,11 @@ h2{ font-weight:500; letter-spacing:-.02em; font-size:clamp(26px,4.2vw,36px); li
 .arch-core-title .think{ color:var(--violet); font-style:normal; margin-right:2px; }
 .arch-core-sub{ font-size:13px; line-height:1.6; color:var(--ink-3); margin-top:8px; }
 .arch-core-sub b{ color:var(--accent); font-weight:500; }
-/* the payoff: your app updates in the SAME place you prompted from — live (green) */
+/* the payoff: your app updates in the SAME place you prompted from — live (rainbow border, below) */
 .arch-payoff{ width:100%; max-width:340px; margin:4px 0 0; text-align:center;
-  background:linear-gradient(180deg, rgba(109,211,150,.12), rgba(109,211,150,0));
-  border:1px solid rgba(29,122,69,.40); border-radius:14px; padding:14px 18px;
-  font-size:13px; line-height:1.6; color:var(--ok); }
-.arch-payoff b{ color:var(--ok); font-weight:600; }
+  border:1px solid; border-radius:14px; padding:14px 18px;
+  font-size:13px; line-height:1.6; color:var(--ink-2); }
+.arch-payoff b{ color:var(--ink); font-weight:600; }
 /* vertical connector: a slim track, a downward-travelling pulse, an arrowhead, a side label */
 .arch-link{ position:relative; width:2px; height:46px; background:var(--rule-2); border-radius:2px; margin:8px 0; }
 .arch-link::after{ content:""; position:absolute; left:50%; bottom:-1px; transform:translateX(-50%);
@@ -288,13 +287,13 @@ h2{ font-weight:500; letter-spacing:-.02em; font-size:clamp(26px,4.2vw,36px); li
 .feat p .comp{ font-family:var(--mono); font-size:12px; color:var(--ink-2); white-space:nowrap; }
 .asks{ max-width:720px; margin:34px auto 0; text-align:left; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .ask{ display:flex; flex-direction:column; gap:12px; padding:18px; border:1px solid var(--rule); border-radius:14px; background:var(--bg-2); }
-/* the server card (where Agent Keyboard runs) gets a neon rainbow border drifting left to right like the headline:
-   ::after is the card (fill + rainbow rim), ::before a blurred copy of the rim behind it, the glow */
-.arch-core{ position:relative; isolation:isolate; border-color:transparent; background:none; }
-.arch-core::before, .arch-core::after{ content:""; position:absolute; z-index:-1; inset:-1px; border-radius:inherit;
+/* the server card (where Agent Keyboard runs) and the payoff (its impact) get a neon rainbow border drifting left to right like the headline:
+   ::after is the box (fill + rainbow rim), ::before a blurred copy of the rim behind it, the glow */
+.arch-core, .arch-payoff{ position:relative; isolation:isolate; border-color:transparent; background:none; }
+.arch-core::before, .arch-core::after, .arch-payoff::before, .arch-payoff::after{ content:""; position:absolute; z-index:-1; inset:-1px; border-radius:inherit;
   animation:rainbow-drift 8s linear infinite; }
-.arch-core::before{ background:var(--rainbow) 0 0 / 200% 100%; filter:blur(7px); opacity:.35; }
-.arch-core::after{ border:1.5px solid transparent;
+.arch-core::before, .arch-payoff::before{ background:var(--rainbow) 0 0 / 200% 100%; filter:blur(7px); opacity:.35; }
+.arch-core::after, .arch-payoff::after{ border:1.5px solid transparent;
   background:linear-gradient(var(--bg-2), var(--bg-2)) padding-box, var(--rainbow) 0 0 / 200% 100% border-box; }
 .ask .a-ico{ width:18px; height:18px; color:var(--accent); flex:none; }
 .ask .a-txt{ font-size:15px; font-weight:500; color:var(--ink); }
@@ -329,7 +328,7 @@ footer .meta a:hover{ color:var(--ink); }
   .asks{ grid-template-columns:1fr; }
 }
 @media (prefers-reduced-motion: reduce){
-  h1 em, .arch-core::before, .arch-core::after{ animation:none; }
+  h1 em, .arch-core::before, .arch-core::after, .arch-payoff::before, .arch-payoff::after{ animation:none; }
   .hero .kbd, .hero .kbd::before{ animation:none; }
   h1 .mode::after{ display:none; }
   .conn-line .pulse{ animation:none; opacity:0; }
