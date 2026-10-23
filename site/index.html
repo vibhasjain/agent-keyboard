@@ -124,7 +124,7 @@ a{ color:var(--accent); text-decoration:none; }
    fades in the lower half, drifts it down with you and swells it past the edges of the screen while
    it thins out, so the colour seems to wash over the page (--y = scrollY, set by JS; unset under reduced motion) */
 .hero .kbd::before{
-  --s:min(var(--y, 0), 500) / 500;
+  --s:(min(var(--y, 0), 400) + 100) / 500; /* starts a fifth of the way open, so the edges are already soft at rest */
   --open:calc(var(--s) * 40%);
   content:""; position:absolute; z-index:-1; inset:-280px -240px -60px;
   -webkit-mask-image:radial-gradient(closest-side, #000 8%, rgba(0,0,0,.45) 50%, transparent),
