@@ -116,13 +116,15 @@ a:hover{ color:var(--amber); }
   display:block; line-height:0; margin:0 auto 52px; width:fit-content;
   animation:breathe 3s ease-in-out infinite;
 }
-/* a muted rainbow glow under the typewriter, slowly turning */
+/* a muted rainbow glow under the typewriter; on scroll its colours slide left to right
+   (like the keys) and it swells a little (--y = scrollY, set by JS; unset under reduced motion) */
 .hero .kbd::before{
   content:""; position:absolute; z-index:-1; inset:-30px -40px; border-radius:50%;
-  background:conic-gradient(#f4a7a7, #f6c99a, #efe19c, #a9dcb0, #9fc8ea, #c1abe6, #f4a7a7);
-  filter:blur(34px); opacity:.6; animation:glow-turn 12s linear infinite;
+  background:repeating-linear-gradient(90deg, #f4a7a7, #f6c99a 100px, #efe19c 200px, #a9dcb0 300px, #9fc8ea 400px, #c1abe6 500px, #f4a7a7 600px)
+    calc(var(--y, 0) * 1.5px) 0;
+  transform:scale(calc(1 + min(var(--y, 0), 400) / 1000));
+  filter:blur(34px); opacity:.6;
 }
-@keyframes glow-turn{ to{ transform:rotate(360deg); } }
 .hero .kbd img{ display:block; width:min(300px, 80vw); height:auto; }
 @keyframes breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.05); } }
 .eyebrow{ font-size:12px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--amber); margin-bottom:20px; }
@@ -300,7 +302,7 @@ footer .meta a:hover{ color:var(--amber); }
   .asks{ grid-template-columns:1fr; }
 }
 @media (prefers-reduced-motion: reduce){
-  .hero .kbd, .hero .kbd::before{ animation:none; }
+  .hero .kbd{ animation:none; }
   h1 .mode::after{ display:none; }
   .conn-line .pulse{ animation:none; opacity:0; }
   .phone iframe{ transition:none; }
@@ -541,7 +543,7 @@ footer .meta a:hover{ color:var(--amber); }
 </footer>
 
 <script>
-  // Background parallax: feed scroll position to CSS (body::after), once per frame.
+  // Scroll position for CSS (the dot-grid parallax, the hero glow), once per frame.
   (function(){
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     var root = document.documentElement, raf = 0;
