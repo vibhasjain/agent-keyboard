@@ -88,7 +88,7 @@ a{ color:var(--accent); text-decoration:none; }
 .brand{ display:flex; align-items:center; gap:11px; }
 /* the muted still: only the hero moves */
 .brand .mark{ display:block; width:41px; height:auto; }
-.brand b{ font-weight:600; font-size:15px; letter-spacing:.01em; }
+.brand b{ font-weight:600; font-size:15px; letter-spacing:.01em; white-space:nowrap; }
 .top-right{ display:flex; align-items:center; gap:16px; }
 .gh-pill{
   display:inline-flex; align-items:center; gap:7px;
@@ -312,8 +312,6 @@ footer .meta a:hover{ color:var(--ink); }
 
 @media (max-width:720px){
   .grid{ grid-template-columns:1fr; }
-  .top{ justify-content:center; }
-  .top .brand{ display:none; }
   section{ padding:44px 0; }
   .asks{ grid-template-columns:1fr; }
 }
