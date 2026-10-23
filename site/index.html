@@ -78,14 +78,6 @@ body{
   overflow-x:clip; /* hidden on body becomes the viewport's, which phones still let you swipe sideways; clip doesn't */
   background:var(--bg);
 }
-/* a faint dot grid drifts at a quarter of scroll speed (JS sets --y = scrollY) */
-body::after{
-  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
-  background:
-    radial-gradient(circle, rgba(23,23,28,.06) 1px, transparent 1.6px) 0 calc(var(--y, 0) * -.25px) / 28px 28px;
-  -webkit-mask-image:radial-gradient(ellipse 120% 100% at 50% 30%, #000 30%, transparent 100%);
-          mask-image:radial-gradient(ellipse 120% 100% at 50% 30%, #000 30%, transparent 100%);
-}
 ::selection{ background:var(--accent); color:#fff; }
 a{ color:var(--accent); text-decoration:none; }
 
@@ -129,7 +121,7 @@ a{ color:var(--accent); text-decoration:none; }
     linear-gradient(to bottom, #000 calc(58% + var(--open)), transparent calc(76% + var(--open)));
           mask-composite:intersect;
   background:repeating-linear-gradient(90deg, #f4a7a7, #f6c99a 100px, #efe19c 200px, #a9dcb0 300px, #9fc8ea 400px, #c1abe6 500px, #f4a7a7 600px)
-    0 0 / 600px 100%;
+    0 0 / 600px 100% content-box; padding:2px; /* inset off the box edge, which otherwise leaves a faint vertical line */
   transform-origin:50% 72%;
   /* pushed back down by however much the hero padding was trimmed, so the glow stays where it was while the keyboard sits higher */
   transform:translateY(calc(var(--s) * 380px + clamp(130px, 20vw, 220px) - clamp(100px, 14vw, 150px))) scale(calc(1 + var(--s) * 2.2));
@@ -198,7 +190,7 @@ h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; mar
 
 /* ---- section scaffolding ---- */
 section{ padding:58px 0; }
-.why-art{ display:block; width:184px; height:auto; margin:0 auto 26px; image-rendering:pixelated; filter:drop-shadow(0 10px 34px rgba(23,23,28,.14)); }
+.why-art{ display:block; width:184px; height:auto; margin:0 auto 26px; image-rendering:pixelated; }
 @media (min-width:720px){
   .why{ display:flex; align-items:center; gap:52px; max-width:860px; }
   .why .why-art{ width:260px; margin:0; flex:none; }
@@ -214,8 +206,7 @@ h2{ font-weight:500; letter-spacing:-.02em; font-size:clamp(26px,4.2vw,36px); li
    beside the page and the change lands next to the conversation. The iframe is
    laid out at 1024x640 and scaled to the frame (JS sets --s). */
 .screen{ display:none; position:relative; z-index:1; max-width:1070px; margin:36px auto 0; padding:0 22px; }
-.screen-win{ border:1px solid var(--rule-2); border-radius:14px; overflow:hidden; background:var(--bg-2);
-  box-shadow:0 30px 80px rgba(23,23,28,.14); }
+.screen-win{ border:1px solid var(--rule-2); border-radius:14px; overflow:hidden; background:var(--bg-2); }
 .screen-bar{ position:relative; display:flex; align-items:center; gap:7px; height:34px; padding:0 14px;
   background:var(--bg-2); border-bottom:1px solid var(--rule); }
 .screen-bar i{ width:10px; height:10px; border-radius:50%; background:var(--rule-2); }
@@ -256,8 +247,7 @@ h2{ font-weight:500; letter-spacing:-.02em; font-size:clamp(26px,4.2vw,36px); li
 /* the shared-server card — the hero of the diagram */
 .arch-core{ width:100%; max-width:340px; margin:4px 0; text-align:center;
   background:var(--bg-2);
-  border:1px solid var(--accent); border-radius:14px; padding:17px 20px;
-  box-shadow:0 10px 34px rgba(23,23,28,.08); }
+  border:1px solid var(--accent); border-radius:14px; padding:17px 20px; }
 .arch-core-title{ font-size:15px; font-weight:600; color:var(--accent); }
 .arch-core-title .think{ color:var(--violet); font-style:normal; margin-right:2px; }
 .arch-core-sub{ font-size:13px; line-height:1.6; color:var(--ink-3); margin-top:8px; }
@@ -358,7 +348,7 @@ footer .meta a:hover{ color:var(--ink); }
 
 <div class="wrap">
   <div class="top">
-    <div class="brand"><img class="mark" src="typewriter-mark.png" width="41" height="22" alt=""><b>Agent Keyboard</b></div>
+    <div class="brand"><img class="mark" src="agent-keyboard-hello-still.webp" width="41" height="21" alt=""><b>Agent Keyboard</b></div>
     <div class="top-right">
       <a class="gh-pill" href="https://github.com/vibhasjain/agent-keyboard">
         <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
@@ -577,7 +567,7 @@ footer .meta a:hover{ color:var(--ink); }
 </footer>
 
 <script>
-  // Scroll position for CSS (the dot-grid parallax, the hero glow), once per frame.
+  // Scroll position for CSS (the hero glow), once per frame.
   (function(){
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     var root = document.documentElement, raf = 0;
