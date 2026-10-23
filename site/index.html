@@ -41,16 +41,19 @@
 <style>
 :root{
   /* light theme: warm paper, dark ink; the accent is ink too, so the only colour on the page
-     is the keyboard's rainbow (echoed in the headline accents, --rainbow, each stop AA on --bg) */
+     is the keyboard's rainbow (echoed in the headline accents, --rainbow, each stop at least 3:1 on --bg, AA for large text) */
   --bg:#fbf8f3; --bg-2:#ffffff; --bg-3:#f3eee6;
   --ink:#1f1a14; --ink-2:#4f473d; --ink-3:#6b6257;
   --rule:#ebe4d9; --rule-2:#ddd3c4;
   --accent:#17171c; --accent-hover:#2c2c33;
-  --rainbow:linear-gradient(90deg, #c0262d, #a16207, #15803d, #1d4ed8, #7e22ce);
+  --rainbow:linear-gradient(90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff);
   --violet:#6e3fc4; --ok:#1d7a45;
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --wrap:960px;
+}
+@supports (background:linear-gradient(in oklch, red, blue)){
+  :root{ --rainbow:linear-gradient(in oklch 90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff); }
 }
 *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 button, a, summary{
