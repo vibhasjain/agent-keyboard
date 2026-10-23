@@ -46,14 +46,14 @@
   --ink:#17171c; --ink-2:#4a4a52; --ink-3:#66666e;
   --rule:#e7e7e9; --rule-2:#d9d9dc;
   --accent:#17171c; --accent-hover:#2c2c33;
-  --rainbow:linear-gradient(90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff);
+  --rainbow:linear-gradient(90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff, #ff0a54);
   --violet:#6e3fc4; --ok:#1d7a45;
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --wrap:960px;
 }
 @supports (background:linear-gradient(in oklch, red, blue)){
-  :root{ --rainbow:linear-gradient(in oklch 90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff); }
+  :root{ --rainbow:linear-gradient(in oklch 90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff, #ff0a54); }
 }
 *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 button, a, summary{
@@ -148,7 +148,10 @@ h1{
 /* the longest phrase (~9.9em) must fit line two on a phone */
 @media (max-width:439px){ h1{ font-size:min(36px, calc((100vw - 48px) / 10)); } }
 h1 em, h2 em{ font-style:normal; color:var(--accent);
-  background:var(--rainbow); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  background:var(--rainbow) 0 0 / 200% 100%; -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  animation:rainbow-drift 8s linear infinite; }
+/* the gradient loops (ends where it starts), so sliding one tile width is seamless; left to right like the keys */
+@keyframes rainbow-drift{ to{ background-position:-200% 0; } }
 h1 .mode{ white-space:nowrap; }
 h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; margin-left:.04em; vertical-align:-.08em; background:var(--accent); animation:caret 1s steps(1) infinite; }
 @keyframes caret{ 50%{ opacity:0; } }
@@ -314,6 +317,7 @@ footer .meta a:hover{ color:var(--ink); }
   .asks{ grid-template-columns:1fr; }
 }
 @media (prefers-reduced-motion: reduce){
+  h1 em, h2 em{ animation:none; }
   .hero .kbd, .hero .kbd::before{ animation:none; }
   h1 .mode::after{ display:none; }
   .conn-line .pulse{ animation:none; opacity:0; }
