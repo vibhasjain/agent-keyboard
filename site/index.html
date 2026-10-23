@@ -41,19 +41,19 @@
 <style>
 :root{
   /* light theme: pure white, dark ink; the accent is ink too, so the only colour on the page
-     is the keyboard's rainbow (echoed in the headline accents, --rainbow, each stop at least 3:1 on --bg, AA for large text) */
+     is the keyboard's rainbow (echoed in the headline accents, --rainbow, lighter stops, 2.6–3.4:1 on --bg, for display-size text only) */
   --bg:#ffffff; --bg-2:#ffffff; --bg-3:#f2f2f3;
   --ink:#17171c; --ink-2:#4a4a52; --ink-3:#66666e;
   --rule:#e7e7e9; --rule-2:#d9d9dc;
   --accent:#17171c; --accent-hover:#2c2c33;
-  --rainbow:linear-gradient(90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff, #ff0a54);
+  --rainbow:linear-gradient(90deg, #ff4f7f, #ff7a33, #22b45e, #3d93ff, #a36bff, #ff4f7f);
   --violet:#6e3fc4; --ok:#1d7a45;
   --sans:"Inter",-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
   --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --wrap:960px;
 }
 @supports (background:linear-gradient(in oklch, red, blue)){
-  :root{ --rainbow:linear-gradient(in oklch 90deg, #ff0a54, #f04d00, #00a344, #0a7cff, #8f2bff, #ff0a54); }
+  :root{ --rainbow:linear-gradient(in oklch 90deg, #ff4f7f, #ff7a33, #22b45e, #3d93ff, #a36bff, #ff4f7f); }
 }
 *{ box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
 button, a, summary{
@@ -351,8 +351,8 @@ footer .meta a:hover{ color:var(--ink); }
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
   <filter id="neon" x="-25%" y="-100%" width="150%" height="300%">
-    <feGaussianBlur stdDeviation="7"/>
-    <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .3 0" result="b"/>
+    <feGaussianBlur stdDeviation="5"/>
+    <feColorMatrix values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .15 0" result="b"/>
     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
 </svg>
