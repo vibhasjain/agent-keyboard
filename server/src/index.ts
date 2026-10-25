@@ -86,6 +86,9 @@ const STATIC_ORIGINS = new Set<string>();
 for (const s of SITES) {
   STATIC_ORIGINS.add(`https://${s.domain}`);
   STATIC_ORIGINS.add(`https://www.${s.domain}`);
+  if (!s.sandbox && !s.pushBranch) {
+    console.log(`agent-keyboard: sandbox not configured for site "${s.id}" — changes push straight to ${s.branch}; add "sandbox":{} to enable branch previews (see "Sandboxes" in SELF_HOSTING.md)`);
+  }
 }
 for (const o of (process.env.EXTRA_ORIGINS ?? "").split(",")) {
   const trimmed = o.trim();

@@ -136,7 +136,15 @@ async function doEnsureCheckout(site: Site): Promise<string> {
     // A half-written clone can still have a .git, which the existsSync check above
     // would then take for a good checkout. Clear it so the retry actually retries.
     await rm(dir, { recursive: true, force: true }).catch(() => {});
-    throw scrubToken(e);
+    const err = scrubToken(e) as { message?: string };
+    // GitHub answers a token that can't see the repo with 403 / "not found" /
+    // auth failed, none of which say what to fix. Name it (this rides to the bar too).
+    if (/\b403\b|not found|authentication failed|could not read username|write access/i.test(err?.message ?? "")) {
+      const hint = `GH_TOKEN cannot access ${site.repo} — give the token this repo (Repository access → Only select repositories) with Contents: Read and write`;
+      console.error(`agent-keyboard: ${hint}`);
+      if (err) err.message = `${hint}\n${err.message}`;
+    }
+    throw err;
   }
   await git(dir, ["config", "user.name", GIT_USER_NAME]);
   await git(dir, ["config", "user.email", GIT_USER_EMAIL]);
