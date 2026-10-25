@@ -86,10 +86,15 @@ The server clones and pushes your site repos with a fine-grained personal access
 3. **Permissions → Repository permissions:**
    - **Contents:** Read and write (clone, commit, push).
    - **Metadata:** Read-only (auto-selected).
-   - **Pull requests:** Read and write — only if you'll use [sandboxes](#sandboxes-preview-a-change-before-it-goes-live)
-     (publishing one opens and merges a PR).
+   - **Pull requests:** Read and write — needed for [sandboxes](#sandboxes-preview-a-change-before-it-goes-live)
+     (publishing one opens and merges a PR). Grant it unless you'll never use them.
    - Leave **everything else off** — in particular do **not** grant **Workflows**.
 4. Generate; copy the token → `GH_TOKEN`.
+
+If the repo belongs to an organization, the org may need to approve fine-grained tokens first (org
+**Settings → Personal access tokens**); until it does, clones fail with `403: Write access to repository
+not granted`. A classic token with the `repo` scope also works, but it reaches every repo you can, so
+prefer the fine-grained one.
 
 Why no Workflows permission: without it, GitHub rejects any push that adds or edits files under
 `.github/workflows/`. That caps the agent's blast radius — even with permissions bypassed in the VM, it
@@ -144,8 +149,11 @@ Everything runs in one small Fly app with one volume.
      CLAUDE_CODE_OAUTH_TOKEN="sk-ant-oat..." \
      OPENAI_API_KEY="sk-..." \
      AK_INTERNAL_SECRET="$(openssl rand -hex 32)" \
-     SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
+     SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com","sandbox":{"preview":"https://{branch}--YOUR-NETLIFY-SITE.netlify.app"}}]'
    ```
+   The `sandbox` entry lets the agent build bigger changes on a preview branch before they go live.
+   Swap in your host's preview URL pattern, or drop it to push every change straight to `branch`. See
+   [Sandboxes](#sandboxes-preview-a-change-before-it-goes-live) for the pattern and the one host setting it needs.
    `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. `AK_INTERNAL_SECRET` is any random
    string the agent uses to call its own server on 127.0.0.1; without it, sandboxes and scheduled `cron`
    runs fail with "sign in required". The built-in image-generation
@@ -333,14 +341,19 @@ Setup requirements, once:
 Revoke someone by removing their email from the JSON file (`fly ssh console`), or deleting the user
 in Supabase.
 
-### Branded invite emails (optional, free)
+### Email: branded invites and @mentions (optional, free)
+
+Invites work without this. @mentions don't: emailing a teammate you @mention in the bar needs
+`RESEND_API_KEY` (and `EMAIL_FROM`, a sender on your verified Resend domain); without it, mentions
+fail with "RESEND_API_KEY is not set".
 
 By default Supabase sends invites from its own shared address with a generic template (and a
 couple-per-hour rate limit). To send branded emails from your own domain instead: create a free
 [Resend](https://resend.com) account, verify your domain (3 DNS records), plug Resend's SMTP
 credentials into Supabase (Project Settings → Auth → SMTP), and paste the templates from
 [`server/email-templates/`](./server/email-templates) into Auth → Email Templates. Details in that
-directory's README. No code changes — the provision-user flow just starts sending branded emails.
+directory's README. Then `fly secrets set RESEND_API_KEY=re_... EMAIL_FROM="Agent Keyboard <invites@yourdomain.com>"`
+and the provision-user flow and @mentions send branded emails.
 
 ---
 
