@@ -88,6 +88,10 @@ for (const s of SITES) {
   STATIC_ORIGINS.add(`https://www.${s.domain}`);
   if (!s.sandbox && !s.pushBranch) {
     console.log(`agent-keyboard: sandbox not configured for site "${s.id}" — changes push straight to ${s.branch}; add "sandbox":{} to enable branch previews (see "Sandboxes" in SELF_HOSTING.md)`);
+  } else if (s.sandbox && !process.env.AK_INTERNAL_SECRET) {
+    console.warn(`agent-keyboard: site "${s.id}" has sandbox configured but AK_INTERNAL_SECRET is unset — the agent can't create sandboxes ("sign in required"); set it to a random string (openssl rand -hex 32)`);
+  } else if (s.sandbox && s.guest) {
+    console.warn(`agent-keyboard: site "${s.id}" is guest:true, so its agent runs without AK_INTERNAL_SECRET and can't create sandboxes; drop guest or sandbox`);
   }
 }
 for (const o of (process.env.EXTRA_ORIGINS ?? "").split(",")) {
