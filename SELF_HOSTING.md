@@ -86,6 +86,8 @@ The server clones and pushes your site repos with a fine-grained personal access
 3. **Permissions → Repository permissions:**
    - **Contents:** Read and write (clone, commit, push).
    - **Metadata:** Read-only (auto-selected).
+   - **Pull requests:** Read and write — only if you'll use [sandboxes](#sandboxes-preview-a-change-before-it-goes-live)
+     (publishing one opens and merges a PR).
    - Leave **everything else off** — in particular do **not** grant **Workflows**.
 4. Generate; copy the token → `GH_TOKEN`.
 
@@ -365,6 +367,38 @@ the PR is on you.
 
 ---
 
+## Sandboxes: preview a change before it goes live
+
+Sandboxes are off until you turn them on per site. With them on, the agent offers to build a bigger
+change in a **sandbox**: it pushes a branch `ak/<slug>`, your host builds a preview of it, and the bar
+moves you to that preview to keep working there. Nothing reaches `branch` until you ask the sandbox's
+agent to publish (it squashes the work into one PR and merges it).
+
+1. **Make your host build every branch.** On Netlify: Site configuration → Build & deploy → Branches
+   and deploy contexts → **Branch deploys: All** ("Deploy only the production branch" means sandboxes
+   never get a preview). Deploy Previews don't matter here.
+2. **Add `sandbox` to the site's `SITES` entry**, with your host's preview URL pattern. `{branch}` is
+   the sandbox branch with `/` turned into `-` (`ak/new-hero` → `ak-new-hero`):
+
+   ```jsonc
+   // Netlify: "mysite" is your Netlify site name — the part before .netlify.app in the site's
+   // default URL (Site configuration → General → Site details).
+   { "id": "blog", "repo": "https://github.com/you/blog.git", "branch": "main",
+     "domain": "blog.example.com", "sandbox": { "preview": "https://{branch}--mysite.netlify.app" } }
+   ```
+
+   If your host serves branches at subdomains of your own domain (`ak-new-hero.blog.example.com`),
+   `"sandbox": {}` is enough.
+3. **Give `GH_TOKEN` Pull requests: Read and write** (step 3), or publishing fails.
+
+Changing `SITES` restarts the server. At boot it logs `sandbox not configured for site "<id>"` for every
+site that has neither `sandbox` nor `pushBranch`, so you can see which ones still push straight to live.
+Once it's on, the `sandbox` harness setting picks how it's used — ask the bar: `"offer"` (the default:
+offer one for bigger changes), `"always"` (every change goes through a sandbox, so nothing reaches the
+live branch without review), or `"off"`.
+
+---
+
 ## 9. Troubleshooting
 
 | Symptom | Cause | Fix |
@@ -374,6 +408,9 @@ the PR is on you.
 | Bar loads but requests are CORS-blocked | The page's domain doesn't match the site's `domain` in `SITES` | Fix the `domain`, or add the page's origin to `EXTRA_ORIGINS`. |
 | 401 on login | Wrong email/password, or the user doesn't exist, or signups left on and you signed up a different address | Confirm the user in Supabase; the login email must equal `ALLOWED_EMAIL`. |
 | Tapping the mic goes *connecting* then errors | No `OPENAI_API_KEY`, so the server refuses to mint voice tokens | Set it and redeploy. (The mic button is always shown; only token minting is gated.) |
+| First job fails with "GH_TOKEN cannot access …" | The token doesn't include that repo, or lacks Contents write | Edit the token: Repository access → Only select repositories → add the repo; Contents: Read and write. |
+| No "Build in a sandbox" offer, or the preview never loads | `sandbox` missing from the site's `SITES` entry, or the host doesn't build branch deploys | See [Sandboxes](#sandboxes-preview-a-change-before-it-goes-live): Netlify Branch deploys → All, and add `sandbox`. |
+| Publishing a sandbox fails | `GH_TOKEN` lacks Pull requests: Read and write | Grant it on the token (no redeploy needed if the token value is unchanged). |
 | Job runs but push is rejected | `GH_TOKEN` lacks the repo, lacks Contents write, or the push touched `.github/workflows/` | Add the repo to the token's selection / grant Contents write. Workflow files are blocked by design. |
 | Job history / re-attach doesn't persist across restarts | No `SUPABASE_SERVICE_KEY` | Set the service_role key and redeploy; re-run `server/sql/jobs.sql` if you skipped it. |
 | Everything works but the agent errors immediately | `CLAUDE_CODE_OAUTH_TOKEN` missing or expired | Re-run `claude setup-token` and update the secret. |

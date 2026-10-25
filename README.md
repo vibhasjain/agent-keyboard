@@ -128,7 +128,7 @@ listing any missing *required* var.
 | `SUPABASE_ANON_KEY` | Publishable anon key. Public by design; injected into the widget. |
 | `ALLOWED_EMAIL` | The email(s) allowed to drive the agent — one, or a comma-separated few (case-insensitive). |
 | `SITES` | One-line JSON array allow-list of repos the agent may edit (see below). |
-| `GH_TOKEN` | Fine-grained PAT: only the `SITES` repos, Contents read/write + Metadata, no workflows. |
+| `GH_TOKEN` | Fine-grained PAT: only the `SITES` repos, Contents read/write + Metadata (+ Pull requests read/write for sandboxes), no workflows. |
 
 **Optional**
 
@@ -174,6 +174,10 @@ SITES=[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","do
   `branch`. Use it when you'd rather review changes than deploy them live: nothing redeploys until you
   merge the branch yourself. A `{ts}` placeholder becomes a UTC timestamp, so `"agent-keyboard/{ts}"`
   gives each change its own branch. Must differ from `branch`. See [SELF_HOSTING.md](./SELF_HOSTING.md#a-review-step-instead-of-straight-to-main).
+- `sandbox` *(optional)* — turn on sandboxes: the agent can build a bigger change on its own `ak/<slug>`
+  branch with a live preview, and publish it to `branch` only when asked. `{}` for previews at branch
+  subdomains of `domain`, or `{"preview":"https://{branch}--mysite.netlify.app"}` for your host's pattern.
+  Your host must build every branch. See [SELF_HOSTING.md](./SELF_HOSTING.md#sandboxes-preview-a-change-before-it-goes-live).
 
 A pretty-printed multi-site example lives in [`server/sites.example.json`](./server/sites.example.json).
 
