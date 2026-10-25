@@ -138,6 +138,7 @@ listing any missing *required* var.
 | `ALLOWED_USER_ID` | Extra pin to specific Supabase user UUID(s), comma-separated. |
 | `SUPABASE_SERVICE_KEY` | Enables durable job history / re-attach. Works without it; boot warns. |
 | `OPENAI_API_KEY` | Voice dictation (ephemeral realtime tokens minted server-side). Absent = the mic button errors with "voice not configured". |
+| `AK_INTERNAL_SECRET` | Any random string (`openssl rand -hex 32`). The agent uses it to call its own server on 127.0.0.1 — needed for sandboxes and scheduled `cron`. Absent = both fail with "sign in required". Not passed to `guest` sites' agents. |
 | `TS_AUTHKEY` | Tailscale auth key (reusable, tagged, pre-approved). With `TS_EXIT_NODE` (fly.toml), boot starts a userspace `tailscaled` pinned to that exit node and exposes SOCKS5 `127.0.0.1:1055` — a residential egress a site's LinkedIn browser can opt into. Absent = nothing starts. |
 | `AK_PUBLIC_URL` | This server's public base URL; invite emails from user provisioning land on `$AK_PUBLIC_URL/welcome`. |
 | `FLY_API_TOKEN` | App-scoped Fly deploy token (`fly tokens create deploy -a <app>`). Enables the `self-ops` skill — the agent can read its own logs/status and set secrets. |

@@ -143,9 +143,12 @@ Everything runs in one small Fly app with one volume.
      GH_TOKEN="github_pat_..." \
      CLAUDE_CODE_OAUTH_TOKEN="sk-ant-oat..." \
      OPENAI_API_KEY="sk-..." \
+     AK_INTERNAL_SECRET="$(openssl rand -hex 32)" \
      SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'
    ```
-   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. The built-in image-generation
+   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. `AK_INTERNAL_SECRET` is any random
+   string the agent uses to call its own server on 127.0.0.1; without it, sandboxes and scheduled `cron`
+   runs fail with "sign in required". The built-in image-generation
    skill uses Codex's image tool, so it works once Codex on the box is logged in to ChatGPT
    (`fly ssh console` → `HOME=/data codex login --device-auth`). Non-secret tuning vars (`CLAUDE_MODEL`, `AK_PUBLIC_URL`, `PORT`, …)
    can go in the `[env]` block of `server/fly.toml` instead — set `AK_PUBLIC_URL` to
@@ -390,6 +393,9 @@ agent to publish (it squashes the work into one PR and merges it).
    If your host serves branches at subdomains of your own domain (`ak-new-hero.blog.example.com`),
    `"sandbox": {}` is enough.
 3. **Give `GH_TOKEN` Pull requests: Read and write** (step 3), or publishing fails.
+4. **Set `AK_INTERNAL_SECRET`** (step 5), or creating a sandbox fails with "sign in required". Sites
+   marked `"guest": true` run their agent without it (it's one of the owner's personal secrets), so
+   sandboxes don't work on guest sites.
 
 Changing `SITES` restarts the server. At boot it logs `sandbox not configured for site "<id>"` for every
 site that has neither `sandbox` nor `pushBranch`, so you can see which ones still push straight to live.
@@ -418,6 +424,7 @@ live branch without review), or `"off"`.
 | Agent stuck in plan mode / weird settings | Its `settings.json` got wedged | Ask it to "go back to dangerously bypass permissions" (works from plan mode), or `fly ssh console -C "rm /data/agent-keyboard/sites/<id>/settings.json"`. |
 | Invite email link lands on a page with no bar | The invited site domain isn't in Supabase's allowed redirect URLs (so it fell back to the Site URL) | Add the site's domain to Auth → URL Configuration → Redirect URLs. The bar on any of your sites can still complete the flow. |
 | Invited user gets 401 after setting a password | `ALLOWED_USER_ID` is set — it pins auth to specific user ids and blocks provisioned users | `fly secrets unset ALLOWED_USER_ID` (email allow-list stays the gate). |
+| Agent can't create a sandbox, or `cron` never runs ("sign in required" / boot: "AK_INTERNAL_SECRET unset") | `AK_INTERNAL_SECRET` is unset, or the site is `"guest": true` (its agent never gets it) | `fly secrets set AK_INTERNAL_SECRET=$(openssl rand -hex 32)`; drop `guest` on sites that need sandboxes. |
 | Provisioned user still gets 401 | `ALLOWED_USER_ID` is set (pins auth to specific ids) | Unset it, or add the new user's Supabase UUID. |
 
 ---
