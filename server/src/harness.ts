@@ -14,6 +14,7 @@
 import { join } from "node:path";
 import { DATA_DIR, readDataFile, writeDataFile } from "./checkouts.js";
 import { slugifyPage } from "./sites.js";
+import { parentId } from "./sandboxes.js";
 
 export type PermissionMode = "bypassPermissions" | "plan" | "acceptEdits" | "default";
 
@@ -396,6 +397,16 @@ function forPage(settings: HarnessSettings, pageSlug: string): HarnessSettings {
 /** Load + validate a site's harness settings. No file → today's exact defaults.
  *  `pageSlug` (from pageSlugFor) selects a per-page override when one is set. */
 export async function loadHarness(siteId: string, pageSlug = ""): Promise<ResolvedHarness> {
+  const h = await loadOwnHarness(siteId, pageSlug);
+  // A sandbox inherits its live site's "env" (e.g. SUPABASE_ACCESS_TOKEN, to run
+  // migrations at publish); its own env wins. Same people, same secrets.
+  const parent = parentId(siteId);
+  const inherited = parent !== siteId ? (await loadOwnHarness(parent)).env : {};
+  if (Object.keys(inherited).length) h.settings.env = h.env = { ...inherited, ...h.env };
+  return h;
+}
+
+async function loadOwnHarness(siteId: string, pageSlug = ""): Promise<ResolvedHarness> {
   const warnings: string[] = [];
   const raw = await readDataFile(siteRel(siteId, "settings.json"));
   if (!raw) return resolve({}, warnings);
