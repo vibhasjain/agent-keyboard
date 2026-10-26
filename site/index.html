@@ -160,6 +160,7 @@ h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; mar
   font-family:var(--mono); font-size:13px; color:var(--warm); white-space:nowrap; }
 .install code::-webkit-scrollbar{ display:none; }
 .install-note{ margin:12px auto 0; text-align:center; font-size:12.5px; color:var(--ink-3); }
+.install-note code{ font-family:var(--mono); font-size:.95em; color:var(--ink-2); }
 .k{ color:var(--violet); } .a{ color:var(--amber); } .s{ color:var(--ok); } .c{ color:var(--ink-3); }
 .copybtn{
   margin-left:auto; flex:none; font-size:12px; font-weight:500; cursor:pointer;
@@ -367,7 +368,7 @@ footer .meta a:hover{ color:var(--amber); }
       <code><span class="a">&lt;script</span> <span class="k">src</span>=<span class="s">"https://agent-keyboard.fly.dev/widget.js"</span> <span class="k">data-site</span>=<span class="s">"halo"</span> <span class="k">defer</span><span class="a">&gt;&lt;/script&gt;</span></code>
       <button class="copybtn" data-copy="&lt;script src=&quot;https://agent-keyboard.fly.dev/widget.js&quot; data-site=&quot;halo&quot; defer&gt;&lt;/script&gt;">copy</button>
     </div>
-    <p class="install-note">That's the whole install. Open source · self-hosted · MIT.</p>
+    <p class="install-note">Self-hosted: clone the repo and run <code>claude</code>, and it walks you through setup (about an hour). Open source · MIT.</p>
   </div>
 </div>
 
@@ -499,9 +500,9 @@ footer .meta a:hover{ color:var(--amber); }
       </details>
       <details class="qa">
         <summary><h3>How long does setup take?</h3></summary>
-        <p>Minutes. Drop in the script tag and allow-list your repo — you can even ask the agent to wire it up
-          for you. Standing up your own server (or forking this one) is the longer part, and it's a short,
-          well-documented path.</p>
+        <p>About an hour, mostly waiting on builds. You run your own server on Fly.io, with Supabase for
+          sign-in and a GitHub token to push. Clone the repo and run <code>claude</code> in it: the bundled
+          setup skill walks you through each step and checks it works. The script tag is the last step.</p>
       </details>
       <details class="qa">
         <summary><h3>Can I keep my existing workflow?</h3></summary>

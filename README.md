@@ -88,6 +88,10 @@ args: process.env.AK_CDP_PORT ? ['--remote-debugging-port=' + process.env.AK_CDP
 
 Full walkthrough with time estimates in **[SELF_HOSTING.md](./SELF_HOSTING.md)**.
 
+**The fast way:** clone the repo, run `claude` in it, and ask it to *"set up Agent Keyboard"*. The
+bundled `self-host` skill (`.claude/skills/self-host/`) walks you through every step below, runs the
+commands with you, and checks each one before moving on. Plan on about an hour.
+
 **You'll need accounts with:**
 
 - [GitHub](https://github.com) — holds your site repos and issues the push token. (You have this.)

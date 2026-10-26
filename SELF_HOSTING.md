@@ -6,6 +6,10 @@ that edits one of their apps in **under an hour**. Most of that time is waiting 
 You will run your own server (on Fly.io) and your own Supabase project. The bar then edits repos you
 own and pushes to them; wherever those repos deploy from (Netlify, Vercel, GitHub Pages, …) redeploys.
 
+**The fast way:** clone the repo, run `claude` in it, and ask it to *"set up Agent Keyboard"*. The
+bundled `self-host` skill (`.claude/skills/self-host/`) walks you through every step below, runs the
+commands with you, and checks each one before moving on. Plan on about an hour.
+
 **What you need to sign up for**
 
 Everything except the Claude subscription has a usable free tier. The Claude subscription is the one
