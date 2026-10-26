@@ -21,6 +21,9 @@ real cost, and it's what actually does the editing.
   prescribes Fly and the committed config targets it; a Dockerfile exists if you're determined to run
   elsewhere, but you're on your own there. Fly is usage-billed — see the cost note in
   [step 5](#5-flyio-deploy-the-server-15-min).
+- [ ] **[Resend](https://resend.com)**, if anyone besides you will use the bar. Supabase's built-in
+  mailer only sends about 2 invites an hour, and @mentions need Resend. Free tier is fine; see
+  [Email](#email-set-up-resend-recommended-for-more-than-one-user).
 - [ ] **An app host you already use** — [Vercel](https://vercel.com),
   [Netlify](https://netlify.com), [Fly.io](https://fly.io), [Cloudflare Pages](https://pages.cloudflare.com), or
   similar: whatever redeploys your repo when the agent pushes. **Agent Keyboard does not host your
@@ -154,7 +157,7 @@ Everything runs in one small Fly app with one volume.
    The `sandbox` entry lets the agent *offer* a sandbox (a preview branch) for bigger changes; small ones still go straight live, and you pick each time.
    Swap in your host's preview URL pattern, or drop it to push every change straight to `branch`. See
    [Sandboxes](#sandboxes-preview-a-change-before-it-goes-live) for the pattern and the one host setting it needs.
-   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. `AK_INTERNAL_SECRET` is any random
+   `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. If you'll invite other people, add `RESEND_API_KEY` and `EMAIL_FROM` too (see [Email](#email-set-up-resend-recommended-for-more-than-one-user)). `AK_INTERNAL_SECRET` is any random
    string the agent uses to call its own server on 127.0.0.1; without it, sandboxes and scheduled `cron`
    runs fail with "sign in required". The built-in image-generation
    skill uses Codex's image tool, so it works once Codex on the box is logged in to ChatGPT
@@ -341,14 +344,14 @@ Setup requirements, once:
 Revoke someone by removing their email from the JSON file (`fly ssh console`), or deleting the user
 in Supabase.
 
-### Email: branded invites and @mentions (optional, free)
+### Email: set up Resend (recommended for more than one user)
 
-Invites work without this. @mentions don't: emailing a teammate you @mention in the bar needs
-`RESEND_API_KEY` (and `EMAIL_FROM`, a sender on your verified Resend domain); without it, mentions
-fail with "RESEND_API_KEY is not set".
+Without Resend, invites go through Supabase's built-in mailer, which on the free tier is limited to
+about 2 emails an hour and sends from a shared address with a generic template. That's fine for
+inviting yourself, but too slow for a team. @mentions need Resend outright: without `RESEND_API_KEY`
+they fail with "RESEND_API_KEY is not set". If you'll invite anyone, set Resend up from the start.
 
-By default Supabase sends invites from its own shared address with a generic template (and a
-couple-per-hour rate limit). To send branded emails from your own domain instead: create a free
+Create a free
 [Resend](https://resend.com) account, verify your domain (3 DNS records), plug Resend's SMTP
 credentials into Supabase (Project Settings → Auth → SMTP), and paste the templates from
 [`server/email-templates/`](./server/email-templates) into Auth → Email Templates. Details in that
