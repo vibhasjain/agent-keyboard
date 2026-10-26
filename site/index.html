@@ -114,18 +114,18 @@ a{ color:var(--accent); text-decoration:none; }
   --s:(min(var(--y, 0), 400) + 100) / 500; /* starts a fifth of the way open, so the edges are already soft at rest */
   --open:calc(var(--s) * 40%);
   content:""; position:absolute; z-index:-1; inset:-280px -240px -60px;
-  -webkit-mask-image:radial-gradient(closest-side, #000 8%, rgba(0,0,0,.45) 50%, transparent),
+  -webkit-mask-image:radial-gradient(closest-side, #000 10%, rgba(0,0,0,.75) 30%, rgba(0,0,0,.45) 50%, rgba(0,0,0,.2) 70%, rgba(0,0,0,.06) 88%, transparent),
     linear-gradient(to bottom, #000 calc(58% + var(--open)), transparent calc(76% + var(--open)));
   -webkit-mask-composite:source-in;
-          mask-image:radial-gradient(closest-side, #000 8%, rgba(0,0,0,.45) 50%, transparent),
+          mask-image:radial-gradient(closest-side, #000 10%, rgba(0,0,0,.75) 30%, rgba(0,0,0,.45) 50%, rgba(0,0,0,.2) 70%, rgba(0,0,0,.06) 88%, transparent),
     linear-gradient(to bottom, #000 calc(58% + var(--open)), transparent calc(76% + var(--open)));
           mask-composite:intersect;
-  background:repeating-linear-gradient(90deg, #f4a7a7, #f6c99a 100px, #efe19c 200px, #a9dcb0 300px, #9fc8ea 400px, #c1abe6 500px, #f4a7a7 600px)
+  background:repeating-linear-gradient(90deg, #ff8fa3, #ffb877 100px, #ffe27a 200px, #7fe3b0 300px, #7cc4ff 400px, #b79cff 500px, #ff8fa3 600px)
     0 0 / 600px 100% content-box; padding:2px; /* inset off the box edge, which otherwise leaves a faint vertical line */
   transform-origin:50% 72%;
   /* pushed back down by however much the hero padding was trimmed, so the glow stays where it was while the keyboard sits higher */
   transform:translateY(calc(var(--s) * 380px + clamp(130px, 20vw, 220px) - clamp(100px, 14vw, 150px))) scale(calc(1 + var(--s) * 2.2));
-  opacity:calc(.9 - var(--s) * .45); animation:glow-drift 8s linear infinite;
+  opacity:calc(.55 - var(--s) * .25); filter:blur(36px); animation:glow-drift 8s linear infinite;
 }
 /* the .kbd is positioned (and transformed), so the hero text after it must be positioned too to paint above the glow */
 .hero > :not(.kbd){ position:relative; }
