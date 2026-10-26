@@ -151,7 +151,7 @@ Everything runs in one small Fly app with one volume.
      AK_INTERNAL_SECRET="$(openssl rand -hex 32)" \
      SITES='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com","sandbox":{"preview":"https://{branch}--YOUR-NETLIFY-SITE.netlify.app"}}]'
    ```
-   The `sandbox` entry lets the agent build bigger changes on a preview branch before they go live.
+   The `sandbox` entry lets the agent *offer* a sandbox (a preview branch) for bigger changes; small ones still go straight live, and you pick each time.
    Swap in your host's preview URL pattern, or drop it to push every change straight to `branch`. See
    [Sandboxes](#sandboxes-preview-a-change-before-it-goes-live) for the pattern and the one host setting it needs.
    `OPENAI_API_KEY` is optional (voice); omit it to leave voice off. `AK_INTERNAL_SECRET` is any random
