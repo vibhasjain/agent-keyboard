@@ -32,19 +32,20 @@ the owner sees "interrupted". So:
 "self-ops isn't enabled on this deployment — the owner needs to set the
 FLY_API_TOKEN secret."
 
-Always pass the app explicitly: `-a agent-keyboard` (or read `$FLY_APP_NAME`).
+Always pass the app explicitly: `-a "$FLY_APP_NAME"` (Fly sets it; on the original
+instance it's `agent-keyboard`).
 
 ## Common operations
 
 ```bash
-fly status -a agent-keyboard                  # machine state
-fly logs -a agent-keyboard --no-tail | tail -50   # recent logs (incl. your own boot)
-fly secrets list -a agent-keyboard            # names + digests only, never values
-fly secrets set NAME="value" -a agent-keyboard    # ⚠ restarts this machine (see above)
+fly status -a "$FLY_APP_NAME"                  # machine state
+fly logs -a "$FLY_APP_NAME" --no-tail | tail -50   # recent logs (incl. your own boot)
+fly secrets list -a "$FLY_APP_NAME"            # names + digests only, never values
+fly secrets set NAME="value" -a "$FLY_APP_NAME"    # ⚠ restarts this machine (see above)
 ```
 
 Deploy status after you push: check the Actions run on the repo
-(`gh run list --repo vibhasjain/agent-keyboard --limit 1` — gh is installed
+(`gh run list --limit 1` from your checkout — gh is installed
 and GH_TOKEN is in your env).
 
 ## Updating your own Claude Code CLI
@@ -64,6 +65,20 @@ Dockerfile is NOT under `.github/workflows/`, so the GH_TOKEN restriction
 doesn't block it). The restart lands minutes later, after your turn — so tell
 the user "it'll update on the next deploy, ~2-3 min." Pin a specific version,
 never the floating `latest` tag, so builds stay reproducible.
+
+## Updating Agent Keyboard to latest (self-hosted forks)
+
+On a fork ("update Agent Keyboard to latest"), merge upstream and push; CI deploys it:
+
+```bash
+git pull --no-rebase https://github.com/vibhasjain/agent-keyboard.git main
+git push origin main     # the fork's CI (FLY_API_TOKEN repo secret) deploys ~2-3 min later
+```
+
+Resolve conflicts in favour of upstream, except keep the fork's `app =` in `server/fly.toml`. If the
+push is rejected because upstream changed `.github/workflows/`, that's the Workflows limit below: the
+owner runs `gh repo sync` or merges once on github.com. No CI run after the push means the repo secret
+is missing: say so (see `SELF_HOSTING.md` step 6) rather than `fly deploy` from inside your own turn.
 
 ## Where your own state lives (the /data volume)
 
