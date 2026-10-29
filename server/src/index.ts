@@ -1295,6 +1295,20 @@ app.listen(port, () => {
   void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
   void seedCodexConfig().catch((e) => console.error("[boot] codex config seed failed", e));
+  // "Update yourself" pushes to the fork: warn now, not mid-request, if GH_TOKEN can't.
+  // The receive-pack handshake is 200 only with push access, and writes nothing.
+  const fork = process.env.AK_FORK_REPO;
+  if (fork) {
+    void fetch(`https://github.com/${fork}.git/info/refs?service=git-receive-pack`, {
+      headers: { Authorization: `Basic ${Buffer.from(`x-access-token:${process.env.GH_TOKEN ?? ""}`).toString("base64")}` },
+    })
+      .then((r) => {
+        if (!r.ok) console.warn(`agent-keyboard: GH_TOKEN can't push AK_FORK_REPO ${fork} (HTTP ${r.status}), so "update yourself" will fail — add the fork to the token (Repository access, Contents: Read and write)`);
+      })
+      .catch((e) => console.warn(`agent-keyboard: couldn't check push access to ${fork}`, String(e)));
+  } else {
+    console.log(`agent-keyboard: AK_FORK_REPO unset — "update yourself" is off; set it to your fork (owner/agent-keyboard) to enable it`);
+  }
   startTailscale();
   startUsagePush();
 });

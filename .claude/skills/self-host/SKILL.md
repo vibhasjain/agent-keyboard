@@ -86,7 +86,8 @@ Verify: `curl -sS "https://$REF.supabase.co/auth/v1/settings" -H "apikey: $ANON_
 
 Send them to github.com/settings/personal-access-tokens/new with exactly:
 - Repository access → **Only select repositories** → the site repo(s) **and their
-  `agent-keyboard` fork** (step 7b lets the server update itself from it)
+  `agent-keyboard` fork** (step 7b: the server updates itself by pushing to it, so without the fork
+  "update yourself" fails with a 403)
 - **Contents: Read and write**, **Metadata: Read-only** (auto), **Pull requests: Read and write**
   (sandbox publishing opens a PR)
 - Nothing else — **no Workflows**, on purpose
@@ -154,27 +155,26 @@ they want their fork to carry it.
 
 ## 7b. Self-updates (don't skip)
 
-So that "update Agent Keyboard to latest" works from the bar later, the server needs its own source as
-a site plus a deploy token. Without this, `self-ops` is off and every new version means a terminal.
+So that "update Agent Keyboard to latest" works from any site's bar later, the server needs to know its
+own fork and to be able to deploy it. Without this, every new version means a terminal.
 
 1. Their clone must be a GitHub fork they own (`gh repo fork --remote` if it's a plain clone of
    upstream), with the `fly.toml` app rename committed and pushed to its `main`.
-2. Add it to `SITES` as a second entry. The `domain` is where its bar lives: their site's domain is
-   fine, since the bar picks the site by `data-site`, not by domain:
-   `{"id":"ak","repo":"https://github.com/OWNER/agent-keyboard.git","branch":"main","domain":"DOMAIN"}`
+2. `AK_FORK_REPO=OWNER/agent-keyboard` (a Fly secret). Every site's agent may then update that fork.
+   `GH_TOKEN` must reach it (step 3): re-run the 200/403 check against the fork.
 3. One deploy token, used twice: as a Fly secret (self-ops) and as the fork's repo secret (the CI
-   autodeploy in `SELF_HOSTING.md` step 6, which ships the update after the agent pushes). GitHub
-   leaves Actions off on new forks: have them enable it in the fork's Actions tab.
+   autodeploy in `SELF_HOSTING.md` step 6, which ships the update after the agent pushes).
+4. GitHub leaves Actions **off** on forks until the owner turns them on once. Have them open
+   `https://github.com/OWNER/agent-keyboard/actions` and click **I understand my workflows, go ahead and
+   enable them**. Until then a push deploys nothing.
 
 ```bash
 FLY_TOKEN=$(fly tokens create deploy -a APP)
-fly secrets set -a APP FLY_API_TOKEN="$FLY_TOKEN" SITES="$SITES"
+fly secrets set -a APP FLY_API_TOKEN="$FLY_TOKEN" AK_FORK_REPO="OWNER/agent-keyboard"
 gh secret set FLY_API_TOKEN --repo OWNER/agent-keyboard --body "$FLY_TOKEN"
 ```
 
-`FLY_APP_NAME` doesn't need setting; Fly sets it on every machine. In step 8 the owner adds a second
-tag with `data-site="ak"` on one page of their site (an unlinked `/ak.html` is fine). That bar edits
-and updates the server.
+`FLY_APP_NAME` doesn't need setting; Fly sets it on every machine.
 
 ## 8. Verify and hand over
 
@@ -191,7 +191,6 @@ the id, and the page must be served from `domain`):
 <script src="https://APP.fly.dev/widget.js" data-site="ID" defer></script>
 ```
 
-Offer to add it to their site's repo for them if it's cloned locally, plus the `data-site="ak"` page
-from step 7b. Finish with step 8 ("First run"):
+Offer to add it to their site's repo for them if it's cloned locally. Finish with step 8 ("First run"):
 sign in with the email and password from step 2, and ask for something small. Mention the optional CI
 autodeploy (step 6) and delete `~/.agent-keyboard-setup.env`.

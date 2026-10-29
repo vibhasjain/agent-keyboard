@@ -101,7 +101,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   `SITES`, `GH_TOKEN` (push); optional — `CLAUDE_CODE_OAUTH_TOKEN` (read by the CLI, not the server),
   `SUPABASE_SERVICE_KEY` (durable jobs + user provisioning), `ALLOWED_USER_ID`, `OPENAI_API_KEY`
   (voice), `AK_PUBLIC_URL` (invite `/welcome` redirect),
-  `EXTRA_ORIGINS` (extra CORS), `TS_AUTHKEY` (+ `TS_EXIT_NODE` in fly.toml — see below). CI uses the repo secret `FLY_API_TOKEN`.
+  `EXTRA_ORIGINS` (extra CORS), `AK_FORK_REPO` (a fork's own repo, enables "update yourself"), `TS_AUTHKEY` (+ `TS_EXIT_NODE` in fly.toml — see below). CI uses the repo secret `FLY_API_TOKEN`.
 - **LinkedIn egress** — LinkedIn blocks the Fly datacenter IP (and every proxy tried), so
   `server/tailscale-up.sh` (started at boot by `index.ts`) runs a dedicated *userspace*
   `tailscaled` on the volume (`/data/tailscale-linkedin`) pinned to the owner's office iPad as a
