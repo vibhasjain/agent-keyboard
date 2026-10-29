@@ -1050,6 +1050,15 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     render()
   }
 
+  // Back from a locked phone / background tab: a turn may have finished (and its
+  // session closed) unseen — the replayed close drops the live block, so refetch
+  // the tail now (or on the next open) or that last round vanishes.
+  on(document, 'visibilitychange', () => {
+    if (document.hidden || isGuestDemo()) return
+    lastLoadTurnCount = -1
+    if (getState().ui.mode === 'expanded' && loaded && !loading) void loadHistory()
+  })
+
   subscribe(render)
   subscribeGuestDemo(render)
   render()
