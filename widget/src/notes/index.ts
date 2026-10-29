@@ -11,7 +11,7 @@ import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { linkSchema } from '@milkdown/kit/preset/commonmark'
 import { InputRule } from '@milkdown/kit/prose/inputrules'
 import { liftListItem, sinkListItem } from '@milkdown/kit/prose/schema-list'
-import { Plugin } from '@milkdown/kit/prose/state'
+import { Plugin, Selection } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import { $inputRule, $prose } from '@milkdown/kit/utils'
 import { blockEdit } from '@milkdown/crepe/feature/block-edit'
@@ -56,8 +56,10 @@ const linkRule = $inputRule(
     }),
 )
 
-// Backspace on an empty nested list line outdents it (like Shift-Tab, which phones
-// don't have) instead of dropping its bullet/number.
+// Backspace on an empty list line: a nested one outdents (like Shift-Tab, which
+// phones don't have); otherwise the line is deleted and the caret goes to the end
+// of the line above, instead of leaving a bullet-less line inside the item above
+// (which phones' DOM handling could turn back into a numbered item, looping).
 const outdentEmpty = $prose(
   () =>
     new Plugin({
@@ -65,10 +67,17 @@ const outdentEmpty = $prose(
         handleKeyDown: (view, e) => {
           if (e.key !== 'Backspace') return false
           const { empty, $from } = view.state.selection
-          if (!empty || $from.parent.content.size || $from.depth < 4) return false
           const item = $from.node(-1)
-          if (item.type.name !== 'list_item' || $from.index(-1) || $from.node(-3).type.name !== 'list_item') return false
-          return liftListItem(item.type)(view.state, view.dispatch)
+          if (!empty || $from.parent.content.size || item?.type.name !== 'list_item') return false
+          let d: number // depth of the node to delete
+          if ($from.index(-1)) d = $from.depth
+          else if ($from.depth >= 4 && $from.node(-3).type.name === 'list_item')
+            return liftListItem(item.type)(view.state, view.dispatch)
+          else if (item.childCount === 1 && $from.index(-2)) d = $from.depth - 1
+          else return false
+          const tr = view.state.tr.delete($from.before(d), $from.after(d))
+          view.dispatch(tr.setSelection(Selection.near(tr.doc.resolve($from.before(d)), -1)).scrollIntoView())
+          return true
         },
       },
     }),
