@@ -222,6 +222,7 @@ function mount(): void {
   shadow.appendChild(style)
   const { light, accent } = resolveTheme()
   host.classList.toggle('ak-light', light)
+  host.classList.toggle('ak-rainbow', CONFIG.accent === 'rainbow')
   if (accent) host.style.setProperty('--ak-accent', accent)
 
   initViewport(host)

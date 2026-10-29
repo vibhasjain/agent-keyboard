@@ -44,7 +44,8 @@ The widget reads its own `<script>` tag and needs no config from the embedder:
   matches within a path segment, `**` across segments), or `data-only-paths="/blog/**"` to restrict
   it to just those. Handy when the embed lives in a shared template.
 - **`data-accent`** (optional) — the bar's accent colour (send button, highlights, focus rings), any
-  CSS colour, e.g. `data-accent="#e11d48"`. Without it the bar takes the host page's brand colour
+  CSS colour, e.g. `data-accent="#e11d48"`, or `rainbow` (accent text drifts a rainbow left to right; icons and rings
+  stay blue). Without it the bar takes the host page's brand colour
   from `--brand`, `--primary`, `--color-primary`, `--accent` or `--color-accent` (bare shadcn HSL
   channels work too), then `<meta name="theme-color">`; greys are skipped, and the colour is
   lightened or darkened until it reads on the bar's surface. No match = neutral white (or ink on a
