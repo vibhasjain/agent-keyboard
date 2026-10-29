@@ -49,7 +49,8 @@ The widget reads its own `<script>` tag and needs no config from the embedder:
   channels work too), then `<meta name="theme-color">`; greys are skipped, and the colour is
   lightened or darkened until it reads on the bar's surface. No match = neutral white (or ink on a
   light bar). The surface is the opposite of the host page: near-black on light pages, warm
-  off-white on dark ones (body/html background luminance). State colours keep their meaning.
+  off-white on dark ones (body/html background luminance); `data-theme="dark"` or `"light"` pins
+  it. State colours keep their meaning.
 - **`data-guest-demo`** (optional) — turns the signed-out bar into a scripted, client-only onboarding
   tour loaded from `/agent-keyboard-demo.json` on the host site (or from the URL supplied as the
   attribute value). It never starts an agent job or uses owner credentials. Omit it for the normal

@@ -50,9 +50,10 @@ interface Config {
   summon: boolean
   summonSignedOut: boolean
   accent: string // data-accent override ('' = derive from the host page)
+  theme: string // data-theme="dark"|"light" pins the bar's surface ('' = opposite of the host page)
 }
 
-export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false, summonSignedOut: false, accent: '' }
+export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false, summonSignedOut: false, accent: '', theme: '' }
 
 /** Resolve site + api base from the widget script element. Returns the site id
  *  (empty string means caller should refuse to mount). */
@@ -76,6 +77,7 @@ export function initConfig(script: HTMLScriptElement | null): string {
   CONFIG.summon = summon != null && summon !== 'false'
   CONFIG.summonSignedOut = summon?.trim() === 'signed-out'
   CONFIG.accent = script?.getAttribute('data-accent')?.trim() || ''
+  CONFIG.theme = script?.getAttribute('data-theme')?.trim() || ''
   CONFIG.guestDemoUrl = CONFIG.guestDemo
     ? guestDemo?.trim() || new URL('/agent-keyboard-demo.json', location.href).toString()
     : ''
@@ -117,7 +119,7 @@ export function resolveTheme(): { light: boolean; accent: string } {
   const body = getComputedStyle(document.body)
   // First opaque background of body/html; transparent all the way = browser white.
   const bg = [body.backgroundColor, root.backgroundColor].map((c) => toRgba(ctx, c)).find((c) => c && c[3] >= 128)
-  const light = !!bg && luminance(bg) < 0.18
+  const light = CONFIG.theme ? CONFIG.theme === 'light' : !!bg && luminance(bg) < 0.18
   const barLum = light ? luminance([247, 245, 240]) : luminance([10, 10, 10]) // --ak-bg
   const target = light ? 0 : 255
   const vars = ['--brand', '--primary', '--color-primary', '--accent', '--color-accent']
