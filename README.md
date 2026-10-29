@@ -21,7 +21,9 @@ the script is served from.
 
 Add `data-summon` and the bar stays invisible to visitors: <kbd>`</kbd>/<kbd>~</kbd> summons and
 dismisses it (a triple-tap anywhere on touch screens), and <kbd>Esc</kbd> steps the open widget back
-down. Those are the only keyboard interactions, with or without `data-summon`.
+down. Those are the only keyboard interactions, with or without `data-summon`. For an owner-only bar,
+use `data-summon="signed-out"`: it shows as normal for anyone signed in to Agent Keyboard on that
+site and stays hidden (summonable the same way, to sign in) for everyone else.
 
 **[agentkeyboard.com](https://agentkeyboard.com) runs this widget on itself** (`data-site="halo"`) —
 the marketing site edits its own repo. When you see a commit here authored by `Agent Keyboard`, it was

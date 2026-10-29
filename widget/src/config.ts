@@ -46,10 +46,12 @@ interface Config {
   guestDemoUrl: string
   // data-summon: mount hidden; ` / ~ (or a triple-tap on touch) summons and
   // dismisses the widget. For pages where visitors shouldn't see the bar.
+  // data-summon="signed-out": hidden only while signed out (owner-only bar).
   summon: boolean
+  summonSignedOut: boolean
 }
 
-export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false }
+export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false, summonSignedOut: false }
 
 /** Resolve site + api base from the widget script element. Returns the site id
  *  (empty string means caller should refuse to mount). */
@@ -71,6 +73,7 @@ export function initConfig(script: HTMLScriptElement | null): string {
   CONFIG.guestDemo = guestDemo != null && guestDemo !== 'false'
   const summon = script?.getAttribute('data-summon')
   CONFIG.summon = summon != null && summon !== 'false'
+  CONFIG.summonSignedOut = summon?.trim() === 'signed-out'
   CONFIG.guestDemoUrl = CONFIG.guestDemo
     ? guestDemo?.trim() || new URL('/agent-keyboard-demo.json', location.href).toString()
     : ''

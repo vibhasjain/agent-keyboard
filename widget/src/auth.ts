@@ -115,6 +115,10 @@ export function consumeHandoff(): void {
   }
 }
 
+export function hasPendingHandoff(): boolean {
+  return !!pendingHandoff
+}
+
 export async function redeemHandoff(): Promise<boolean> {
   const token_hash = pendingHandoff
   pendingHandoff = ''

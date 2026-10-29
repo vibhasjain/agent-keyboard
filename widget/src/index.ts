@@ -3,7 +3,7 @@
 // Renders a collapsed bar synchronously; makes ZERO network requests at boot
 // unless there is a persisted active job AND a stored session to re-attach with.
 
-import { consumeHandoff, consumeInviteToken, getPendingInvite, initAuth, redeemHandoff } from './auth'
+import { consumeHandoff, consumeInviteToken, getPendingInvite, hasPendingHandoff, hasStoredSession, initAuth, redeemHandoff } from './auth'
 import { screenStream } from './api'
 import { mountBar } from './bar'
 import { CONFIG, initConfig, shouldMountHere } from './config'
@@ -223,6 +223,7 @@ function mount(): void {
 
   initViewport(host)
   initAuth() // synchronous: sets auth slice from localStorage, no network
+  const signedIn = hasStoredSession() || hasPendingHandoff() // before redeemHandoff() clears it
   if (isGuestDemo()) void loadGuestDemo()
   mountBar(shadow)
   const liveBrowser = mountLiveBrowser(shadow)
@@ -261,8 +262,9 @@ function mount(): void {
   window.__agentKeyboard = api
 
   // data-summon: invisible until summoned — except mid-invite, where hiding
-  // would bury the set-a-password form the link just opened.
-  if (CONFIG.summon && !getPendingInvite()) host.style.display = 'none'
+  // would bury the set-a-password form the link just opened. With
+  // data-summon="signed-out", signed-in owners (or a handoff mid-sign-in) see it.
+  if (CONFIG.summon && !getPendingInvite() && !(CONFIG.summonSignedOut && signedIn)) host.style.display = 'none'
 
   // ` / ~ summons and dismisses the whole widget. It's a typable character —
   // never hijack it while any field is focused, in the widget or on the host
