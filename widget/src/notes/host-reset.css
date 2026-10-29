@@ -1,0 +1,4 @@
+/* The overlay is in the light DOM, so the host page's bare element rules (`ol { display: grid }`,
+   `h2 { text-transform: uppercase }`) reach the editor. Roll them back to browser defaults first;
+   imported before Crepe so its `.milkdown *` and the .akn rules still win at equal specificity. */
+.akn :where(ol, ul, li, p, h1, h2, h3, h4, h5, h6, blockquote, pre, code, a, input, button, section, table, thead, tbody, tr, th, td, hr) { all: revert; }
