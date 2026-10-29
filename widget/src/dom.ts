@@ -54,6 +54,8 @@ const ICON_PATHS: Record<string, string> = {
   expand: '<path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none"/>',
   'chevron-down': '<path d="M5 9.5 12 16l7-6.5" fill="none"/>',
   'chevron-left': '<path d="M15 5 8 12l7 7" fill="none"/>',
+  indent: '<path d="M21 5H11M21 12H11M21 19H11M3 8l4 4-4 4" fill="none"/>',
+  outdent: '<path d="M21 5H11M21 12H11M21 19H11M7 8l-4 4 4 4" fill="none"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none"/><path d="m3.5 7 8.5 6 8.5-6" fill="none"/>',

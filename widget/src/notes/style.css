@@ -93,6 +93,10 @@
 .akn .akn-btn:hover { color: #ffb86b; background: rgba(10,10,10,.72); }
 .akn-back { display: none !important; }
 .akn-status { position: absolute; z-index: 2; right: 14px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); max-width: 60%; pointer-events: none; font-size: 12px; color: #6f6a61; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.akn-indent { position: absolute; z-index: 2; left: 14px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 8px; }
+.akn-indent[hidden] { display: none; }
+.akn .akn-indent .akn-btn { width: 40px; height: 40px; }
+.akn .akn-indent .akn-btn:disabled { opacity: .35; }
 .akn-status.err { color: #f97066; }
 .akn-proxy { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; }
 
