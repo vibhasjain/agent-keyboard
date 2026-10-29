@@ -10,6 +10,7 @@ import { CrepeBuilder } from '@milkdown/crepe/builder'
 import { remarkStringifyOptionsCtx } from '@milkdown/kit/core'
 import { linkSchema } from '@milkdown/kit/preset/commonmark'
 import { InputRule } from '@milkdown/kit/prose/inputrules'
+import { liftListItem } from '@milkdown/kit/prose/schema-list'
 import { Plugin } from '@milkdown/kit/prose/state'
 import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/view'
 import { $inputRule, $prose } from '@milkdown/kit/utils'
@@ -52,6 +53,24 @@ const linkRule = $inputRule(
     new InputRule(/\[([^\]]+)\]\(([^()\s]+)\)$/, (state, [, text, href], start, end) => {
       const link = linkSchema.type(ctx)
       return state.tr.replaceWith(start, end, state.schema.text(text!, [link.create({ href })])).removeStoredMark(link)
+    }),
+)
+
+// Backspace on an empty nested list line outdents it (like Shift-Tab, which phones
+// don't have) instead of dropping its bullet/number.
+const outdentEmpty = $prose(
+  () =>
+    new Plugin({
+      props: {
+        handleKeyDown: (view, e) => {
+          if (e.key !== 'Backspace') return false
+          const { empty, $from } = view.state.selection
+          if (!empty || $from.parent.content.size || $from.depth < 4) return false
+          const item = $from.node(-1)
+          if (item.type.name !== 'list_item' || $from.index(-1) || $from.node(-3).type.name !== 'list_item') return false
+          return liftListItem(item.type)(view.state, view.dispatch)
+        },
+      },
     }),
 )
 
@@ -650,7 +669,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       .addFeature(placeholder, { text: 'Describe the change — type / for blocks' })
     // `-` bullets (remark's default is `*`), so a note round-trips the way people write it.
     crepe.editor.config((ctx) => ctx.update(remarkStringifyOptionsCtx, (o) => ({ ...o, bullet: '-' as const })))
-    crepe.editor.use(linkRule).use(mentions())
+    crepe.editor.use(linkRule).use(outdentEmpty).use(mentions())
     crepe.on((l) =>
       l.markdownUpdated((_ctx, md) => {
         markdown = unescapeMentions(md)
