@@ -148,6 +148,11 @@ h1 em{ font-style:normal; color:var(--accent);
 /* #neon (inline SVG after <body>) blurs a copy of the text under itself, so the glow takes each letter's own moving colour */
 /* the gradient loops (ends where it starts), so sliding one tile width is seamless; left to right like the keys */
 @keyframes rainbow-drift{ to{ background-position:-200% 0; } }
+/* the Agent Keyboard bar's accent cycles through the same rainbow; data-accent on the embed is the static fallback */
+@property --ak-accent{ syntax:'<color>'; inherits:true; initial-value:#3d93ff; }
+#agent-keyboard-host{ animation:ak-accent-cycle 8s linear infinite; }
+@keyframes ak-accent-cycle{ 0%,100%{ --ak-accent:#ff4f7f; } 20%{ --ak-accent:#ff7a33; } 30%{ --ak-accent:#e6b422; } 40%{ --ak-accent:#22b45e; } 60%{ --ak-accent:#3d93ff; } 80%{ --ak-accent:#a36bff; } }
+@media (prefers-reduced-motion:reduce){ #agent-keyboard-host{ animation:none; } }
 h1 .mode{ white-space:nowrap; }
 h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; margin-left:.04em; vertical-align:-.08em; background:var(--accent); animation:caret 1s steps(1) infinite; }
 @keyframes caret{ 50%{ opacity:0; } }
