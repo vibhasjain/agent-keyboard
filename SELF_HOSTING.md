@@ -88,8 +88,9 @@ The server clones and pushes your site repos with a fine-grained personal access
 
 1. GitHub → **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate
    new token**.
-2. **Repository access → Only select repositories:** pick *exactly* the repos you'll list in `SITES`.
-   Nothing else.
+2. **Repository access → Only select repositories:** pick *exactly* the repos you'll list in `SITES`,
+   **plus your `agent-keyboard` fork**. The fork is how the server updates itself (step 6): without it,
+   "update yourself" fails with `403: Permission denied`. Nothing else.
 3. **Permissions → Repository permissions:**
    - **Contents:** Read and write (clone, commit, push).
    - **Metadata:** Read-only (auto-selected).
@@ -218,8 +219,22 @@ fly tokens create deploy -a YOUR-APP          # prints an app-scoped deploy toke
 gh secret set FLY_API_TOKEN --body "<that token>"
 ```
 
+**Turn Actions on.** GitHub disables workflows on forks until you enable them once: open your fork's
+**Actions** tab and click *I understand my workflows, go ahead and enable them*. Until then a push
+deploys nothing.
+
 Now `git push` handles deploys. Without this you just re-run the `flyctl deploy` command from step 5 by
 hand.
+
+**Self-updates.** Tell the server which repo is its fork, and every site's bar can then handle "update
+yourself" (merge upstream, run the checks, push, confirm the deploy started) in one turn:
+
+```bash
+fly secrets set -a YOUR-APP AK_FORK_REPO="you/agent-keyboard" FLY_API_TOKEN="<that token>"
+```
+
+`GH_TOKEN` must be able to push the fork (step 3); boot logs a warning if it can't. If a push is ever
+refused, **Sync fork → Update branch** on the fork's GitHub page does the same merge by hand.
 
 ---
 
@@ -438,6 +453,7 @@ live branch without review), or `"off"`.
 | No "Build in a sandbox" offer, or the preview never loads | `sandbox` missing from the site's `SITES` entry, or the host doesn't build branch deploys | See [Sandboxes](#sandboxes-preview-a-change-before-it-goes-live): Netlify Branch deploys → All, and add `sandbox`. |
 | Publishing a sandbox fails | `GH_TOKEN` lacks Pull requests: Read and write | Grant it on the token (no redeploy needed if the token value is unchanged). |
 | Job runs but push is rejected | `GH_TOKEN` lacks the repo, lacks Contents write, or the push touched `.github/workflows/` | Add the repo to the token's selection / grant Contents write. Workflow files are blocked by design. |
+| "Update yourself" can't push, or pushes but nothing deploys (boot: "GH_TOKEN can't push AK_FORK_REPO") | The token doesn't include the fork; or Actions were never enabled on the fork / `FLY_API_TOKEN` repo secret missing | Add the fork to the token (step 3); enable Actions in the fork's Actions tab and set the secret (step 6). |
 | Job history / re-attach doesn't persist across restarts | No `SUPABASE_SERVICE_KEY` | Set the service_role key and redeploy; re-run `server/sql/jobs.sql` if you skipped it. |
 | Everything works but the agent errors immediately | `CLAUDE_CODE_OAUTH_TOKEN` missing or expired | Re-run `claude setup-token` and update the secret. |
 | "Image generation isn't available" | Codex on the box isn't logged in to ChatGPT | `fly ssh console` → `HOME=/data codex login --device-auth`. |

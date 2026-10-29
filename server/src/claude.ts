@@ -259,6 +259,12 @@ function scopeNote(site: Site, pushBranch: string = site.branch, sandboxMode: st
     `Modify only files inside this repository. Everything else under /data is off-limits — other checkouts, other sites' state, server config, auth files — with exactly two exceptions you own: your harness settings file (described below) and your skills directory ${join(CLAUDE_HOME, ".claude", "skills")}, where you may install or edit skills to gain new capabilities (they load from the next turn).`,
     `One more allowance, controlled by the repository owner: if THIS repository's own instructions (CLAUDE.md, AGENTS.md, or a runbook such as CLOUD_WORKER.md) explicitly name another repository you may work on, clone it under .tmp/<name>/ inside this checkout (it survives turn resets), make the change there, run that repo's own checks, commit and push to the branch those instructions name, and remove nothing else. Never touch other sites' checkouts under /data/checkouts.`,
   ];
+  const fork = process.env.AK_FORK_REPO;
+  if (fork && !site.guest) {
+    lines.push(
+      `This server runs your owner's own Agent Keyboard fork, github.com/${fork}. When asked to update yourself or Agent Keyboard to the latest, you may work on that repo too: follow the "Updating Agent Keyboard to latest" section of the self-ops skill (clone it under .tmp/ak-fork/, merge upstream, run its checks, push its main, confirm the deploy started).`,
+    );
+  }
   if (site.guest) {
     lines.push(
       `This site is shared with invited guests: the owner's personal credentials and personal skills (${PERSONAL_SKILLS.join(", ")}) are deliberately unavailable in this session, and other sites' files are denied. If asked for them, say they are not available on this site.`,

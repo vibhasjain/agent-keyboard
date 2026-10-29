@@ -1,6 +1,6 @@
 ---
 name: self-ops
-description: Operate the Agent Keyboard deployment you are running on — logs, secrets, machine status, deploys, Supabase auth config. Use when the owner asks about the server itself, deploys, secrets, boot problems, or anything ops-shaped (only meaningful on the site whose repo IS agent-keyboard).
+description: Operate the Agent Keyboard deployment you are running on — logs, secrets, machine status, deploys, Supabase auth config. Use when the owner asks about the server itself, deploys, secrets, boot problems, or anything ops-shaped, or says "update yourself" / "update Agent Keyboard to latest" (works from any site when AK_FORK_REPO is set).
 ---
 
 # self-ops
@@ -68,17 +68,35 @@ never the floating `latest` tag, so builds stay reproducible.
 
 ## Updating Agent Keyboard to latest (self-hosted forks)
 
-On a fork ("update Agent Keyboard to latest"), merge upstream and push; CI deploys it:
+"Update yourself" / "update Agent Keyboard to latest" works from **any** site's bar: `$AK_FORK_REPO`
+(`owner/agent-keyboard`, set at setup) names this instance's fork, and you may clone and push it even
+though it isn't your site's repo. Unset means this instance has no fork to update: say so and point the
+owner to `AK_FORK_REPO` in `SELF_HOSTING.md` step 6. Do it all in one turn:
 
 ```bash
+F="$AK_FORK_REPO"; R=.tmp/ak-fork
+# 200 = GH_TOKEN can push the fork. Check FIRST, before any merge work:
+curl -s -o /dev/null -w "%{http_code}\n" -u "x-access-token:$GH_TOKEN" "https://github.com/$F.git/info/refs?service=git-receive-pack"
+[ -d $R ] || git clone "https://x-access-token:$GH_TOKEN@github.com/$F.git" $R
+cd $R && git pull --ff-only origin main
 git pull --no-rebase https://github.com/vibhasjain/agent-keyboard.git main
-git push origin main     # the fork's CI (FLY_API_TOKEN repo secret) deploys ~2-3 min later
+(cd server && npm ci --include=dev && npm run typecheck) && (cd widget && npm ci --include=dev && npm test)
+git push origin main
 ```
 
-Resolve conflicts in favour of upstream, except keep the fork's `app =` in `server/fly.toml`. If the
-push is rejected because upstream changed `.github/workflows/`, that's the Workflows limit below: the
-owner runs `gh repo sync` or merges once on github.com. No CI run after the push means the repo secret
-is missing: say so (see `SELF_HOSTING.md` step 6) rather than `fly deploy` from inside your own turn.
+- **Not 200:** say so once, up front, and stop: `GH_TOKEN` can't push `$F`. Either add the fork to the
+  token (Repository access, Contents: Read and write), or click **Sync fork → Update branch** on
+  `https://github.com/$F`. (`npm ci` needs `--include=dev`: the box runs with `NODE_ENV=production`.)
+- **Conflicts:** take upstream, except keep the fork's `app =` in `server/fly.toml`.
+- **Rejected because upstream changed `.github/workflows/`:** `GH_TOKEN` has no Workflows permission
+  (see Known limits). Point the owner to **Sync fork → Update branch**, which can.
+- **Confirm the deploy started.** A minute after the push, `gh run list --repo "$F" --workflow
+  agent-keyboard-deploy.yml --limit 1` should show a run for the new head. If there's none, start one:
+  `gh workflow run agent-keyboard-deploy.yml --repo "$F"`. If that fails, Actions are off on the fork
+  (GitHub disables them on forks until the owner enables them once in the repo's **Actions** tab), or
+  the `FLY_API_TOKEN` repo secret is missing (`SELF_HOSTING.md` step 6). Say which. Don't `fly deploy`
+  from inside your own turn.
+- The deploy restarts this machine a few minutes later. Tell the owner it's on its way.
 
 ## Where your own state lives (the /data volume)
 
