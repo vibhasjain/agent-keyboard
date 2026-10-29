@@ -124,7 +124,7 @@ export function resolveTheme(): { light: boolean; accent: string } {
   const target = light ? 0 : 255
   const vars = ['--brand', '--primary', '--color-primary', '--accent', '--color-accent']
   const candidates = [
-    CONFIG.accent === 'rainbow' ? '#3d93ff' : CONFIG.accent, // rainbow: blue for the non-text accents (styles.ts)
+    CONFIG.accent === 'rainbow' ? '#3d93ff' : CONFIG.accent, // rainbow: blue base; styles.ts cycles it (static under reduced motion)
     ...vars.map((v) => root.getPropertyValue(v).trim() || body.getPropertyValue(v).trim()),
     document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content.trim() || '',
   ]

@@ -139,7 +139,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 **Agent state colors carry meaning:** syncing = dim, thinking = violet, editing/acting = the accent,
 done = green, error = `#f97066` (red, outside the palette, used sparingly). In the widget the
 accent is `--ak-accent`: neutral white by default, the host's brand colour when found, or the embed's
-`data-accent` (a colour, or `rainbow` for drifting rainbow text; agentkeyboard.com pins `#ffb86b`) — see `resolveTheme` in `widget/src/config.ts`, which also flips the bar to a light surface on dark host pages unless `data-theme` pins it (agentkeyboard.com pins `dark`).
+`data-accent` (a colour, or `rainbow` for drifting rainbow text — icons and rings cycle the same colours; agentkeyboard.com pins `#ffb86b`) — see `resolveTheme` in `widget/src/config.ts`, which also flips the bar to a light surface on dark host pages unless `data-theme` pins it (agentkeyboard.com pins `dark`).
 
 **Brand mark:** the pixel-art typewriter (adopted 2026-09-25 at Lingz's request; it replaced the ⌨️
 emoji, which is no longer used in any UI). **Only the site hero moves**: `site/typewriter.webp`, keys

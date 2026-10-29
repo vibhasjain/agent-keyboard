@@ -224,6 +224,11 @@ function mount(): void {
   host.classList.toggle('ak-light', light)
   host.classList.toggle('ak-rainbow', CONFIG.accent === 'rainbow')
   if (accent) host.style.setProperty('--ak-accent', accent)
+  // rainbow: make --ak-accent animatable so icons and rings cycle too (styles.ts).
+  // @property is ignored inside a shadow root, so register it here; throws if already registered.
+  if (CONFIG.accent === 'rainbow') {
+    try { CSS.registerProperty({ name: '--ak-accent', syntax: '<color>', inherits: true, initialValue: '#3d93ff' }) } catch {}
+  }
 
   initViewport(host)
   initAuth() // synchronous: sets auth slice from localStorage, no network
