@@ -43,6 +43,13 @@ The widget reads its own `<script>` tag and needs no config from the embedder:
   `data-hide-paths="/admin/,/checkout"` to skip those (a trailing `/` means the whole subtree, `*`
   matches within a path segment, `**` across segments), or `data-only-paths="/blog/**"` to restrict
   it to just those. Handy when the embed lives in a shared template.
+- **`data-accent`** (optional) — the bar's accent colour (send button, highlights, focus rings), any
+  CSS colour, e.g. `data-accent="#e11d48"`. Without it the bar takes the host page's brand colour
+  from `--brand`, `--primary`, `--color-primary`, `--accent` or `--color-accent` (bare shadcn HSL
+  channels work too), then `<meta name="theme-color">`; greys are skipped, and the colour is
+  lightened or darkened until it reads on the bar's surface. No match = neutral white (or ink on a
+  light bar). The surface is the opposite of the host page: near-black on light pages, warm
+  off-white on dark ones (body/html background luminance). State colours keep their meaning.
 - **`data-guest-demo`** (optional) — turns the signed-out bar into a scripted, client-only onboarding
   tour loaded from `/agent-keyboard-demo.json` on the host site (or from the URL supplied as the
   attribute value). It never starts an agent job or uses owner credentials. Omit it for the normal

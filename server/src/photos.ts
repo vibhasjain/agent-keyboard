@@ -6,13 +6,15 @@
 // Uploads live under .git/info/exclude'd `.tmp/`, so they never get committed.
 // A boot sweep purges anything older than 24h across all checkouts.
 
-import { mkdir, writeFile, readdir, stat, rm, rename } from "node:fs/promises";
+import { mkdir, writeFile, readdir, readFile, stat, rm, rename, appendFile } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { randomUUID } from "node:crypto";
 import { checkoutPath } from "./checkouts.js";
 
 const MAX_DIM = 1568;
 const UPLOAD_TTL_MS = 24 * 60 * 60_000;
+// Shown images stay in the chat history (outputsLog), so they outlive uploads.
+const OUTPUT_TTL_MS = 30 * 24 * 60 * 60_000;
 
 // Agent-produced images (things the agent wants to SHOW the user) live in a
 // sibling dir. Same .tmp/ tree, so they're git-excluded and swept the same way.
@@ -131,11 +133,11 @@ export async function cleanupUploads(siteId: string, relPaths: string[]): Promis
   );
 }
 
-/** Boot sweep: purge staged uploads + agent outputs older than 24h everywhere. */
+/** Boot sweep: purge staged uploads older than 24h and agent outputs older than 30 days. */
 export async function purgeStaleUploads(siteIds: string[]): Promise<void> {
   const now = Date.now();
   for (const siteId of siteIds) {
-    for (const dir of [uploadsDir(siteId), outputsDir(siteId)]) {
+    for (const [dir, ttl] of [[uploadsDir(siteId), UPLOAD_TTL_MS], [outputsDir(siteId), OUTPUT_TTL_MS]] as const) {
       let files: string[];
       try {
         files = await readdir(dir);
@@ -146,7 +148,7 @@ export async function purgeStaleUploads(siteIds: string[]): Promise<void> {
         const abs = join(dir, f);
         try {
           const s = await stat(abs);
-          if (now - s.mtimeMs > UPLOAD_TTL_MS) await rm(abs, { force: true });
+          if (now - s.mtimeMs > ttl) await rm(abs, { force: true });
         } catch {
           /* gone */
         }
@@ -166,16 +168,40 @@ export interface OutputImage {
   alt: string; // the agent's original filename (sans extension), as a caption
 }
 
-/** Clear a site's outputs dir at the start of a turn, so we only ever surface
- *  images the agent produced THIS turn (clean attribution, bounded growth). */
+/** Clear uncollected files from a site's outputs dir at the start of a turn, so
+ *  we only ever surface images the agent produced THIS turn. Collected (served)
+ *  images and their logs stay: the chat history keeps showing them. */
 export async function resetOutputs(siteId: string): Promise<void> {
-  await rm(outputsDir(siteId), { recursive: true, force: true }).catch(() => {});
+  const dir = outputsDir(siteId);
+  const files = await readdir(dir).catch(() => [] as string[]);
+  await Promise.all(
+    files
+      .filter((f) => !SERVED_NAME_RE.test(f) && !f.endsWith(".jsonl"))
+      .map((f) => rm(join(dir, f), { recursive: true, force: true }).catch(() => {})),
+  );
+}
+
+/** Per-conversation log of shown images, one `{ts, names}` line per turn. */
+function outputsLog(siteId: string, sessionId: string): string {
+  return join(outputsDir(siteId), `${sessionId}.jsonl`);
+}
+
+/** The images each turn of a conversation showed, oldest first. */
+export async function readShownImages(siteId: string, sessionId: string): Promise<Array<{ ts: string; names: string[] }>> {
+  const raw = await readFile(outputsLog(siteId, sessionId), "utf8").catch(() => "");
+  return raw.split("\n").flatMap((l) => {
+    try {
+      return l.trim() ? [JSON.parse(l)] : [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /** Collect the images the agent left in `.tmp/outputs/` this turn. Each is
  *  renamed to an unguessable `<uuid>.<ext>` (so the open asset route can serve
  *  it without leaking a guessable path) and returned for the result frame. */
-export async function collectOutputs(siteId: string): Promise<OutputImage[]> {
+export async function collectOutputs(siteId: string, sessionId: string): Promise<OutputImage[]> {
   const dir = outputsDir(siteId);
   let files: string[];
   try {
@@ -203,6 +229,10 @@ export async function collectOutputs(siteId: string): Promise<OutputImage[]> {
       continue;
     }
     out.push({ name: served, alt: f.replace(OUTPUT_EXT_RE, "") });
+  }
+  if (out.length) {
+    const line = JSON.stringify({ ts: new Date().toISOString(), names: out.map((o) => o.name) });
+    await appendFile(outputsLog(siteId, sessionId), line + "\n").catch(() => {});
   }
   return out;
 }

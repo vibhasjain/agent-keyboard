@@ -1067,7 +1067,7 @@ export async function* runMessageJob(
       }
 
       // Any images the agent dropped in .tmp/outputs/ this turn, to show in chat.
-      const images = await collectOutputs(site.id).catch(() => []);
+      const images = await collectOutputs(site.id, sessionId).catch(() => []);
       yield [
         "result",
         {
@@ -1240,7 +1240,7 @@ export async function* runStreamingSession(
           () => ({}) as Awaited<ReturnType<typeof gitSummary>>,
         );
         if (git.headSha) turnStartSha = git.headSha;
-        const images = await collectOutputs(site.id).catch(() => []);
+        const images = await collectOutputs(site.id, sessionId).catch(() => []);
         queue.push([
           "result",
           {

@@ -7,7 +7,7 @@
 //    type), skeleton bars, a divider, and the deploy chip.
 
 export const DEMO_STYLES = `
-.ak-lg-row.demo-focus .ak-lg-mark{ color:var(--ak-amber); }
+.ak-lg-row.demo-focus .ak-lg-mark{ color:var(--ak-accent); }
 /* the bar floats above the fake browser chrome (.demo-chrome, light DOM) */
 .ak-zone{ padding-bottom:74px; }
 /* backdrop-filter blur is a heavy mobile GPU cost, recomposited every frame of a

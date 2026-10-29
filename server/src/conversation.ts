@@ -11,6 +11,7 @@ import { sessionIdFor, conversationIdFor, CLAUDE_HOME } from "./claude.js";
 import { checkoutPath } from "./checkouts.js";
 import { toolLabel } from "./tool-label.js";
 import { readTeamNotes } from "./team.js";
+import { readShownImages } from "./photos.js";
 
 export type ChatPart = { type: "text"; text: string } | { type: "tools"; tools: string[] };
 
@@ -35,6 +36,8 @@ export interface ChatMessage {
   sender?: string;
   // A teammate note (team.ts): who it was emailed to. Never seen by Claude.
   to?: string[];
+  // Images the agent showed with this reply (photos.ts outputsLog), as asset paths.
+  images?: string[];
 }
 
 /** Claude Code slugs a project dir as its absolute cwd with `/` and `.` → `-`. */
@@ -229,6 +232,12 @@ export async function readConversation(
   for (const note of await readTeamNotes(siteId, conversationId)) {
     const i = all.findIndex((m) => m.ts && note.ts && m.ts > note.ts);
     all.splice(i < 0 ? all.length : i, 0, note);
+  }
+
+  // Shown images belong to the last reply written before they were collected.
+  for (const shown of await readShownImages(siteId, sessionId)) {
+    const reply = all.findLast((m) => m.role === "assistant" && m.ts && m.ts <= shown.ts);
+    if (reply) (reply.images ??= []).push(...shown.names.map((n) => `/sites/${encodeURIComponent(siteId)}/assets/${n}`));
   }
 
   // Newest-last array. Page from the end: skip `before` newest, take `limit`.

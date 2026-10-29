@@ -66,7 +66,7 @@ let pendingUserTexts: string[] = []
 
 // Turns completed during this page load (rendered under any server-fetched history).
 // `thumbs` = the user's attached photos; `files` = non-image attachments;
-// `images` = images the agent chose to show.
+// `images` = images the agent chose to show (history carries them too).
 export interface LiveTurn { role: 'user' | 'assistant' | 'error'; text: string; thumbs?: string[]; files?: string[]; images?: string[] }
 const liveTurns: LiveTurn[] = []
 
@@ -117,9 +117,6 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
   for (let i = 0; i < liveTurns.length; i++) {
     const t = liveTurns[i]
     if (t.role !== 'user') continue
-    // Agent-shown images live ONLY on the live turn (history never carries
-    // them; the files are one-turn transient) — never prune that pair.
-    if (liveTurns[i + 1]?.role === 'assistant' && liveTurns[i + 1]?.images?.length) continue
     const target = normTurnText(t.text)
     for (let j = pos; j < history.length; j++) {
       const m = history[j]
