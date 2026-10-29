@@ -6,7 +6,7 @@
 import { consumeHandoff, consumeInviteToken, getPendingInvite, hasPendingHandoff, hasStoredSession, initAuth, redeemHandoff } from './auth'
 import { screenStream } from './api'
 import { mountBar } from './bar'
-import { CONFIG, initConfig, shouldMountHere } from './config'
+import { CONFIG, initConfig, resolveTheme, shouldMountHere } from './config'
 import { el, icon, on, show } from './dom'
 import { injectFonts } from './fonts'
 import { isGuestDemo, loadGuestDemo } from './guest-demo'
@@ -220,6 +220,9 @@ function mount(): void {
   const style = document.createElement('style')
   style.textContent = STYLES
   shadow.appendChild(style)
+  const { light, accent } = resolveTheme()
+  host.classList.toggle('ak-light', light)
+  if (accent) host.style.setProperty('--ak-accent', accent)
 
   initViewport(host)
   initAuth() // synchronous: sets auth slice from localStorage, no network

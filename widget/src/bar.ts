@@ -358,7 +358,7 @@ function makeComposer(onTeamNote: () => void): Composer {
   })
   // Keep the textarea focused on press: blurring it drops the iOS keyboard lift
   // (--ak-kb) before the click fires, the button jumps away and the tap misses.
-  on(sendBtn, 'mousedown', (e) => e.preventDefault())
+  for (const b of [cam, attach, mic, sendBtn]) on(b, 'mousedown', (e) => e.preventDefault())
   on(sendBtn, 'click', () => {
     blurButton(sendBtn)
     doSend()

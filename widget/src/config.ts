@@ -49,9 +49,10 @@ interface Config {
   // data-summon="signed-out": hidden only while signed out (owner-only bar).
   summon: boolean
   summonSignedOut: boolean
+  accent: string // data-accent override ('' = derive from the host page)
 }
 
-export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false, summonSignedOut: false }
+export const CONFIG: Config = { site: '', api: '', isDev: false, guestDemo: false, guestDemoUrl: '', summon: false, summonSignedOut: false, accent: '' }
 
 /** Resolve site + api base from the widget script element. Returns the site id
  *  (empty string means caller should refuse to mount). */
@@ -74,6 +75,7 @@ export function initConfig(script: HTMLScriptElement | null): string {
   const summon = script?.getAttribute('data-summon')
   CONFIG.summon = summon != null && summon !== 'false'
   CONFIG.summonSignedOut = summon?.trim() === 'signed-out'
+  CONFIG.accent = script?.getAttribute('data-accent')?.trim() || ''
   CONFIG.guestDemoUrl = CONFIG.guestDemo
     ? guestDemo?.trim() || new URL('/agent-keyboard-demo.json', location.href).toString()
     : ''
@@ -84,6 +86,62 @@ export function initConfig(script: HTMLScriptElement | null): string {
     /* keep default */
   }
   return site
+}
+
+/** Parse any CSS colour to [r,g,b,a] (0-255) via a 1px canvas; null if invalid. */
+function toRgba(ctx: CanvasRenderingContext2D, c: string): Uint8ClampedArray | null {
+  if (!CSS.supports('color', c)) return null
+  ctx.clearRect(0, 0, 1, 1)
+  ctx.fillStyle = c
+  ctx.fillRect(0, 0, 1, 1)
+  return ctx.getImageData(0, 0, 1, 1).data
+}
+
+function luminance(rgb: ArrayLike<number>): number {
+  const [r, g, b] = Array.from(rgb, (x) => {
+    const v = x / 255
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  })
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+
+/** The bar's theme, opposite to the host page: `light` when the host's
+ *  background is dark, plus its accent: data-accent, else the host's brand
+ *  colour (common CSS custom properties, then <meta name="theme-color">),
+ *  pushed toward white (dark bar) or black (light bar) until it reads at 4.5:1.
+ *  accent '' = keep the neutral default. */
+export function resolveTheme(): { light: boolean; accent: string } {
+  const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+  if (!ctx) return { light: false, accent: '' }
+  const root = getComputedStyle(document.documentElement)
+  const body = getComputedStyle(document.body)
+  // First opaque background of body/html; transparent all the way = browser white.
+  const bg = [body.backgroundColor, root.backgroundColor].map((c) => toRgba(ctx, c)).find((c) => c && c[3] >= 128)
+  const light = !!bg && luminance(bg) < 0.18
+  const barLum = light ? luminance([247, 245, 240]) : luminance([10, 10, 10]) // --ak-bg
+  const target = light ? 0 : 255
+  const vars = ['--brand', '--primary', '--color-primary', '--accent', '--color-accent']
+  const candidates = [
+    CONFIG.accent,
+    ...vars.map((v) => root.getPropertyValue(v).trim() || body.getPropertyValue(v).trim()),
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.content.trim() || '',
+  ]
+  for (let c of candidates) {
+    if (!c) continue
+    // shadcn/Tailwind themes store bare HSL channels: "222 47% 11%"
+    if (!CSS.supports('color', c) && CSS.supports('color', `hsl(${c})`)) c = `hsl(${c})`
+    const px = toRgba(ctx, c)
+    if (!px) continue
+    const [r, g, b, a] = px
+    // Transparent or grey (black/white chrome colours) isn't a brand: stay neutral.
+    if (a < 128 || Math.max(r, g, b) - Math.min(r, g, b) < 30) continue
+    for (let w = 0; w <= 100; w += 10) {
+      const rgb = [r, g, b].map((x) => Math.round(x + ((target - x) * w) / 100))
+      const l = luminance(rgb)
+      if ((Math.max(l, barLum) + 0.05) / (Math.min(l, barLum) + 0.05) >= 4.5) return { light, accent: `rgb(${rgb.join(',')})` }
+    }
+  }
+  return { light, accent: '' }
 }
 
 /** Glob match for a URL path: `*` matches within a segment, `**` across

@@ -337,19 +337,22 @@ function toolRun(raw: unknown[]): HTMLElement {
 function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
   if (m.role === 'system') return dividerEl(m.text)
   const tools = Array.isArray(m.tools) ? (m.tools as unknown[]).map(String).filter(Boolean) : []
+  // Server history carries shown images as asset paths on the API origin.
+  const images = m.images?.map((u) => (u.startsWith('/') ? CONFIG.api + u : u))
   if (m.role === 'assistant' && m.parts?.length) {
     const wrap = el('div')
     for (const part of m.parts) {
       if (part.type === 'tools' && part.tools.length) wrap.appendChild(toolRun(part.tools))
       else if (part.type === 'text' && part.text) wrap.appendChild(msgEl('assistant', part.text))
     }
+    if (images) wrap.lastElementChild?.lastElementChild?.appendChild(thumbRow(images))
     markAnsweredOptions(wrap, m.chosenOption ?? answer)
     return wrap
   }
   if (m.role === 'assistant' && tools.length) {
     const wrap = el('div')
     wrap.appendChild(toolRun(tools))
-    if (m.text) wrap.appendChild(msgEl('assistant', m.text))
+    if (m.text) wrap.appendChild(msgEl('assistant', m.text, { images }))
     markAnsweredOptions(wrap, m.chosenOption ?? answer)
     return wrap
   }
@@ -358,7 +361,7 @@ function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
     photos: m.photos,
     thumbs: m.thumbs,
     files: m.files,
-    images: m.images,
+    images,
     sender: m.sender,
     to: m.to,
   })
@@ -964,6 +967,11 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // the option's text as the next message — start() queues it behind a running job.
   // Answered options are rebuilt disabled by rebuildStatic() and cannot re-send;
   // the guard here covers the window between the tap and that rebuild.
+  // Keep the composer focused on press, as bar.ts does for its buttons: the iOS
+  // keyboard dropping mid-tap shifts the list and the click misses.
+  on(listEl, 'mousedown', (e) => {
+    if ((e.target as HTMLElement)?.closest?.('.ak-opt')) e.preventDefault()
+  })
   on(listEl, 'click', (e) => {
     const btn = (e.target as HTMLElement)?.closest?.('.ak-opt') as HTMLButtonElement | null
     if (!btn || btn.disabled) return

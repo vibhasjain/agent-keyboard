@@ -25,6 +25,10 @@ down. Those are the only keyboard interactions, with or without `data-summon`. F
 use `data-summon="signed-out"`: it shows as normal for anyone signed in to Agent Keyboard on that
 site and stays hidden (summonable the same way, to sign in) for everyone else.
 
+The bar's accent follows your site's brand colour (`--primary`, `--brand`, `<meta name="theme-color">`…)
+and is neutral otherwise; pin one with `data-accent="#hex"`. Its surface is the opposite of your
+page's background: dark on light sites, light on dark sites.
+
 **[agentkeyboard.com](https://agentkeyboard.com) runs this widget on itself** (`data-site="halo"`) —
 the marketing site edits its own repo. When you see a commit here authored by `Agent Keyboard`, it was
 made from the bar at the bottom of that page.
