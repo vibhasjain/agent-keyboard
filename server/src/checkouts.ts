@@ -123,7 +123,7 @@ export function ensureCheckout(site: Site): Promise<string> {
 
 async function doEnsureCheckout(site: Site): Promise<string> {
   const dir = checkoutPath(site.id);
-  if (existsSync(join(dir, ".git"))) return dir;
+  if (existsSync(join(dir, ".git"))) return guardLive(site, dir);
 
   await mkdir(CHECKOUTS_DIR, { recursive: true });
   try {
@@ -150,6 +150,19 @@ async function doEnsureCheckout(site: Site): Promise<string> {
   await git(dir, ["config", "user.email", GIT_USER_EMAIL]);
   // Keep our photo-staging dir out of every diff/status the agent might commit.
   await appendFile(join(dir, ".git", "info", "exclude"), "\n.tmp/\n").catch(() => {});
+  return guardLive(site, dir);
+}
+
+/** A sandbox may only push its own branch: going live is the publish step (a squashed PR + retire). */
+async function guardLive(site: Site, dir: string): Promise<string> {
+  if (!site.sandboxOf) return dir;
+  const live = site.sandboxOf.branch;
+  await mkdir(join(dir, ".git", "hooks"), { recursive: true });
+  await writeFile(
+    join(dir, ".git", "hooks", "pre-push"),
+    `#!/bin/sh\nwhile read -r _ _ ref _; do\n  [ "$ref" = "refs/heads/${live}" ] && { echo "A sandbox never pushes to ${live}. To go live, rebase onto origin/${live}, push ${site.branch}, and use the publish step (POST /sites/${site.id}/publish)." >&2; exit 1; }\ndone\nexit 0\n`,
+    { mode: 0o755 },
+  );
   return dir;
 }
 

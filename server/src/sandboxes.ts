@@ -4,7 +4,7 @@
 // /sites/:id route work unchanged. The registry is a JSON file on the volume.
 // See the "Sandboxes PRD + tech design" note.
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, git, lastUsed, removeCheckout, tryAcquireSiteLock, writeDataFile } from "./checkouts.js";
@@ -103,6 +103,24 @@ const WARN_DAYS = 2;
 const DAY_MS = 86_400_000;
 
 /**
+ * Retire sandboxes whose work already reached live some other way (e.g. merged
+ * and pushed by hand): the branch tip is in live and was committed after the
+ * sandbox was made (a fresh, untouched branch is in live too).
+ */
+async function merged(sb: Sandbox, parent: Site): Promise<boolean> {
+  const dir = checkoutPath(sb.id);
+  if (!existsSync(join(dir, ".git"))) return false;
+  const [base, head] = [`origin/${parent.branch}`, `origin/${sb.branch}`];
+  try {
+    await git(dir, ["fetch", "origin", `+refs/heads/${parent.branch}:refs/remotes/${base}`, `+refs/heads/${sb.branch}:refs/remotes/${head}`]);
+    await git(dir, ["merge-base", "--is-ancestor", head, base]);
+    return Date.parse((await git(dir, ["log", "-1", "--format=%cI", head])).trim()) > Date.parse(sb.createdAt);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Archive sandboxes nobody has used for IDLE_DAYS. Each is warned first (via
  * `warn`, WARN_DAYS ahead); any activity after the warning restarts the clock.
  * Skips a sandbox whose job is running.
@@ -115,6 +133,18 @@ export async function pruneSandboxes(
   for (const sb of registry.values()) {
     const parent = getParent(sb.parent);
     if (!parent || closedReason(sb)) continue;
+    if (await merged(sb, parent)) {
+      const release = tryAcquireSiteLock(sb.id);
+      if (!release) continue;
+      try {
+        await retire(sb, parent, { publishedAt: new Date(now).toISOString() });
+        await removeCheckout(sb.id);
+        console.log(`[sandbox] ${sb.id}: retired, its branch is already in ${parent.branch}`);
+      } finally {
+        release();
+      }
+      continue;
+    }
     const used = await lastUsed(checkoutPath(sb.id));
     const warned = sb.warnedAt ? Date.parse(sb.warnedAt) : 0;
     if (warned > used && now - warned >= WARN_DAYS * DAY_MS) {
