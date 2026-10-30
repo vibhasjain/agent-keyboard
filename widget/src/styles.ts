@@ -584,7 +584,7 @@ button::-moz-focus-inner{ border:0; }
   padding:7px 12px; cursor:pointer;
   transition:color .16s ease, background .16s ease, border-color .16s ease;
 }
-.ak-opt:hover:not(:disabled){ color:var(--ak-accent); border-color:var(--ak-accent); background:color-mix(in srgb,var(--ak-accent) 12%,transparent); }
+@media (hover:hover){ .ak-opt:hover:not(:disabled){ color:var(--ak-accent); border-color:var(--ak-accent); background:color-mix(in srgb,var(--ak-accent) 12%,transparent); } }
 .ak-opt:active:not(:disabled){ transform:translateY(1px); }
 /* An answered turn's options are spent: the one you took stays lit, the rest fade.
    Tapping any of them again in scrollback must not re-send. */
