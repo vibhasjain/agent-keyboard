@@ -190,6 +190,21 @@ button::-moz-focus-inner{ border:0; }
   -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
 }
+/* hovering an option gets the same rainbow text and ring (only where hover is real, see .ak-opt:hover) */
+@media (hover:hover){
+  :host(.ak-rainbow) .ak-opt:hover:not(:disabled){
+    background:var(--ak-rainbow) 0 0 / 200% 100%, color-mix(in srgb,var(--ak-accent) 12%,transparent);
+    -webkit-background-clip:text,padding-box; background-clip:text,padding-box;
+    -webkit-text-fill-color:transparent; animation:ak-rainbow 8s linear infinite;
+    position:relative; border-color:transparent;
+  }
+  :host(.ak-rainbow) .ak-opt:hover:not(:disabled)::before{
+    content:""; position:absolute; inset:-1px; padding:1px; border-radius:inherit; pointer-events:none;
+    background:var(--ak-rainbow) 0 0 / 200% 100%; animation:ak-rainbow 8s linear infinite;
+    -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite:xor;
+    mask:linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  }
+}
 @keyframes ak-rainbow{ to{ background-position:-200% 0; } }
 :host(.ak-rainbow){ animation:ak-accent-cycle 8s linear infinite; }
 :host(.ak-rainbow.ak-light){ animation-name:ak-accent-cycle-light; }
