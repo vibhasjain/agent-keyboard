@@ -244,10 +244,18 @@ export async function getToken(): Promise<string | null> {
   // Dev bypass: mock server ignores Authorization; never try to refresh a fake token.
   if (CONFIG.isDev) return s.access_token
   if (s.expires_at - 60 > nowSec()) return s.access_token
-  if (!refreshInFlight) {
-    refreshInFlight = doRefresh(s).finally(() => {
-      refreshInFlight = null
-    })
-  }
-  return refreshInFlight
+  return refresh(s)
+}
+
+/** Refresh now, ignoring expires_at — the server rejected a token that hasn't
+ *  expired (session revoked elsewhere). null ⇒ failed (a 4xx also signed us out). */
+export async function forceRefresh(): Promise<string | null> {
+  const s = readSession()
+  return s && !CONFIG.isDev ? refresh(s) : null
+}
+
+function refresh(s: Session): Promise<string | null> {
+  return (refreshInFlight ??= doRefresh(s).finally(() => {
+    refreshInFlight = null
+  }))
 }

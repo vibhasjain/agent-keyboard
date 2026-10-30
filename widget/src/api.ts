@@ -1,7 +1,7 @@
 // Typed client for the Agent Keyboard server. Auth header via hand-rolled getToken.
 // Reads the SSE stream directly off fetch (no EventSource — we need POST + headers).
 
-import { getToken } from './auth'
+import { forceRefresh, getToken, hasStoredSession } from './auth'
 import { CONFIG } from './config'
 
 export type SseFrameHandler = (name: string, data: Record<string, unknown>) => void
@@ -28,6 +28,27 @@ async function authHeaders(extra?: Record<string, string>): Promise<Record<strin
   }
 }
 
+export const SIGNED_OUT = 'Signed out. Sign in again.'
+
+/** A 401/403 while signed in can mean the session was revoked elsewhere (sign-out
+ *  everywhere, password change, an admin) though the token hasn't expired. Force one
+ *  refresh: true ⇒ retry once with the new token. A rejected refresh signs out
+ *  (doRefresh) and throws SIGNED_OUT; a network/5xx refresh failure returns false
+ *  so the caller's usual transient handling applies. */
+async function reauth(status: number): Promise<boolean> {
+  if ((status !== 401 && status !== 403) || !hasStoredSession()) return false
+  if (await forceRefresh()) return true
+  if (!hasStoredSession()) throw new HttpError(status, SIGNED_OUT)
+  return false
+}
+
+/** fetch with the bearer token, retried once after a forced refresh (see reauth). */
+async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const go = async () => fetch(url(path), { ...init, headers: await authHeaders(init.headers as Record<string, string> | undefined) })
+  const res = await go()
+  return (await reauth(res.status)) ? go() : res
+}
+
 /** Pull the server's own explanation out of an error body, if it sent one. */
 function readError(body: string): string {
   try {
@@ -42,8 +63,7 @@ function readError(body: string): string {
  *  Delivers every frame to onFrame; keepalive comment lines (":") are ignored.
  *  Resolves when the stream closes; an onFrame that throws cancels the reader. */
 export async function readSse(path: string, init: RequestInit, onFrame: SseFrameHandler): Promise<void> {
-  const headers = await authHeaders(init.headers as Record<string, string> | undefined)
-  const res = await fetch(url(path), { ...init, headers })
+  const res = await authedFetch(path, init)
   if (!res.ok || !res.body) {
     // The server explains itself in {error} on every rejection, not just 404s —
     // reading it only there turned "site not in the allow-list" into "/path -> 500".
@@ -96,8 +116,7 @@ export async function readSse(path: string, init: RequestInit, onFrame: SseFrame
 }
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers = await authHeaders({ 'Content-Type': 'application/json', ...(init?.headers as Record<string, string>) })
-  const res = await fetch(url(path), { ...init, headers })
+  const res = await authedFetch(path, { ...init, headers: { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string>) } })
   if (!res.ok) throw new HttpError(res.status, `${path} -> ${res.status}`)
   return (await res.json()) as T
 }
@@ -262,7 +281,16 @@ export const screenStream = (
   readSse(`/sites/${encodeURIComponent(siteId)}/screen`, { method: 'GET', signal }, onFrame)
 
 // XHR (not fetch) so we get upload progress events for the chip's progress ring.
-async function xhrUpload(
+async function xhrUpload(...args: Parameters<typeof xhrUploadOnce>): Promise<UploadResult> {
+  try {
+    return await xhrUploadOnce(...args)
+  } catch (e) {
+    if (e instanceof HttpError && (await reauth(e.status))) return xhrUploadOnce(...args)
+    throw e
+  }
+}
+
+async function xhrUploadOnce(
   fullUrl: string,
   field: 'photo' | 'file',
   file: Blob,

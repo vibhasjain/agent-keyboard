@@ -5,7 +5,7 @@
 // Fire-and-forget guarantee: we transition sending → streaming only AFTER the jobId
 // is persisted to localStorage, so closing the tab never loses the job.
 
-import { api, HttpError, type ConversationMessage, type GitInfo } from './api'
+import { api, HttpError, SIGNED_OUT, type ConversationMessage, type GitInfo } from './api'
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
@@ -783,7 +783,7 @@ function reattach(gen: number, isBoot: boolean): void {
         } else {
           const message =
             e.status === 401 || e.status === 403
-              ? 'Sign in again to reconnect.'
+              ? SIGNED_OUT
               : e.status === 404
                 ? 'That job is no longer available.'
                 : `Could not reconnect (${e.status}).`
