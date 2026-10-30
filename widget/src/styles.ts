@@ -176,12 +176,18 @@ button::-moz-focus-inner{ border:0; }
   background:var(--ak-rainbow) 0 0 / 200% 100%; -webkit-background-clip:text; background-clip:text;
   -webkit-text-fill-color:transparent; animation:ak-rainbow 8s linear infinite;
 }
+/* the option you picked: rainbow text over its accent tint (two layers, so the tint survives background-clip:text) */
+:host(.ak-rainbow) .ak-opt.selected:disabled{
+  background:var(--ak-rainbow) 0 0 / 200% 100%, color-mix(in srgb,var(--ak-accent) 13%,transparent);
+  -webkit-background-clip:text,padding-box; background-clip:text,padding-box;
+  -webkit-text-fill-color:transparent; animation:ak-rainbow 8s linear infinite;
+}
 @keyframes ak-rainbow{ to{ background-position:-200% 0; } }
 :host(.ak-rainbow){ animation:ak-accent-cycle 8s linear infinite; }
 :host(.ak-rainbow.ak-light){ animation-name:ak-accent-cycle-light; }
 @keyframes ak-accent-cycle{ 0%,100%{ --ak-accent:#ff4f7f; } 20%{ --ak-accent:#ff7a33; } 30%{ --ak-accent:#e6b422; } 40%{ --ak-accent:#22b45e; } 60%{ --ak-accent:#3d93ff; } 80%{ --ak-accent:#a36bff; } }
 @keyframes ak-accent-cycle-light{ 0%,100%{ --ak-accent:#d6245a; } 20%{ --ak-accent:#c04a08; } 30%{ --ak-accent:#a07a00; } 40%{ --ak-accent:#13803f; } 60%{ --ak-accent:#1f6fd6; } 80%{ --ak-accent:#7a3fd9; } }
-@media (prefers-reduced-motion: reduce){ :host(.ak-rainbow), :host(.ak-rainbow) .ak-mini-copy, :host(.ak-rainbow) .ak-line, :host(.ak-rainbow) .ak-t-mark, :host(.ak-rainbow) .ak-t-body{ animation:none; } }
+@media (prefers-reduced-motion: reduce){ :host(.ak-rainbow), :host(.ak-rainbow) .ak-mini-copy, :host(.ak-rainbow) .ak-line, :host(.ak-rainbow) .ak-t-mark, :host(.ak-rainbow) .ak-t-body, :host(.ak-rainbow) .ak-opt{ animation:none; } }
 
 /* ---- login (Claude Code prompt sequence: "> email" / "> password") ---- */
 .ak-login{ display:flex; flex-direction:column; width:100%; }
