@@ -47,11 +47,11 @@ RUN curl -fsSL https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg \
     && rm -rf /var/lib/apt/lists/*
 
 # The real Claude Code CLI (pinned).
-RUN npm install -g @anthropic-ai/claude-code@2.1.312
+RUN npm install -g @anthropic-ai/claude-code@2.1.314
 
 # OpenAI Codex CLI (pinned) — image generation only (the image-gen skill and repo
 # image commands; owner 2026-10-14). Login lives on the volume: /data/.codex/auth.json.
-RUN npm install -g @openai/codex@0.165.0
+RUN npm install -g @openai/codex@0.166.0
 
 # Supabase CLI (pinned). Logged in per site via SUPABASE_ACCESS_TOKEN in that
 # site's settings.json "env" knob (harness.ts) — each site's own Supabase account.
