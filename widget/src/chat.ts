@@ -794,7 +794,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const live = getLiveTurns()
     // One sequence for the look-ahead: a chip tapped in the last history message is
     // answered by a user turn that lands in `live`, so it has to cross the boundary.
-    const turns = [...history, ...live]
+    // Sends still waiting behind a running job count too, so a tapped chip lights at once.
+    const waiting = [...getPendingFollowups(), ...getQueued().map((q) => q.text)].map((text) => ({ role: 'user', text }))
+    const turns = [...history, ...live, ...waiting]
     for (let i = 0; i < history.length; i++) listEl.appendChild(nodeForMessage(history[i], answerFor(turns, i)))
     for (let i = 0; i < live.length; i++) {
       const t = live[i]
@@ -966,7 +968,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // One delegated listener covers live, history, and every re-render. A tap sends
   // the option's text as the next message — start() queues it behind a running job.
   // Answered options are rebuilt disabled by rebuildStatic() and cannot re-send;
-  // the guard here covers the window between the tap and that rebuild.
+  // the tap marks them at once too, so the pick lights up before that rebuild.
   // Keep the composer focused on press, as bar.ts does for its buttons: the iOS
   // keyboard dropping mid-tap shifts the list and the click misses.
   on(listEl, 'mousedown', (e) => {
@@ -977,6 +979,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (!btn || btn.disabled) return
     const text = (btn.dataset.send || btn.textContent || '').trim()
     if (!text) return
+    // Light the pick now; the rebuild that confirms it can wait on a queued or slow send.
+    const opts = btn.closest<HTMLElement>('.ak-opts')
+    if (opts) markAnsweredOptions(opts, text)
     if (isGuestDemo()) chooseGuestDemo(text)
     else start({ text, page: location.pathname })
   })
