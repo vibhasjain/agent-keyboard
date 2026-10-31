@@ -29,7 +29,9 @@ function notePath(siteId: string, name: string): string {
  *  only group them in the sidebar, so a name is unique across folders. */
 const orderPath = (siteId: string) => join(checkoutPath(siteId), NOTES_REL, ".order.json");
 
-export type NoteOrder = (string | { folder: string; notes: string[] })[];
+/** The Archive folder also carries `from`: each archived note's previous folder
+ *  ("" = loose), so Restore can put it back. */
+export type NoteOrder = (string | { folder: string; notes: string[]; from?: Record<string, string> })[];
 
 export function validOrder(order: unknown): order is NoteOrder {
   return (
@@ -38,7 +40,16 @@ export function validOrder(order: unknown): order is NoteOrder {
     order.every(
       (i) =>
         validNoteName(i) ||
-        (validNoteName(i?.folder) && Array.isArray(i.notes) && i.notes.length <= 1000 && i.notes.every(validNoteName)),
+        (validNoteName(i?.folder) &&
+          Array.isArray(i.notes) &&
+          i.notes.length <= 1000 &&
+          i.notes.every(validNoteName) &&
+          (i.from === undefined ||
+            (typeof i.from === "object" &&
+              i.from !== null &&
+              !Array.isArray(i.from) &&
+              Object.keys(i.from).length <= 1000 &&
+              Object.entries(i.from).every(([n, f]) => validNoteName(n) && (f === "" || validNoteName(f)))))),
     )
   );
 }
@@ -74,7 +85,12 @@ export async function noteTree(siteId: string): Promise<NoteOrder> {
   const left = new Set(notes.map((n) => n.name));
   const take = (n: string) => left.delete(n);
   const tree = (await readOrder(siteId))
-    .map((i) => (typeof i === "string" ? i : { folder: i.folder, notes: i.notes.filter(take) }))
+    .map((i) => {
+      if (typeof i === "string") return i;
+      const notes = i.notes.filter(take);
+      if (i.folder !== ARCHIVE_FOLDER || !i.from) return { folder: i.folder, notes };
+      return { folder: i.folder, notes, from: Object.fromEntries(Object.entries(i.from).filter(([n]) => notes.includes(n))) };
+    })
     .filter((i) => typeof i !== "string" || take(i));
   const fresh = notes.filter((n) => left.has(n.name)).sort((a, b) => a.updatedAt - b.updatedAt).map((n) => n.name);
   let daily = tree.find((i) => typeof i !== "string" && i.folder === DAILY_FOLDER) as { folder: string; notes: string[] } | undefined;
@@ -252,7 +268,7 @@ export async function mergeNotes(fromId: string, toId: string): Promise<string[]
   const dstOrder: unknown = await json(join(dst, ".order.json"), []);
   const order: NoteOrder = (validOrder(dstOrder) ? dstOrder : [])
     .filter((i) => typeof i !== "string" || !deleted.includes(i))
-    .map((i) => (typeof i === "string" ? i : { folder: i.folder, notes: i.notes.filter((x) => !deleted.includes(x)) }));
+    .map((i) => (typeof i === "string" ? i : { ...i, notes: i.notes.filter((x) => !deleted.includes(x)) }));
   const inOrder = new Set(order.flatMap((i) => (typeof i === "string" ? [i] : i.notes)));
   for (const n of written.filter((x) => !inOrder.has(x))) {
     const folder = (validOrder(srcOrder) ? srcOrder : []).find((i) => typeof i !== "string" && i.notes.includes(n)) as { folder: string } | undefined;

@@ -57,6 +57,7 @@ const ICON_PATHS: Record<string, string> = {
   indent: '<path d="M21 5H11M21 12H11M21 19H11M3 8l4 4-4 4" fill="none"/>',
   outdent: '<path d="M21 5H11M21 12H11M21 19H11M7 8l-4 4 4 4" fill="none"/>',
   archive: '<rect x="3" y="4" width="18" height="4" rx="1" fill="none"/><path d="M5 8v11h14V8M10 12h4" fill="none"/>',
+  undo: '<path d="M9 14 4 9l5-5" fill="none"/><path d="M4 9h11a5 5 0 0 1 0 10h-4" fill="none"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none"/><path d="m3.5 7 8.5 6 8.5-6" fill="none"/>',

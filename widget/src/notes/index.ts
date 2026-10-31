@@ -243,7 +243,8 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   // -- state --
   // The sidebar: loose notes, then one level of folders. `names` is every note, flat.
-  type Item = string | { folder: string; notes: string[] }
+  // The Archive folder also remembers each archived note's previous folder ("" = loose).
+  type Item = string | { folder: string; notes: string[]; from?: Record<string, string> }
   let tree: Item[] = []
   let names: string[] = []
   const setTree = (t: Item[]) => {
@@ -253,6 +254,8 @@ export async function open(opts: NotesOptions): Promise<void> {
   const mapNotes = (fn: (n: string) => string[]) =>
     setTree(tree.flatMap((i): Item[] => (typeof i === 'string' ? fn(i) : [{ ...i, notes: i.notes.flatMap(fn) }])))
   const folderNames = () => tree.flatMap((i) => (typeof i === 'string' ? [] : [i.folder]))
+  const archive = () => tree.find((i) => typeof i !== 'string' && i.folder === ARCHIVE) as Exclude<Item, string> | undefined
+  const isArchived = (n: string) => !!archive()?.notes.includes(n)
   // Folder and note names are unique together, so a name always means one thing:
   // [[Folder]] mentions every note in it.
   const taken = (n: string) => names.includes(n) || folderNames().includes(n)
@@ -288,7 +291,8 @@ export async function open(opts: NotesOptions): Promise<void> {
     const t: Item[] = []
     let f: { folder: string; notes: string[] } | null = null
     for (const c of list.children as HTMLCollectionOf<HTMLElement>) {
-      if (c.dataset.folder !== undefined) t.push((f = { folder: c.dataset.folder, notes: [] }))
+      if (c.dataset.folder !== undefined)
+        t.push((f = { folder: c.dataset.folder, notes: [], ...(c.dataset.folder === ARCHIVE && { from: archive()?.from }) }))
       else if (c.dataset.name !== undefined) (f ? f.notes : t).push(c.dataset.name)
     }
     return t
@@ -425,7 +429,8 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
   }
 
-  // Notes archive (move into the Archive folder); only archived notes can be deleted.
+  // Notes archive (move into the Archive folder); archived notes are read-only
+  // and can be restored to their previous folder, or deleted.
   const noteRow = (name: string, archived = false) => {
     const li = h('li')
     li.dataset.name = name
@@ -439,8 +444,18 @@ export async function open(opts: NotesOptions): Promise<void> {
     del.title = archived ? 'Delete note' : 'Archive note'
     del.setAttribute('aria-label', `${archived ? 'Delete' : 'Archive'} note ${name}`)
     del.append(icon(archived ? 'trash' : 'archive', 14))
-    del.onclick = () => (archived ? void deleteNote(name) : archiveNote(name))
-    li.append(b, del)
+    del.onclick = () => void (archived ? deleteNote(name) : archiveNote(name))
+    li.append(b)
+    if (archived) {
+      const undo = h('button', 'akn-del akn-restore')
+      undo.type = 'button'
+      undo.title = 'Restore note'
+      undo.setAttribute('aria-label', `Restore note ${name}`)
+      undo.append(icon('undo', 14))
+      undo.onclick = () => restoreNote(name)
+      li.append(undo)
+    }
+    li.append(del)
     list.appendChild(li)
   }
 
@@ -530,7 +545,12 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
     setTree(
       to
-        ? tree.map((i) => (typeof i !== 'string' && i.folder === from ? { ...i, folder: to } : i))
+        ? tree.map((i) =>
+            typeof i === 'string' ? i
+            : i.folder === from ? { ...i, folder: to }
+            : i.from ? { ...i, from: Object.fromEntries(Object.entries(i.from).map(([n, f]) => [n, f === from ? to : f])) }
+            : i,
+          )
         : tree.flatMap((i) => (typeof i !== 'string' && i.folder === from ? i.notes : [i])),
     )
     renderList()
@@ -746,6 +766,11 @@ export async function open(opts: NotesOptions): Promise<void> {
       }),
     )
     await crepe.create()
+    if (isArchived(name)) {
+      crepe.setReadonly(true)
+      title.readOnly = true
+      by.textContent = `${by.textContent ? `${by.textContent} · ` : ''}archived, read-only`
+    }
 
     // Rename on commit (blur / Enter). The server refuses to clobber an existing note.
     const rename = async () => {
@@ -929,13 +954,41 @@ export async function open(opts: NotesOptions): Promise<void> {
     await flush()
     closeNote()
   }
-  const archiveNote = (name: string) => {
+  const archiveNote = async (name: string) => {
+    if (current === name) await flush()
+    const prev = tree.find((i) => typeof i !== 'string' && i.notes.includes(name)) as Exclude<Item, string> | undefined
     mapNotes((n) => (n === name ? [] : [n]))
     if (!folderNames().includes(ARCHIVE)) setTree([...tree, { folder: ARCHIVE, notes: [] }])
-    setTree(tree.map((i) => (typeof i !== 'string' && i.folder === ARCHIVE ? { ...i, notes: [name, ...i.notes] } : i)))
+    setTree(
+      tree.map((i) =>
+        typeof i !== 'string' && i.folder === ARCHIVE
+          ? { ...i, notes: [name, ...i.notes], from: { ...i.from, [name]: prev?.folder ?? '' } }
+          : i,
+      ),
+    )
     saveOrder()
-    renderList()
+    if (current === name) void openNote(name)
+    else renderList()
     setStatus('Archived')
+  }
+  /** Back to the folder it was archived from (top of it), or loose if that folder is gone. */
+  const restoreNote = (name: string) => {
+    const back = archive()?.from?.[name] ?? ''
+    setTree(
+      tree.map((i) => {
+        if (typeof i === 'string') return i
+        if (i.folder === ARCHIVE) {
+          const { [name]: _, ...from } = i.from ?? {}
+          return { ...i, notes: i.notes.filter((n) => n !== name), from }
+        }
+        return i.folder === back ? { ...i, notes: [name, ...i.notes] } : i
+      }),
+    )
+    if (!names.includes(name)) setTree([name, ...tree])
+    saveOrder()
+    if (current === name) void openNote(name)
+    else renderList()
+    setStatus('Restored')
   }
   const deleteNote = async (name: string) => {
     if (!confirm(`Delete "${name}"? This can't be undone.`)) return
