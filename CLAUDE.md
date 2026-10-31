@@ -67,7 +67,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   live and force-pushes, shows a summary with a "Publish to live" option, then calls `POST /sites/<sandbox>/publish`
   (internal secret): only the sandbox's creator or an `ALLOWED_EMAIL` owner (whoever sent the site's latest message) may.
   The server squashes the branch into one commit authored by them (`Co-authored-by` for the others), opens a PR and
-  rebase-merges it, deletes the branch, archives the notes to live's `.tmp/notes-archive/<slug>/`, notes it in the live
+  rebase-merges it, deletes the branch, archives the notes to live's `.tmp/notes-archive/<slug>/` and 3-way merges them into live's notes (`mergeNotes`, against the `.tmp/notes/.base/` snapshot taken at creation; daily notes skipped, conflicts keep live's copy and are listed in the live note), notes it in the live
   conversation, waits for live to change, redirects the bar back, and deletes the checkout once the session ends (the
   session files are kept). **M3:** the settings menu on the live site lists open sandboxes (`GET /sites/:id/sandboxes`:
   name, owner, last activity); tapping one joins it via the same handoff. A sandbox idle 12 days gets a warning note in
