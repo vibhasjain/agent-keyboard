@@ -196,6 +196,11 @@ app you're using via its own git repo. When editing, describe the **shipped** pr
   check that no other site has a job running (`agent_keyboard_jobs` where `status='running'` and `site_id` is not this
   site, via the service key in the server env); if one is running, wait for it to finish (poll every 30 s, up to 20 min),
   then push. `site/`-only pushes don't restart the server and need no wait.
+- **Docs (Notes)** — product docs live in Notes (`.tmp/notes/`, folders in `.order.json`). **Living docs** describe how
+  the product works today; **Incremental docs** hold one PRD/tech spec per change, with a status line on top (open /
+  🟡 partly done / ✅ done + date + commit). When you implement an incremental doc, in the same job mark its status and
+  update every living doc it touches to reflect the latest implementation (and its "Last updated" date). New specs go in
+  Incremental docs.
 - **Plan first** for non-trivial (3+ step) tasks; verify before marking done — prove it works, don't
   assume. Root-cause fixes, minimal impact, touch only what's necessary.
 - **Browser testing** — headless (the `browse`/dev-browser Playwright skill), never chrome MCP tools.
