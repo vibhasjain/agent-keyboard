@@ -50,8 +50,13 @@ export async function writeOrder(siteId: string, order: NoteOrder): Promise<void
   await writeFile(orderPath(siteId), JSON.stringify(order));
 }
 
+/** The default folder for yyyy-mm-dd notes (the editor's Today button). */
+export const DAILY_FOLDER = "Daily notes";
+const isDaily = (n: string) => /^\d{4}-\d{2}-\d{2}$/.test(n);
+
 /** The saved layout minus deleted notes, plus notes not in it yet (new) at the
- *  end, oldest first. */
+ *  end, oldest first. A Daily notes folder always exists (unless a note has its
+ *  name); it takes in new yyyy-mm-dd notes and lists dates newest first. */
 export async function noteTree(siteId: string): Promise<NoteOrder> {
   const dir = join(checkoutPath(siteId), NOTES_REL);
   const files = await readdir(dir).catch(() => [] as string[]);
@@ -65,8 +70,15 @@ export async function noteTree(siteId: string): Promise<NoteOrder> {
   const tree = (await readOrder(siteId))
     .map((i) => (typeof i === "string" ? i : { folder: i.folder, notes: i.notes.filter(take) }))
     .filter((i) => typeof i !== "string" || take(i));
-  const fresh = notes.filter((n) => left.has(n.name)).sort((a, b) => a.updatedAt - b.updatedAt);
-  return [...tree, ...fresh.map((n) => n.name)];
+  const fresh = notes.filter((n) => left.has(n.name)).sort((a, b) => a.updatedAt - b.updatedAt).map((n) => n.name);
+  let daily = tree.find((i) => typeof i !== "string" && i.folder === DAILY_FOLDER) as { folder: string; notes: string[] } | undefined;
+  if (!daily && !notes.some((n) => n.name === DAILY_FOLDER)) tree.push((daily = { folder: DAILY_FOLDER, notes: [] }));
+  if (daily) {
+    daily.notes.push(...fresh.filter(isDaily));
+    // Stable: dates first, newest on top; anything else keeps its order below.
+    daily.notes.sort((a, b) => +isDaily(b) - +isDaily(a) || (isDaily(a) && isDaily(b) ? b.localeCompare(a) : 0));
+  }
+  return [...tree, ...fresh.filter((n) => !daily || !isDaily(n))];
 }
 
 /** Every note, flat, in sidebar order (for the composer's #mention list). */

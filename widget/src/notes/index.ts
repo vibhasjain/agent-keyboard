@@ -187,7 +187,10 @@ export async function open(opts: NotesOptions): Promise<void> {
   const newMenu = h('div', 'akn-newmenu')
   newMenu.setAttribute('role', 'menu')
   newMenu.hidden = true
-  sideHead.append(newBtn, newMenu)
+  const todayBtn = h('button', 'akn-new', 'Today')
+  todayBtn.type = 'button'
+  todayBtn.title = "Open today's daily note"
+  sideHead.append(newBtn, todayBtn, newMenu)
   const list = h('ul', 'akn-list')
   side.append(sideHead, list)
 
@@ -807,6 +810,26 @@ export async function open(opts: NotesOptions): Promise<void> {
     await openNote(name, true)
   }
 
+  // Today's note (local yyyy-mm-dd), created on first tap. The server keeps the
+  // Daily notes folder newest first; mirror that here so it shows right away.
+  const DAILY = 'Daily notes'
+  const today = async () => {
+    const d = new Date()
+    const name = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (names.includes(name)) return openNote(name)
+    try {
+      await call(`/${encodeURIComponent(name)}`, { method: 'PUT', body: JSON.stringify({ content: '' }) })
+    } catch (e) {
+      setStatus(`Couldn't create — ${(e as Error).message}`, true)
+      return
+    }
+    if (!folderNames().includes(DAILY)) setTree([...tree, { folder: DAILY, notes: [] }])
+    setTree(tree.map((i) => (typeof i !== 'string' && i.folder === DAILY ? { ...i, notes: [name, ...i.notes] } : i)))
+    toggleFolder(DAILY, false)
+    saveOrder()
+    await openNote(name)
+  }
+
   // Last-chance save if the tab closes mid-debounce (keepalive outlives the page).
   const onUnload = () => {
     if (!dirty || !current) return
@@ -880,6 +903,10 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
   }
   newBtn.onclick = () => showMenu(newMenu.hidden)
+  todayBtn.onclick = () => {
+    const release = holdKeyboard()
+    void today().finally(release)
+  }
   root.addEventListener('pointerdown', (e) => {
     if (!newMenu.hidden && !sideHead.contains(e.target as Node)) showMenu(false)
   })
