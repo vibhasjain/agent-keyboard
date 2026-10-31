@@ -460,9 +460,11 @@ export async function open(opts: NotesOptions): Promise<void> {
   // Esc cancels. An empty name removes the folder and keeps its notes. The
   // folder icon collapses it (open folder icon while expanded). The trash
   // removes the folder the same way: its notes move out, nothing is deleted.
-  // The Daily notes folder can't be renamed or deleted (the server always
-  // keeps it, and files new yyyy-mm-dd notes into it); it can still move.
+  // The Daily notes and Archive folders can't be renamed or deleted (the server
+  // always keeps them, and files new yyyy-mm-dd notes into Daily notes); they
+  // can still move. Notes in Archive can't be #mentioned in chat.
   const DAILY = 'Daily notes'
+  const ARCHIVE = 'Archive'
   const folderRow = (folder: string, renaming: boolean) => {
     const li = h('li', 'akn-folder')
     li.dataset.folder = folder
@@ -474,8 +476,8 @@ export async function open(opts: NotesOptions): Promise<void> {
     toggle.onclick = () => toggleFolder(folder)
     const b = h('button')
     b.type = 'button'
-    const fixed = folder === DAILY
-    b.title = fixed ? "Daily notes can't be renamed or deleted" : 'Rename folder'
+    const fixed = folder === DAILY || folder === ARCHIVE
+    b.title = fixed ? `${folder} can't be renamed or deleted` : 'Rename folder'
     b.append(h('span', undefined, folder))
     const wasDrag = draggable(li, b)
     const edit = () => {

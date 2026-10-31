@@ -56,10 +56,13 @@ export async function writeOrder(siteId: string, order: NoteOrder): Promise<void
 /** The default folder for yyyy-mm-dd notes (the editor's Today button). */
 export const DAILY_FOLDER = "Daily notes";
 const isDaily = (n: string) => /^\d{4}-\d{2}-\d{2}$/.test(n);
+/** A fixed folder for retired notes: they stay readable but can't be #mentioned. */
+export const ARCHIVE_FOLDER = "Archive";
 
 /** The saved layout minus deleted notes, plus notes not in it yet (new) at the
  *  end, oldest first. A Daily notes folder always exists (unless a note has its
- *  name); it takes in new yyyy-mm-dd notes and lists dates newest first. */
+ *  name); it takes in new yyyy-mm-dd notes and lists dates newest first. An
+ *  Archive folder always exists the same way. */
 export async function noteTree(siteId: string): Promise<NoteOrder> {
   const dir = join(checkoutPath(siteId), NOTES_REL);
   const files = await readdir(dir).catch(() => [] as string[]);
@@ -81,13 +84,15 @@ export async function noteTree(siteId: string): Promise<NoteOrder> {
     // Stable: dates first, newest on top; anything else keeps its order below.
     daily.notes.sort((a, b) => +isDaily(b) - +isDaily(a) || (isDaily(a) && isDaily(b) ? b.localeCompare(a) : 0));
   }
+  if (!tree.some((i) => typeof i !== "string" && i.folder === ARCHIVE_FOLDER) && !notes.some((n) => n.name === ARCHIVE_FOLDER))
+    tree.push({ folder: ARCHIVE_FOLDER, notes: [] });
   return [...tree, ...fresh.filter((n) => !daily || !isDaily(n))];
 }
 
-/** Every note, flat, in sidebar order (for the composer's #mention list). */
+/** Every note but the archived ones, flat, in sidebar order (for the composer's #mention list). */
 export async function listNotes(siteId: string): Promise<{ name: string; folder?: string }[]> {
   return (await noteTree(siteId)).flatMap((i) =>
-    typeof i === "string" ? [{ name: i }] : i.notes.map((name) => ({ name, folder: i.folder })),
+    typeof i === "string" ? [{ name: i }] : i.folder === ARCHIVE_FOLDER ? [] : i.notes.map((name) => ({ name, folder: i.folder })),
   );
 }
 
@@ -172,12 +177,15 @@ export function notesNote(siteId: string, text: string): string {
   } catch {
     folders = new Map();
   }
+  // Archived notes (and the Archive folder) can't be #mentioned; [[links]] to them still resolve.
+  const archived = new Set([ARCHIVE_FOLDER, ...(folders.get(ARCHIVE_FOLDER) ?? [])]);
+  folders.delete(ARCHIVE_FOLDER);
   if (all.length) all.push(...folders.keys());
   while (queue.length) {
     const t = queue.shift()!;
     const found = [...t.matchAll(/\[\[([^\[\]]+)\]\]/g)].map((m) => m[1]!.trim());
     const lower = t.toLowerCase();
-    for (const n of all) if (lower.includes(`#${n.toLowerCase()}`)) found.push(n);
+    for (const n of all) if (!archived.has(n) && lower.includes(`#${n.toLowerCase()}`)) found.push(n);
     for (const n of [...found]) found.push(...(folders.get(n) ?? []));
     for (const n of found) {
       if (names.includes(n) || !validNoteName(n) || !existsSync(notePath(siteId, n))) continue;
