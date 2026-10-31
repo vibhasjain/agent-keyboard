@@ -116,6 +116,12 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
   let pos = 0
   for (let i = 0; i < liveTurns.length; i++) {
     const t = liveTurns[i]
+    // A reply with no user turn before it (a streaming job re-attached without its
+    // prompt) can't pair by prompt text — match it against history replies by its own.
+    if (t.role === 'assistant' && liveTurns[i - 1]?.role !== 'user') {
+      if (history.some((m) => m.role === 'assistant' && sameTerminalText(m.text, t.text))) drop.add(i)
+      continue
+    }
     if (t.role !== 'user') continue
     const target = normTurnText(t.text)
     for (let j = pos; j < history.length; j++) {
