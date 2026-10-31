@@ -275,7 +275,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       if (typeof i === 'string') noteRow(i)
       else {
         folderRow(i.folder, i.folder === renaming)
-        for (const n of i.notes) noteRow(n)
+        for (const n of i.notes) noteRow(n, i.folder === ARCHIVE)
       }
     }
     markRows()
@@ -425,7 +425,8 @@ export async function open(opts: NotesOptions): Promise<void> {
     }
   }
 
-  const noteRow = (name: string) => {
+  // Notes archive (move into the Archive folder); only archived notes can be deleted.
+  const noteRow = (name: string, archived = false) => {
     const li = h('li')
     li.dataset.name = name
     const b = h('button', undefined, name)
@@ -435,10 +436,10 @@ export async function open(opts: NotesOptions): Promise<void> {
     b.onclick = () => wasDrag() || void openNote(name)
     const del = h('button', 'akn-del')
     del.type = 'button'
-    del.title = 'Delete note'
-    del.setAttribute('aria-label', `Delete note ${name}`)
-    del.append(icon('trash', 14))
-    del.onclick = () => void deleteNote(name)
+    del.title = archived ? 'Delete note' : 'Archive note'
+    del.setAttribute('aria-label', `${archived ? 'Delete' : 'Archive'} note ${name}`)
+    del.append(icon(archived ? 'trash' : 'archive', 14))
+    del.onclick = () => (archived ? void deleteNote(name) : archiveNote(name))
     li.append(b, del)
     list.appendChild(li)
   }
@@ -927,6 +928,14 @@ export async function open(opts: NotesOptions): Promise<void> {
   back.onclick = async () => {
     await flush()
     closeNote()
+  }
+  const archiveNote = (name: string) => {
+    mapNotes((n) => (n === name ? [] : [n]))
+    if (!folderNames().includes(ARCHIVE)) setTree([...tree, { folder: ARCHIVE, notes: [] }])
+    setTree(tree.map((i) => (typeof i !== 'string' && i.folder === ARCHIVE ? { ...i, notes: [name, ...i.notes] } : i)))
+    saveOrder()
+    renderList()
+    setStatus('Archived')
   }
   const deleteNote = async (name: string) => {
     if (!confirm(`Delete "${name}"? This can't be undone.`)) return
