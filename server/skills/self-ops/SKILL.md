@@ -78,10 +78,11 @@ F="$AK_FORK_REPO"; R=.tmp/ak-fork
 # 200 = GH_TOKEN can push the fork. Check FIRST, before any merge work:
 curl -s -o /dev/null -w "%{http_code}\n" -u "x-access-token:$GH_TOKEN" "https://github.com/$F.git/info/refs?service=git-receive-pack"
 [ -d $R ] || git clone "https://x-access-token:$GH_TOKEN@github.com/$F.git" $R
-cd $R && git pull --ff-only origin main
+cd $R && git pull --ff-only origin main && OLD=$(git rev-parse HEAD)
 git pull --no-rebase https://github.com/vibhasjain/agent-keyboard.git main
 (cd server && npm ci --include=dev && npm run typecheck) && (cd widget && npm ci --include=dev && npm test)
 git push origin main
+git diff $OLD HEAD -- server/.env.example   # settings this update added
 ```
 
 - **Not 200:** say so once, up front, and stop: `GH_TOKEN` can't push `$F`. Either add the fork to the
@@ -96,6 +97,9 @@ git push origin main
   (GitHub disables them on forks until the owner enables them once in the repo's **Actions** tab), or
   the `FLY_API_TOKEN` repo secret is missing (`SELF_HOSTING.md` step 6). Say which. Don't `fly deploy`
   from inside your own turn.
+- **New settings.** If that last diff adds lines, list each new setting in your summary with its
+  comment from `.env.example` and whether this instance has it set (`fly secrets list`, `env`). They
+  are optional, so nothing fails without them — the summary is the only place the owner hears of them.
 - The deploy restarts this machine a few minutes later. Tell the owner it's on its way.
 
 ## Where your own state lives (the /data volume)
