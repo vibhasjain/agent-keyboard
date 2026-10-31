@@ -460,6 +460,9 @@ export async function open(opts: NotesOptions): Promise<void> {
   // Esc cancels. An empty name removes the folder and keeps its notes. The
   // folder icon collapses it (open folder icon while expanded). The trash
   // removes the folder the same way: its notes move out, nothing is deleted.
+  // The Daily notes folder can't be renamed or deleted (the server always
+  // keeps it, and files new yyyy-mm-dd notes into it); it can still move.
+  const DAILY = 'Daily notes'
   const folderRow = (folder: string, renaming: boolean) => {
     const li = h('li', 'akn-folder')
     li.dataset.folder = folder
@@ -471,7 +474,8 @@ export async function open(opts: NotesOptions): Promise<void> {
     toggle.onclick = () => toggleFolder(folder)
     const b = h('button')
     b.type = 'button'
-    b.title = 'Rename folder'
+    const fixed = folder === DAILY
+    b.title = fixed ? "Daily notes can't be renamed or deleted" : 'Rename folder'
     b.append(h('span', undefined, folder))
     const wasDrag = draggable(li, b)
     const edit = () => {
@@ -496,7 +500,7 @@ export async function open(opts: NotesOptions): Promise<void> {
       input.focus()
       input.select()
     }
-    b.onclick = () => wasDrag() || edit()
+    b.onclick = () => wasDrag() || fixed || edit()
     const del = h('button', 'akn-del')
     del.type = 'button'
     del.title = 'Delete folder (keeps its notes)'
@@ -505,9 +509,9 @@ export async function open(opts: NotesOptions): Promise<void> {
     del.onclick = () =>
       confirm(`Delete the folder "${folder}"? Its notes are kept and move out of it. This can't be undone.`) &&
       renameFolder(folder, '')
-    li.append(toggle, b, del)
+    li.append(toggle, b, ...(fixed ? [] : [del]))
     list.appendChild(li)
-    if (renaming) edit()
+    if (renaming && !fixed) edit()
   }
 
   const renameFolder = (from: string, to: string) => {
@@ -812,7 +816,6 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   // Today's note (local yyyy-mm-dd), created on first tap. The server keeps the
   // Daily notes folder newest first; mirror that here so it shows right away.
-  const DAILY = 'Daily notes'
   const today = async () => {
     const d = new Date()
     const name = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`

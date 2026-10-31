@@ -698,7 +698,11 @@ app.post("/sites/:siteId/publish", authed, async (req, res) => {
     await addTeamNote(live.id, await conversationIdFor(live.id, ""), {
       id: randomUUID(),
       role: "user",
-      text: `Published the sandbox ${sb.branch} to live: ${title.trim()} (${out.pr})`,
+      text:
+        `Published the sandbox ${sb.branch} to live: ${title.trim()} (${out.pr})` +
+        (out.conflicts.length
+          ? `. These notes changed on both sides and kept live's copy: ${out.conflicts.join(", ")}. The sandbox's versions are in .tmp/notes-archive/${sb.id.split("--sb-")[1]}/.`
+          : ""),
       tools: [],
       ts: new Date().toISOString(),
       sender: by,

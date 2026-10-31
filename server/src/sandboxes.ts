@@ -9,6 +9,7 @@ import { cp } from "node:fs/promises";
 import { join } from "node:path";
 import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, git, lastUsed, removeCheckout, tryAcquireSiteLock, writeDataFile } from "./checkouts.js";
 import type { Site } from "./config.js";
+import { NOTES_BASE, mergeNotes } from "./notes.js";
 
 export interface Sandbox {
   id: string; // `<parent>--sb-<slug>`
@@ -83,14 +84,21 @@ export async function listSandboxes(parent: string) {
 
 const save = () => writeDataFile(FILE, JSON.stringify([...registry.values()], null, 1));
 
-/** Close a sandbox: delete its branch, archive its notes on live, record why. */
-async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>): Promise<void> {
+/** Close a sandbox: delete its branch, archive its notes on live, and when it
+ *  was published merge them into live's notes too. Returns the notes that
+ *  conflicted (live's copy kept; the sandbox's is in the archive). */
+async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>): Promise<string[]> {
   await gh(parent.repo, `/git/refs/heads/${sb.branch}`, { method: "DELETE" }).catch(() => {});
-  // Notes made or edited here are archived on live, not merged back into its notes.
   const slug = sb.id.split(SEP)[1]!;
   await cp(join(checkoutPath(sb.id), ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", slug), { recursive: true }).catch(() => {});
+  const conflicts =
+    mark.publishedAt && existsSync(checkoutPath(sb.id))
+      ? await mergeNotes(sb.id, parent.id).catch((e) => (console.error(`[sandbox] ${sb.id}: notes merge failed`, e), [] as string[]))
+      : [];
+  if (conflicts.length) console.log(`[sandbox] ${sb.id}: notes kept live's copy on conflict: ${conflicts.join(", ")}`);
   Object.assign(sb, mark);
   await save();
+  return conflicts;
 }
 
 /** Archive a sandbox by hand (its creator or an owner asked): same as an idle archive. */
@@ -203,6 +211,8 @@ export async function createSandbox(
   await ensureCheckout(sandboxSite(sb.id, () => parent)!);
   const notes = (dir: string) => join(dir, ".tmp", "notes");
   await cp(notes(checkoutPath(parent.id)), notes(checkoutPath(sb.id)), { recursive: true }).catch(() => {});
+  // What it started from, for the 3-way merge into live on publish (mergeNotes).
+  await cp(notes(checkoutPath(parent.id)), join(notes(checkoutPath(sb.id)), NOTES_BASE), { recursive: true }).catch(() => {});
   return sb;
 }
 
@@ -225,7 +235,7 @@ export async function publishSandbox(
   by: string,
   title: string,
   summary: string,
-): Promise<{ pr: string; live: boolean }> {
+): Promise<{ pr: string; live: boolean; conflicts: string[] }> {
   const sb = registry.get(site.id)!;
   const parent = site.sandboxOf!;
   const dir = checkoutPath(site.id);
@@ -282,13 +292,13 @@ export async function publishSandbox(
     const err = (await res.json().catch(() => null)) as { message?: string } | null;
     throw new Error(`GitHub couldn't merge ${pr.html_url}: ${err?.message ?? res.status} — if ${parent.branch} moved, rebase and publish again`);
   }
-  await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: pr.html_url });
+  const conflicts = await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: pr.html_url });
   let live = false;
   for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
     const now = await liveBody(parent);
     live = now !== null && now !== before;
   }
-  return { pr: pr.html_url!, live };
+  return { pr: pr.html_url!, live, conflicts };
 }
 
 /** The live home page's body, to notice when a new deploy is serving. */
