@@ -17,7 +17,7 @@ primary_region = "iad"
 # Swap must be a TOP-LEVEL key (before the first [table]). It used to sit below
 # [[vm]], which TOML reads as vm[0].swap_size_mb — flyctl silently ignored it, so
 # the machine ran with no swap at all (2026-07-04 → 2026-09-05).
-swap_size_mb = 512
+swap_size_mb = 1024
 
 # Build runs with the repo root as context (so the widget/ dir is available to
 # the Dockerfile's widget stage):
@@ -81,9 +81,10 @@ swap_size_mb = 512
   source = "agent_data"
   destination = "/data"
 
-# 4 GB: on 2026-09-05 two CLI jobs (estherfell easy-apply loops = headed Chromium
-# under Xvfb, cv-jobs inbox phase) exhausted 2 GB with no swap; the VM never
-# OOM-killed, it livelocked for ~2.5 h until a manual restart.
+# 2 GB + 1 GB swap (cost cut 2026-11-02; peak use the week before was 1.25 GB).
+# It was 4 GB after 2026-09-05, when two CLI jobs (estherfell easy-apply loops =
+# headed Chromium under Xvfb, cv-jobs inbox phase) exhausted 2 GB with NO swap and
+# the VM livelocked ~2.5 h. If that recurs with swap on, go back to 4gb.
 [[vm]]
   size = "shared-cpu-2x"
-  memory = "4gb"
+  memory = "2gb"
