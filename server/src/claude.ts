@@ -185,11 +185,21 @@ export async function conversationIdFor(siteId: string, pageSlug = ""): Promise<
  * Destructive — the old session's memory and transcript are abandoned.
  * Returns the new conversationId.
  */
-export async function rotateConversation(siteId: string, pageSlug = ""): Promise<string> {
+export async function rotateConversation(siteId: string, pageSlug = "", prev?: string): Promise<string> {
   const base = pageSlug ? `site:${siteId}:page:${pageSlug}` : `site:${siteId}`;
   const next = `${base}:${Date.now().toString(36)}-${randomUUID().slice(0, 8)}`;
+  // An automatic rotation keeps the chat panel's history: link back to the old one.
+  if (prev) await writeDataFile(prevLinkPath(next), prev);
   await writeDataFile(pointerPath(siteId, pageSlug), next);
   return next;
+}
+
+const prevLinkPath = (conversationId: string) =>
+  join("agent-keyboard", "conversation-links", conversationId.replace(/[^a-zA-Z0-9._-]/g, "_"));
+
+/** The conversation an automatic rotation replaced (null after a clear/restart). */
+export async function previousConversation(conversationId: string): Promise<string | null> {
+  return readDataFile(prevLinkPath(conversationId));
 }
 
 /** Called only while holding the site lock, immediately before a turn. */
@@ -202,7 +212,7 @@ export async function prepareConversation(siteId: string, pageSlug: string, harn
   let handoff = "";
   if (reason) {
     if (reason !== "fresh cron") handoff = shortHandoff((await readConversation(siteId, { pageSlug, limit: 20 })).messages);
-    conversationId = await rotateConversation(siteId, pageSlug);
+    conversationId = await rotateConversation(siteId, pageSlug, conversationId);
     console.log(`[session-rotation] site=${siteId} page=${pageSlug || "/"} context=${usage?.contextTokens ?? 0} reason=${reason}`);
     usage = null;
   }

@@ -7,7 +7,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { sessionIdFor, conversationIdFor, CLAUDE_HOME } from "./claude.js";
+import { sessionIdFor, conversationIdFor, previousConversation, CLAUDE_HOME } from "./claude.js";
 import { checkoutPath } from "./checkouts.js";
 import { toolLabel } from "./tool-label.js";
 import { readTeamNotes } from "./team.js";
@@ -208,20 +208,8 @@ export function parseConversation(raw: string, checkoutRoot: string): ChatMessag
   return all;
 }
 
-/**
- * Parse the session into normalized chat messages, oldest→newest. Returns the
- * newest `limit` messages plus a `cursor` (count of older messages not yet
- * returned) for scroll-to-top lazy loading. `before` = how many newest messages
- * to skip (the cursor handed back last time), so paging walks backward.
- */
-export async function readConversation(
-  siteId: string,
-  opts: { limit?: number; before?: number; pageSlug?: string } = {},
-): Promise<{ messages: ChatMessage[]; cursor: number }> {
-  const limit = Math.max(1, Math.min(opts.limit ?? 40, 200));
-  const before = Math.max(0, opts.before ?? 0);
-
-  const conversationId = await conversationIdFor(siteId, opts.pageSlug ?? "");
+/** One conversation's messages, with its teammate notes and shown images. */
+async function readSegment(siteId: string, conversationId: string): Promise<ChatMessage[]> {
   const sessionId = sessionIdFor(conversationId);
   const checkoutRoot = checkoutPath(siteId);
   const path = await sessionFilePath(sessionId, checkoutRoot);
@@ -238,6 +226,30 @@ export async function readConversation(
   for (const shown of await readShownImages(siteId, sessionId)) {
     const reply = all.findLast((m) => m.role === "assistant" && m.ts && m.ts <= shown.ts);
     if (reply) (reply.images ??= []).push(...shown.names.map((n) => `/sites/${encodeURIComponent(siteId)}/assets/${n}`));
+  }
+
+  return all;
+}
+
+/**
+ * Parse the session into normalized chat messages, oldest→newest. Returns the
+ * newest `limit` messages plus a `cursor` (count of older messages not yet
+ * returned) for scroll-to-top lazy loading. `before` = how many newest messages
+ * to skip (the cursor handed back last time), so paging walks backward.
+ */
+export async function readConversation(
+  siteId: string,
+  opts: { limit?: number; before?: number; pageSlug?: string } = {},
+): Promise<{ messages: ChatMessage[]; cursor: number }> {
+  const limit = Math.max(1, Math.min(opts.limit ?? 40, 200));
+  const before = Math.max(0, opts.before ?? 0);
+
+  // Walk back through automatic rotations (newest first) until this page is covered.
+  const all: ChatMessage[] = [];
+  let conversationId: string | null = await conversationIdFor(siteId, opts.pageSlug ?? "");
+  for (let depth = 0; conversationId && depth < 50 && all.length <= before + limit; depth++) {
+    all.unshift(...(await readSegment(siteId, conversationId)));
+    conversationId = await previousConversation(conversationId);
   }
 
   // Newest-last array. Page from the end: skip `before` newest, take `limit`.
