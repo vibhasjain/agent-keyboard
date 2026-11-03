@@ -83,6 +83,7 @@ export function cleanUserText(raw: string): { text: string; attachments: number;
         photos += (l.match(/\.tmp\//g) ?? []).length || 1;
         return false;
       }
+      if (/^\[Stopped\] /.test(l)) return false;
       const sent = /^\[Sent from \S+(?: by (\S+))?\]$/i.exec(l);
       if (sent) {
         if (sent[1]) sender = sent[1];

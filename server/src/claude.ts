@@ -313,6 +313,13 @@ function scopeNote(site: Site, pushBranch: string = site.branch, sandboxMode: st
   return lines.join(" ");
 }
 
+/** Conversations (site/page) whose last turn the user cut off with Stop. The next turn is told,
+ *  so the agent doesn't treat the cut-off turn as unanswered and redo it. In-memory: a restart
+ *  already announces itself. */
+const stoppedTurns = new Set<string>();
+const stopNote = (key: string) =>
+  stoppedTurns.delete(key) ? "[Stopped] The user pressed Stop on your previous turn and it was cut off there. Don't resume or redo it unless they ask.\n\n" : "";
+
 /** Build the user turn: a "[Sent from … by <email>]" context line (conversation.ts parses the
  *  sender back out for the transcript's name tags), the text, and any attachments. */
 export function buildPrompt(
@@ -836,6 +843,7 @@ export async function* runMessageJob(
   // resolves spawnClaude's `done`, which closes the frame queue and unblocks the
   // generator so it runs its finally (releasing the site lock) and ends.
   const onAbort = () => {
+    stoppedTurns.add(`${site.id}/${opts.pageSlug ?? ""}`);
     try {
       child?.kill("SIGKILL");
     } catch {
@@ -863,7 +871,7 @@ export async function* runMessageJob(
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
     let resume = existsSync(marker) || sessionFileExists(dir, sessionId);
-    const prompt = handoff + buildPrompt(site, opts);
+    const prompt = handoff + stopNote(`${site.id}/${pageSlug}`) + buildPrompt(site, opts);
 
     // Per-site harness settings (model / effort / permission mode — see
     // harness.ts). Loaded inside the site lock, once per job.
@@ -1149,6 +1157,7 @@ export async function* runStreamingSession(
   let maxTimer: ReturnType<typeof setTimeout> | null = null;
   let closeInput = () => {};
   const onAbort = () => {
+    stoppedTurns.add(`${site.id}/${opts.pageSlug ?? ""}`);
     try {
       child?.kill("SIGKILL");
     } catch {
@@ -1173,7 +1182,7 @@ export async function* runStreamingSession(
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
     const resume = existsSync(marker) || sessionFileExists(dir, sessionId);
-    const prompt = handoff + buildPrompt(site, opts);
+    const prompt = handoff + stopNote(`${site.id}/${pageSlug}`) + buildPrompt(site, opts);
     console.log(
       `[harness] site=${site.id}${pageSlug ? `/${pageSlug}` : ""} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}${site.guest ? " guest" : ""}`,
     );
