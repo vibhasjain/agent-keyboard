@@ -51,7 +51,7 @@ RUN npm install -g @anthropic-ai/claude-code@2.1.318
 
 # OpenAI Codex CLI (pinned) — image generation only (the image-gen skill and repo
 # image commands; owner 2026-10-14). Login lives on the volume: /data/.codex/auth.json.
-RUN npm install -g @openai/codex@0.166.0
+RUN npm install -g @openai/codex@0.167.0
 
 # Supabase CLI (pinned). Logged in per site via SUPABASE_ACCESS_TOKEN in that
 # site's settings.json "env" knob (harness.ts) — each site's own Supabase account.
