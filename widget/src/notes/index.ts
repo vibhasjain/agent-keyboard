@@ -16,6 +16,7 @@ import { Decoration, DecorationSet, type EditorView } from '@milkdown/kit/prose/
 import { $inputRule, $prose } from '@milkdown/kit/utils'
 import { blockEdit } from '@milkdown/crepe/feature/block-edit'
 import { cursor } from '@milkdown/crepe/feature/cursor'
+import { imageBlock } from '@milkdown/crepe/feature/image-block'
 import { linkTooltip } from '@milkdown/crepe/feature/link-tooltip'
 import { listItem } from '@milkdown/crepe/feature/list-item'
 import { placeholder } from '@milkdown/crepe/feature/placeholder'
@@ -53,6 +54,59 @@ const linkRule = $inputRule(
     new InputRule(/\[([^\]]+)\]\(([^()\s]+)\)$/, (state, [, text, href], start, end) => {
       const link = linkSchema.type(ctx)
       return state.tr.replaceWith(start, end, state.schema.text(text!, [link.create({ href })])).removeStoredMark(link)
+    }),
+)
+
+// A ```mermaid code block gets its diagram drawn below it (the source stays an
+// editable code block). Mermaid is ~1 MB, so it loads from a CDN only when a note
+// has one; renders are cached by source so typing elsewhere doesn't redraw them.
+const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'
+type Mermaid = { initialize(c: object): void; render(id: string, src: string): Promise<{ svg: string }> }
+let mermaid: Promise<Mermaid> | null = null
+const svgs = new Map<string, Promise<string>>()
+let mermaidIds = 0
+const renderMermaid = (src: string) => {
+  mermaid ??= (import(MERMAID_URL) as Promise<{ default: Mermaid }>).then(({ default: m }) => {
+    m.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' })
+    return m
+  })
+  let svg = svgs.get(src)
+  if (!svg) svgs.set(src, (svg = mermaid.then((m) => m.render(`akn-mmd-${++mermaidIds}`, src)).then((r) => r.svg)))
+  return svg
+}
+const mermaidPreview = $prose(
+  () =>
+    new Plugin({
+      props: {
+        decorations: (state) => {
+          const decos: Decoration[] = []
+          state.doc.descendants((node, pos) => {
+            const src = node.textContent.trim()
+            if (node.type.name === 'code_block' && node.attrs.language === 'mermaid' && src)
+              decos.push(
+                Decoration.widget(
+                  pos + node.nodeSize,
+                  () => {
+                    const box = h('div', 'akn-mermaid')
+                    box.contentEditable = 'false'
+                    box.textContent = 'Drawing diagram…'
+                    renderMermaid(src).then(
+                      (svg) => (box.innerHTML = svg),
+                      (e) => {
+                        box.classList.add('akn-mermaid-err')
+                        box.textContent = `Diagram error: ${String((e as Error)?.message ?? e).split('\n')[0]}`
+                      },
+                    )
+                    return box
+                  },
+                  { key: `mmd:${src}`, side: -1, ignoreSelection: true },
+                ),
+              )
+            return node.type.name !== 'code_block'
+          })
+          return DecorationSet.create(state.doc, decos)
+        },
+      },
     }),
 )
 
@@ -168,6 +222,34 @@ export async function open(opts: NotesOptions): Promise<void> {
       throw new Error((body as { error?: string }).error || `HTTP ${res.status}`)
     }
     return res.json()
+  }
+
+  // Note images live on the server as images/<uuid>.<ext> (that relative path is
+  // what the markdown keeps, so the agent finds the file beside the note). <img>
+  // can't send the token, so they're fetched with it and shown as blob: URLs.
+  const imageBase = `${opts.api}/sites/${encodeURIComponent(opts.site)}/notes-images`
+  const uploadImage = async (file: File) => {
+    const token = await opts.getToken()
+    setStatus('Uploading image…')
+    const res = await fetch(imageBase, {
+      method: 'POST',
+      body: file,
+      headers: { 'Content-Type': file.type, ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
+    const body = (await res.json().catch(() => ({}))) as { path?: string; error?: string }
+    if (!res.ok || !body.path) {
+      setStatus(body.error || `Image upload failed (HTTP ${res.status})`, true)
+      throw new Error(body.error)
+    }
+    setStatus('')
+    return body.path
+  }
+  const imageURL = async (url: string) => {
+    const m = /^images\/([\w-]+\.\w+)$/.exec(url)
+    if (!m) return url
+    const token = await opts.getToken()
+    const res = await fetch(`${imageBase}/${m[1]}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    return res.ok ? URL.createObjectURL(await res.blob()) : url
   }
 
   // -- DOM --
@@ -753,10 +835,11 @@ export async function open(opts: NotesOptions): Promise<void> {
       .addFeature(blockEdit)
       .addFeature(toolbar)
       .addFeature(table)
+      .addFeature(imageBlock, { onUpload: uploadImage, proxyDomURL: imageURL })
       .addFeature(placeholder, { text: 'Describe the change — type / for blocks' })
     // `-` bullets (remark's default is `*`), so a note round-trips the way people write it.
     crepe.editor.config((ctx) => ctx.update(remarkStringifyOptionsCtx, (o) => ({ ...o, bullet: '-' as const })))
-    crepe.editor.use(linkRule).use(outdentEmpty).use(listIndent(root)).use(mentions())
+    crepe.editor.use(linkRule).use(outdentEmpty).use(listIndent(root)).use(mentions()).use(mermaidPreview)
     crepe.on((l) =>
       l.markdownUpdated((_ctx, md) => {
         markdown = unescapeMentions(md)

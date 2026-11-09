@@ -4,9 +4,10 @@
 // reads them with a repo-relative path. Turn-start sync never cleans `.tmp`, and
 // Restart's `git clean -fdx` excludes `.tmp/notes` (resetCheckoutToOrigin).
 
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { checkoutPath } from "./checkouts.js";
@@ -18,6 +19,21 @@ const execFileP = promisify(execFile);
  *  (so no traversal or hidden files), no brackets (they delimit [[mentions]]). */
 export function validNoteName(name: unknown): name is string {
   return typeof name === "string" && /^[^./\\[\]\x00-\x1f][^/\\[\]\x00-\x1f]{0,79}$/.test(name) && name.trim() === name;
+}
+
+/** Note images: pasted or dropped into a note, stored beside the notes as
+ *  images/<uuid>.<ext> (the path the markdown keeps, relative to the note).
+ *  Raster only: an SVG could carry script. Names are UUIDs, so never overwritten. */
+export const NOTE_IMAGE_TYPES: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
+export const validNoteImage = (file: unknown): file is string =>
+  typeof file === "string" && /^[0-9a-f-]{36}\.(png|jpg|gif|webp)$/.test(file);
+export const noteImagePath = (siteId: string, file: string) => join(checkoutPath(siteId), NOTES_REL, "images", file);
+
+export async function saveNoteImage(siteId: string, mime: string, data: Buffer): Promise<string> {
+  const file = `${randomUUID()}.${NOTE_IMAGE_TYPES[mime]}`;
+  await mkdir(dirname(noteImagePath(siteId, file)), { recursive: true });
+  await writeFile(noteImagePath(siteId, file), data);
+  return `images/${file}`;
 }
 
 function notePath(siteId: string, name: string): string {
@@ -261,6 +277,7 @@ export async function mergeNotes(fromId: string, toId: string): Promise<string[]
   }
   for (const n of written) await writeFile(join(dst, `${n}.md`), (await read(src, n))!);
   for (const n of deleted) await rm(join(dst, `${n}.md`), { force: true });
+  await cp(join(src, "images"), join(dst, "images"), { recursive: true, force: false }).catch(() => {}); // uuid-named: copy, never clobber
 
   // Sidebar: live's order, minus deleted notes, plus new notes in the sandbox's folder for them.
   const json = (p: string, d: unknown) => readFile(p, "utf8").then(JSON.parse).catch(() => d);

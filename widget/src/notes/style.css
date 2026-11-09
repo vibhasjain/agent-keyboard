@@ -8,6 +8,7 @@
 @import '@milkdown/crepe/theme/common/placeholder.css';
 @import '@milkdown/crepe/theme/common/toolbar.css';
 @import '@milkdown/crepe/theme/common/table.css';
+@import '@milkdown/crepe/theme/common/image-block.css';
 @import '@milkdown/crepe/theme/classic-dark.css';
 
 /* Full-screen notes overlay. Light DOM (ProseMirror's selection handling is
@@ -160,3 +161,7 @@
   .akn .milkdown .ProseMirror { padding: 8px 20px 40px; }
 }
 .akn .akn-ref { color: #ffb86b; cursor: pointer; text-decoration: underline; text-decoration-color: #c4651a; text-underline-offset: 3px; }
+
+.akn-mermaid { margin: 0 0 16px; padding: 16px; border: 1px solid #211f1c; border-radius: 8px; overflow-x: auto; text-align: center; color: #6f6a61; font-size: 13px; }
+.akn-mermaid svg { max-width: 100%; height: auto; }
+.akn-mermaid-err { text-align: left; color: #f97066; }
