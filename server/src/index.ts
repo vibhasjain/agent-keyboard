@@ -695,18 +695,35 @@ app.post("/sites/:siteId/publish", authed, async (req, res) => {
   try {
     const out = await publishSandbox(site, by, title.trim(), typeof summary === "string" ? summary.trim() : "");
     const live = site.sandboxOf;
-    await addTeamNote(live.id, await conversationIdFor(live.id, ""), {
-      id: randomUUID(),
-      role: "user",
-      text:
-        `Published the sandbox ${sb.branch} to live: ${title.trim()} (${out.pr})` +
-        (out.conflicts.length
-          ? `. These notes changed on both sides and kept live's copy: ${out.conflicts.join(", ")}. The sandbox's versions are in .tmp/notes-archive/${sb.id.split("--sb-")[1]}/.`
-          : ""),
-      tools: [],
-      ts: new Date().toISOString(),
-      sender: by,
-    }).catch(() => {});
+    const text =
+      `Published the sandbox ${sb.branch} to live: ${title.trim()} (${out.pr})` +
+      (out.conflicts.length
+        ? `. These notes changed on both sides and kept live's copy: ${out.conflicts.join(", ")}. The sandbox's versions are in .tmp/notes-archive/${sb.id.split("--sb-")[1]}/.`
+        : "");
+    // A real turn on live (not just a transcript note), so its agent picks the
+    // change up and answers without anyone having to nudge it.
+    const sent = process.env.AK_INTERNAL_SECRET
+      ? await fetch(`http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${live.id}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-ak-internal": process.env.AK_INTERNAL_SECRET },
+          body: JSON.stringify({
+            text: `${text}\n[Published] This sandbox's work is now on live. Briefly confirm it's in (check it deployed if you can) and say what changed.`,
+            page: "/",
+            sender: by,
+          }),
+        })
+          .then(async (r) => (await r.body?.cancel(), r.ok))
+          .catch(() => false)
+      : false;
+    if (!sent)
+      await addTeamNote(live.id, await conversationIdFor(live.id, ""), {
+        id: randomUUID(),
+        role: "user",
+        text,
+        tools: [],
+        ts: new Date().toISOString(),
+        sender: by,
+      }).catch(() => {});
     setSandboxRedirect(site.id, pageSlugFor(site, "/"), `https://${live.domain}/`);
     void acquireSiteLock(site.id).then((release) => removeCheckout(site.id).catch(() => {}).finally(release));
     res.json(out);
