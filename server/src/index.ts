@@ -39,7 +39,7 @@ import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureChecko
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
 import { addTeamNote, emailMention, handleOf, markClicked, noticeUrl } from "./team.js";
-import { deleteNote, listNotes, noteMeta, noteTree, notesNote, readNote, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
+import { NOTE_IMAGE_TYPES, deleteNote, listNotes, noteImagePath, noteMeta, noteTree, notesNote, readNote, saveNoteImage, validNoteImage, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
@@ -971,6 +971,41 @@ app.delete("/sites/:siteId/notes/:name", authed, async (req, res) => {
   }
   await deleteNote(site.id, name);
   res.json({ name });
+});
+
+/** Upload an image into the notes (raw body, Content-Type png/jpeg/gif/webp, ≤10 MB);
+ *  returns {path} — "images/<uuid>.<ext>", what the note's markdown keeps. */
+app.post("/sites/:siteId/notes-images", authed, express.raw({ type: () => true, limit: "10mb" }), async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const mime = String(req.headers["content-type"] ?? "").split(";")[0]!.trim().toLowerCase();
+  if (!NOTE_IMAGE_TYPES[mime] || !Buffer.isBuffer(req.body) || !req.body.length) {
+    res.status(400).json({ error: "send a PNG, JPEG, GIF or WebP image" });
+    return;
+  }
+  await ensureCheckout(site);
+  res.json({ path: await saveNoteImage(site.id, mime, req.body) });
+});
+
+app.get("/sites/:siteId/notes-images/:file", authed, (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return;
+  }
+  if (denySite(req, res, site.id)) return;
+  const file = req.params.file;
+  if (!validNoteImage(file) || !existsSync(noteImagePath(site.id, file))) {
+    res.status(404).json({ error: "no such image" });
+    return;
+  }
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "private, max-age=31536000, immutable");
+  res.sendFile(noteImagePath(site.id, file));
 });
 
 // ─── teammate notes (an @mention in the composer; see team.ts) ───────────────
