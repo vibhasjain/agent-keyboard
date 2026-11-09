@@ -173,8 +173,8 @@ function makeComposer(onTeamNote: () => void): Composer {
       if (s === 'error' && err) setNote(err, true)
       else if (s === 'idle' || s === 'live') setNote('')
     },
-    onPartial: (delta) => {
-      partial = joinText(partial, delta)
+    onPartial: (delta, replace) => {
+      partial = replace ? delta : joinText(partial, delta)
       const combined = joinText(baseText, partial)
       if (maybeTriggerStopPhrase(combined)) return
       ta.value = combined

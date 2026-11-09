@@ -10,7 +10,32 @@ import type { VoiceState } from './state'
 let liveSession: { pc: RTCPeerConnection; dc: RTCDataChannel | null; stream: MediaStream | null } | null = null
 let connectSeq = 0
 
+// Fallback when the server has no OpenAI key: the browser's own Web Speech API
+// (Chrome, Edge, Safari incl. iOS; not Firefox). Free, less accurate.
+interface Rec {
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((e: any) => void) | null
+  onerror: ((e: any) => void) | null
+  onend: (() => void) | null
+  start(): void
+  stop(): void
+  abort(): void
+}
+const SR: (new () => Rec) | undefined = (globalThis as any).SpeechRecognition || (globalThis as any).webkitSpeechRecognition
+let rec: Rec | null = null
+const MIC_BLOCKED = 'Mic blocked — enable it in Safari settings'
+
 function teardownLiveSession(): void {
+  if (rec) {
+    rec.onresult = rec.onerror = rec.onend = null
+    try {
+      rec.abort()
+    } catch {
+      /* already stopped */
+    }
+    rec = null
+  }
   if (!liveSession) return
   try {
     liveSession.dc?.close()
@@ -57,7 +82,8 @@ export interface VoiceController {
 export interface VoiceHandlers {
   onState: (s: VoiceState, error?: string) => void
   // Partial (live) and final (folded) transcript deltas for the textarea.
-  onPartial: (text: string) => void
+  // replace=true: `text` is the whole pending phrase (browser fallback), not a delta.
+  onPartial: (text: string, replace?: boolean) => void
   onFinal: (text: string) => void
   getState: () => VoiceState
 }
@@ -83,14 +109,52 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
     rs.forEach((r) => r())
   }
 
+  const browserDictate = () => {
+    const r = new SR!()
+    rec = r
+    r.continuous = true
+    r.interimResults = true
+    r.onresult = (e) => {
+      let interim = ''
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t: string = e.results[i][0].transcript
+        if (e.results[i].isFinal) h.onFinal(t.trim())
+        else interim += t
+      }
+      if (rec === r) h.onPartial(interim.trim(), true)
+    }
+    r.onerror = (e) => {
+      if (rec !== r) return
+      rec = null
+      if (e.error === 'not-allowed') h.onState('error', MIC_BLOCKED)
+      else h.onState('idle') // no-speech, aborted, network: just stop
+      settleFlush()
+    }
+    r.onend = () => {
+      if (rec !== r) return
+      rec = null
+      h.onState('idle')
+      settleFlush()
+    }
+    r.start()
+    h.onState('live')
+  }
+
   const connect = async () => {
     const mySeq = ++connectSeq
     const stale = () => mySeq !== connectSeq
     teardownLiveSession()
     h.onState('connecting')
     try {
-      const tok = await api.realtimeToken()
-      if (!tok.value) throw new Error('voice not configured')
+      let tok
+      try {
+        tok = await api.realtimeToken()
+        if (!tok.value) throw new Error('voice not configured')
+      } catch (e) {
+        if (!SR) throw e
+        if (!stale()) browserDictate() // no OpenAI key on the server: use the browser's
+        return
+      }
       const transcribeModel = tok.model || DEFAULT_TRANSCRIBE_MODEL
       if (stale()) return
 
@@ -164,7 +228,7 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
       teardownLiveSession()
       const err = e as Error
       if (err && err.name === 'NotAllowedError') {
-        h.onState('error', 'Mic blocked — enable it in Safari settings')
+        h.onState('error', MIC_BLOCKED)
       } else {
         h.onState('error', err?.message || 'Voice unavailable')
       }
@@ -188,6 +252,19 @@ export function makeVoice(h: VoiceHandlers): VoiceController {
   // A no-op (resolves immediately) when there's no live session.
   const flush = (): Promise<void> =>
     new Promise<void>((resolve) => {
+      if (rec) {
+        const r = rec
+        flushResolvers.push(resolve)
+        r.stop() // final results arrive, then onend settles
+        setTimeout(() => {
+          if (rec === r) {
+            teardownLiveSession()
+            h.onState('idle')
+          }
+          settleFlush()
+        }, 3000)
+        return
+      }
       const s = liveSession
       if (!s || s.dc?.readyState !== 'open') return resolve()
       flushResolvers.push(resolve)
