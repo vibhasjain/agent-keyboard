@@ -44,6 +44,7 @@ import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
+import { setupRouter } from "./setup.js";
 import { seedCodexConfig, seedSkills } from "./skills.js";
 import { startUsagePush } from "./usage.js";
 import {
@@ -1277,6 +1278,9 @@ app.post("/realtime/token", authed, async (_req, res) => {
 
 // Ring webhook + focus registry (see ring.ts).
 app.use(ringRouter());
+
+// One-click self-host installer (see setup.ts). Public, rate-limited, stateless.
+app.use(setupRouter());
 
 // Isolated browser tasks (see browser.ts) — primary-owner-only, one throwaway
 // Chromium + profile per task, never the agent's own CDP browsers.

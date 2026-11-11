@@ -1,6 +1,6 @@
 ---
 name: self-ops
-description: Operate the Agent Keyboard deployment you are running on — logs, secrets, machine status, deploys, Supabase auth config. Use when the owner asks about the server itself, deploys, secrets, boot problems, or anything ops-shaped, or says "update yourself" / "update Agent Keyboard to latest" (works from any site when AK_FORK_REPO is set).
+description: Operate the Agent Keyboard deployment you are running on — logs, secrets, machine status, deploys, Supabase auth config. Use when the owner asks about the server itself, deploys, secrets, boot problems, or anything ops-shaped, or says "update yourself" / "update Agent Keyboard to latest" (works from any site when AK_FORK_REPO or AK_IMAGE is set).
 ---
 
 # self-ops
@@ -70,8 +70,9 @@ never the floating `latest` tag, so builds stay reproducible.
 
 "Update yourself" / "update Agent Keyboard to latest" works from **any** site's bar: `$AK_FORK_REPO`
 (`owner/agent-keyboard`, set at setup) names this instance's fork, and you may clone and push it even
-though it isn't your site's repo. Unset means this instance has no fork to update: say so and point the
-owner to `AK_FORK_REPO` in `SELF_HOSTING.md` step 6. Do it all in one turn:
+though it isn't your site's repo. Unset, but `$AK_IMAGE` set: this is an installer-made instance (see
+**Image-based instances** below). Neither: say so and point the owner to `AK_FORK_REPO` in
+`SELF_HOSTING.md` step 6. Do it all in one turn:
 
 ```bash
 F="$AK_FORK_REPO"; R=.tmp/ak-fork
@@ -101,6 +102,23 @@ git diff $OLD HEAD -- server/.env.example   # settings this update added
   comment from `.env.example` and whether this instance has it set (`fly secrets list`, `env`). They
   are optional, so nothing fails without them — the summary is the only place the owner hears of them.
 - The deploy restarts this machine a few minutes later. Tell the owner it's on its way.
+
+### Image-based instances (`AK_IMAGE`, no fork)
+
+Instances made by the one-click installer (`agentkeyboard.com/setup`) run the public image `$AK_IMAGE`
+(`ghcr.io/vibhasjain/agent-keyboard:latest`, rebuilt on every upstream deploy) and hold an app-scoped
+`FLY_API_TOKEN`. Updating = moving this machine to the newest build of that tag:
+
+```bash
+flyctl image show -a "$FLY_APP_NAME"            # what's running now (digest/ref)
+# Delay the restart so your reply lands first; the update replaces this machine.
+nohup sh -c 'sleep 30; flyctl machine update "$FLY_MACHINE_ID" -a "$FLY_APP_NAME" --image "$AK_IMAGE" -y --detach' >/dev/null 2>&1 &
+```
+
+Tell the owner it restarts in about a minute and the bar reconnects on its own. If `flyctl` says
+unauthorized, the token was revoked: they can make a new one with `fly tokens create deploy -a
+<app>` and set it with `fly secrets set FLY_API_TOKEN=...`. Customising the server needs a fork: create
+one, set `AK_FORK_REPO`, and the fork path above takes over.
 
 ## Where your own state lives (the /data volume)
 

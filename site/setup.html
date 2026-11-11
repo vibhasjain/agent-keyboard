@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a0a" />
+<meta name="robots" content="noindex" />
+<title>Set up Agent Keyboard</title>
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=5" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0a0a; --bg-2:#111110; --ink:#f5f1ea; --ink-2:#b8b2a7; --ink-3:#8a847a;
+  --rule:#211f1c; --rule-2:#2a2723; --amber:#ffb86b; --warm:#e7d3b8; --ok:#6dd396; --err:#f97066;
+  --sans:"Inter",-apple-system,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+*{ box-sizing:border-box; margin:0; padding:0; }
+body{ background:var(--bg); color:var(--ink); font:16px/1.55 var(--sans); padding:48px 20px 120px; }
+main{ max-width:640px; margin:0 auto; }
+a{ color:var(--amber); }
+em{ font-style:normal; color:var(--warm); }
+.top{ display:flex; align-items:center; gap:10px; color:var(--ink-2); text-decoration:none; font-weight:500; margin-bottom:40px; }
+.top img{ width:30px; height:auto; image-rendering:pixelated; }
+h1{ font-size:clamp(30px,5vw,40px); font-weight:500; letter-spacing:-.02em; line-height:1.1; text-wrap:balance; }
+.lede{ color:var(--ink-2); margin:14px 0 32px; }
+fieldset{ border:1px solid var(--rule); border-radius:14px; padding:20px; margin-bottom:18px; background:var(--bg-2); }
+legend{ padding:0 8px; color:var(--ink-2); font-size:13px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
+label{ display:block; margin-top:14px; font-size:14px; font-weight:500; }
+label:first-of-type{ margin-top:0; }
+.hint{ display:block; color:var(--ink-3); font-weight:400; font-size:13px; margin-top:2px; }
+input, textarea{ width:100%; margin-top:6px; padding:10px 12px; border-radius:9px; border:1px solid var(--rule-2);
+  background:var(--bg); color:var(--ink); font:14px var(--mono); }
+textarea{ min-height:84px; resize:vertical; }
+input:focus-visible, textarea:focus-visible, button:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+.row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+.row label{ margin-top:0; }
+code{ font-family:var(--mono); font-size:.9em; color:var(--ink); }
+button{ font:inherit; font-weight:500; cursor:pointer; border:0; border-radius:999px; padding:12px 22px; background:var(--amber); color:#1a1206; }
+button:disabled{ opacity:.55; cursor:progress; }
+.note{ color:var(--ink-3); font-size:13px; margin-top:14px; }
+#out{ margin-top:26px; }
+#out ol{ list-style:none; font:14px var(--mono); }
+#out li{ padding:4px 0; color:var(--ink-2); }
+#out li.ok::before{ content:"✓ "; color:var(--ok); }
+#out li.bad::before{ content:"✗ "; color:var(--err); }
+#out pre{ white-space:pre-wrap; word-break:break-word; background:var(--bg-2); border:1px solid var(--rule); border-radius:9px; padding:12px; margin-top:8px; font:13px var(--mono); color:var(--ink-2); }
+.err{ color:var(--err); }
+@media (max-width:560px){ .row{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <a class="top" href="/"><img src="/typewriter-mark.png" alt="" width="30" height="16" /> Agent Keyboard</a>
+  <h1>Run Agent Keyboard on your own accounts</h1>
+  <p class="lede">This deploys the server into <em>your</em> Fly account, running on your own Claude subscription. It's free. Your tokens go straight into your Fly app's secrets and are never stored or logged here (<a href="https://github.com/vibhasjain/agent-keyboard/blob/main/server/src/setup.ts">see the code</a>). Need the values below? Follow <a href="https://github.com/vibhasjain/agent-keyboard/blob/main/SELF_HOSTING.md">steps 2–4 of the self-hosting guide</a>.</p>
+
+  <form id="f" autocomplete="off">
+    <fieldset>
+      <legend>Fly</legend>
+      <label>Fly org token <span class="hint">Run <code>fly tokens create org</code>. Used once to create the app; the server keeps only a token scoped to its own app.</span>
+        <input name="flyToken" type="password" required /></label>
+      <div class="row" style="margin-top:14px">
+        <label>App name <span class="hint">→ name.fly.dev</span><input name="app" required pattern="[a-z][a-z0-9\-]{1,40}[a-z0-9]" placeholder="my-agent-keyboard" /></label>
+        <label>Region <span class="hint">3 letters</span><input name="region" value="iad" required pattern="[a-z]{3}" /></label>
+        <label>Org <span class="hint">slug</span><input name="org" value="personal" required /></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Your site</legend>
+      <label>SITES <span class="hint">The repos the bar may edit, as JSON. Add <code>"sandbox":{}</code> for preview branches.</span>
+        <textarea name="SITES" required spellcheck="false" placeholder='[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","domain":"blog.example.com"}]'></textarea></label>
+      <label>GitHub token <span class="hint">Fine-grained: Contents and Pull requests read/write on those repos. No Workflows.</span>
+        <input name="GH_TOKEN" type="password" required /></label>
+      <label>Claude token <span class="hint">Run <code>claude setup-token</code> (Pro or Max).</span>
+        <input name="CLAUDE_CODE_OAUTH_TOKEN" type="password" required /></label>
+    </fieldset>
+    <fieldset>
+      <legend>Sign-in (Supabase)</legend>
+      <label>Your email <span class="hint">The login allowed to use the bar.</span><input name="ALLOWED_EMAIL" type="email" required /></label>
+      <label>Project URL<input name="SUPABASE_URL" type="url" required placeholder="https://xxxx.supabase.co" /></label>
+      <label>anon key<input name="SUPABASE_ANON_KEY" type="password" required /></label>
+      <label>service_role key<input name="SUPABASE_SERVICE_KEY" type="password" required /></label>
+    </fieldset>
+    <button id="go" type="submit">Deploy my server</button>
+    <p class="note">Takes 2–5 minutes. Safe to run again if a step fails. Fly bills your account directly (about $2–6/month).</p>
+  </form>
+  <div id="out" aria-live="polite"></div>
+</main>
+<script>
+(function(){
+  var API = 'https://agent-keyboard.fly.dev';
+  var f = document.getElementById('f'), out = document.getElementById('out'), go = document.getElementById('go');
+  var SECRETS = ['SITES','GH_TOKEN','CLAUDE_CODE_OAUTH_TOKEN','ALLOWED_EMAIL','SUPABASE_URL','SUPABASE_ANON_KEY','SUPABASE_SERVICE_KEY'];
+  function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  f.addEventListener('submit', function(ev){
+    ev.preventDefault();
+    var v = function(n){ return f.elements[n].value.trim(); };
+    var secrets = {}; SECRETS.forEach(function(k){ secrets[k] = v(k); });
+    go.disabled = true; go.textContent = 'Deploying…';
+    out.replaceChildren(el('p', null, 'Creating your app, volume and secrets, then deploying. Keep this tab open.'));
+    fetch(API + '/setup/deploy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flyToken: v('flyToken'), app: v('app'), region: v('region'), org: v('org'), secrets: secrets })
+    }).then(function(r){ return r.json(); }).then(function(res){
+      out.replaceChildren();
+      if (res.error) { out.append(el('p', 'err', res.error)); return; }
+      var ol = el('ol');
+      res.steps.forEach(function(s){
+        var li = el('li', s.ok ? 'ok' : 'bad', s.step); ol.append(li);
+        if (s.detail) li.append(el('pre', null, s.detail));
+      });
+      out.append(ol);
+      if (!res.ok) { out.append(el('p', 'err', 'Fix the problem above and press Deploy again; finished steps are skipped.')); return; }
+      var site = JSON.parse(secrets.SITES)[0].id;
+      var tag = '<script src="' + res.url + '/widget.js" data-site="' + site + '" defer></' + 'script>';
+      out.append(el('p', null, 'Done. Your server is at ' + res.url + '. Paste this before </body> on your site:'));
+      out.append(el('pre', null, tag));
+      var copy = el('button', null, 'Copy script tag'); copy.type = 'button';
+      copy.onclick = function(){ navigator.clipboard.writeText(tag).then(function(){ copy.textContent = 'Copied'; }); };
+      out.append(copy);
+      f.elements.flyToken.value = '';
+    }).catch(function(){
+      out.replaceChildren(el('p', 'err', 'Could not reach the installer. Check your connection and try again.'));
+    }).finally(function(){ go.disabled = false; go.textContent = 'Deploy my server'; });
+  });
+})();
+</script>
+<script src="https://agent-keyboard.fly.dev/widget.js" data-site="halo" data-accent="#ffb86b" data-theme="dark" data-guest-demo defer></script>
+</body>
+</html>

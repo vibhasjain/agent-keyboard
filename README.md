@@ -154,6 +154,7 @@ listing any missing *required* var.
 | `FLY_API_TOKEN` | App-scoped Fly deploy token (`fly tokens create deploy -a <app>`). Enables the `self-ops` skill — the agent can read its own logs/status and set secrets. |
 | `SUPABASE_ACCESS_TOKEN` | Supabase personal access token. Lets the agent manage auth config (SMTP, email templates, redirect URLs) via the Management API. |
 | `AK_FORK_REPO` | Your fork, `owner/agent-keyboard`. Enables "update yourself" from any site's bar: the agent merges upstream into the fork and pushes; CI redeploys. `GH_TOKEN` needs push access to it (boot warns if not). |
+| `AK_IMAGE` | Set by the one-click installer: the public image this instance runs (`ghcr.io/vibhasjain/agent-keyboard:latest`). With no `AK_FORK_REPO`, "update yourself" moves the machine to the newest build of it, using the app-scoped `FLY_API_TOKEN` the installer stored. |
 | `EXTRA_ORIGINS` | Comma-separated extra CORS origins (deploy previews, staging). |
 | `CLAUDE_MODEL` | Default model for the CLI. Default `opus`. Per-site overrides via [harness controls](#talking-to-the-harness). |
 | `CONTEXT_WINDOW_TOKENS` | Window size for the approximate context gauge. Default `200000`. |
