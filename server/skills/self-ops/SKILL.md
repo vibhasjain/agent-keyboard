@@ -1,6 +1,6 @@
 ---
 name: self-ops
-description: Operate the Agent Keyboard deployment you are running on — logs, secrets, machine status, deploys, Supabase auth config. Use when the owner asks about the server itself, deploys, secrets, boot problems, or anything ops-shaped, or says "update yourself" / "update Agent Keyboard to latest" (works from any site when AK_FORK_REPO or AK_IMAGE is set).
+description: Operate the Agent Keyboard deployment you are running on — logs, secrets, machine status, deploys, Supabase auth config. Use when the owner asks about the server itself, its health check, adding another site/repo to this server, deploys, secrets, boot problems, or anything ops-shaped, or says "update yourself" / "update Agent Keyboard to latest" (works from any site when AK_FORK_REPO or AK_IMAGE is set).
 ---
 
 # self-ops
@@ -119,6 +119,30 @@ Tell the owner it restarts in about a minute and the bar reconnects on its own. 
 unauthorized, the token was revoked: they can make a new one with `fly tokens create deploy -a
 <app>` and set it with `fly secrets set FLY_API_TOKEN=...`. Customising the server needs a fork: create
 one, set `AK_FORK_REPO`, and the fork path above takes over.
+
+## Health check
+
+`curl -s localhost:8080/check` (public at `https://$FLY_APP_NAME.fly.dev/check`; the owner's page is
+`agentkeyboard.com/setup.html?check=$FLY_APP_NAME`) self-tests Supabase (sign-up off), the jobs table, the
+Claude login, and per site: GH_TOKEN can push, the script tag is on the domain, sandboxes are enabled.
+It also runs once at boot (`fly logs`, lines `agent-keyboard: check …`). Results are cached 60 s.
+
+## Adding another site ("add my repo you/shop at shop.com")
+
+The site list is the `SITES` secret, which is also in your env.
+
+1. Get the repo, the branch it deploys from and the bare domain. Look at its `netlify.toml` /
+   `vercel.json` / `fly.toml` / `wrangler.*` (`gh api repos/OWNER/REPO/contents/netlify.toml`) to guess
+   them, and confirm with the owner. Netlify sites get `"sandbox":{"preview":"https://{branch}--NAME.netlify.app"}`,
+   Cloudflare Pages `"sandbox":{"preview":"https://{branch}.NAME.pages.dev"}`.
+2. Check `gh api repos/OWNER/REPO --jq .permissions.push` is `true`. If not, the owner must add the repo
+   to their fine-grained token (github.com/settings/personal-access-tokens → the token → Repository access)
+   with Contents and Pull requests read/write. Same token, no new secret.
+3. Build the new one-line array: `echo "$SITES" | jq -c '. + [{"id":"shop","repo":"https://github.com/you/shop.git","branch":"main","domain":"shop.com"}]'`.
+   The id must be unique; it's the `data-site` value.
+4. Give the owner the script tag for the new site: `<script src="https://$FLY_APP_NAME.fly.dev/widget.js" data-site="shop" defer></script>`,
+   then, as the LAST action of the turn (it restarts you), `fly secrets set SITES='<array>' -a "$FLY_APP_NAME"`.
+5. Invites to the new domain also need it in Supabase's redirect URLs (see the Supabase section below).
 
 ## Where your own state lives (the /data volume)
 

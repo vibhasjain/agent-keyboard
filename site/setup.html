@@ -167,8 +167,22 @@ button:disabled{ opacity:.55; cursor:progress; }
   }
   function healthy(app, tries){
     return fetch(API + '/setup/health?app=' + app).then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(h){
-      if (h.ok || tries <= 0) return !!h.ok;
+      if (h.ok || tries <= 0) return h;
       return new Promise(function(r){ setTimeout(r, 5000); }).then(function(){ return healthy(app, tries - 1); });
+    });
+  }
+
+  // ?check=<app>: the health page for an existing server.
+  var checkApp = new URLSearchParams(location.search).get('check');
+  if (checkApp) {
+    f.hidden = true;
+    document.querySelector('h1').textContent = 'Health of ' + checkApp + '.fly.dev';
+    document.querySelector('.lede').textContent = 'Each line is a live check of your server. Fix any ✗ and reload.';
+    out.replaceChildren(el('p', null, 'Checking…'));
+    healthy(checkApp, 0).then(function(h){
+      out.replaceChildren();
+      if (!h.ok) { out.append(el('p', 'err', 'Your server is not answering. Run `fly logs -a ' + checkApp + '` to see why.')); return; }
+      steps({ steps: [{ step: 'server is up', ok: true }].concat((h.checks || []).map(function(c){ return { step: c.name, ok: c.ok, detail: c.detail }; })) });
     });
   }
 
@@ -191,10 +205,11 @@ button:disabled{ opacity:.55; cursor:progress; }
       out.lastChild.remove(); if (res.error) throw new Error(res.error); steps(res);
       if (!res.ok) throw new Error('Fix the problem above and press the button again; finished steps are skipped.');
       out.append(el('p', null, 'Waiting for your server to answer…'));
-      return healthy(v('app'), 24).then(function(ok){
+      return healthy(v('app'), 24).then(function(h){
         out.lastChild.remove();
-        var li = el('li', ok ? 'ok' : 'bad', ok ? 'server is up' : 'server not answering yet: check `fly logs -a ' + v('app') + '`');
+        var li = el('li', h.ok ? 'ok' : 'bad', h.ok ? 'server is up' : 'server not answering yet: check `fly logs -a ' + v('app') + '`');
         out.querySelector('ol:last-of-type').append(li);
+        if (h.checks && h.checks.length) { out.append(el('p', null, 'Health check (the script tag one passes once you paste it; recheck at ' + location.origin + location.pathname + '?check=' + v('app') + '):')); steps({ steps: h.checks.map(function(c){ return { step: c.name, ok: c.ok, detail: c.detail }; }) }); }
         var tag = '<script src="' + res.url + '/widget.js" data-site="' + site.id + '" defer></' + 'script>';
         out.append(el('p', null, 'Done. Paste this before </body> on ' + site.domain + ', push it, then tap the bar and sign in with ' + v('email') + ':'));
         out.append(el('pre', null, tag));

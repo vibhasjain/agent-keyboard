@@ -8,10 +8,11 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Router, type Request } from "express";
-import { loadSites } from "./config.js";
+import { loadSites, type Site } from "./config.js";
 
 export const SETUP_IMAGE = process.env.AK_SETUP_IMAGE ?? "ghcr.io/vibhasjain/agent-keyboard:latest";
 const REQUIRED = ["SITES", "ALLOWED_EMAIL", "GH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"] as const;
@@ -316,6 +317,67 @@ export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?
   return { ok: true, ref, steps };
 }
 
+type Check = { name: string; ok: boolean; detail?: string };
+let lastCheck: { at: number; checks: Promise<Check[]> } | undefined;
+
+/** End-to-end self-test of THIS instance (UX report issue 4). No secrets in the output. Cached 60 s. */
+export function runChecks(): Promise<Check[]> {
+  if (lastCheck && Date.now() - lastCheck.at < 60_000) return lastCheck.checks;
+  lastCheck = { at: Date.now(), checks: checks() };
+  return lastCheck.checks;
+}
+
+async function checks(): Promise<Check[]> {
+  const env = process.env;
+  const get = (url: string, headers: Record<string, string> = {}) =>
+    fetch(url, { headers, signal: AbortSignal.timeout(10_000) });
+  const one = async (name: string, fn: () => Promise<true | string>): Promise<Check> => {
+    try {
+      const r = await fn();
+      return r === true ? { name, ok: true } : { name, ok: false, detail: r };
+    } catch (e) {
+      return { name, ok: false, detail: (e as Error).message.slice(0, 200) };
+    }
+  };
+  const sbUrl = env.SUPABASE_URL ?? "";
+  const service = env.SUPABASE_SERVICE_KEY ?? "";
+  const list: Promise<Check>[] = [
+    one("Supabase sign-in, sign-up off", async () => {
+      const r = await get(`${sbUrl}/auth/v1/settings`, { apikey: env.SUPABASE_ANON_KEY ?? "" });
+      if (!r.ok) return `Supabase answered ${r.status}: check SUPABASE_URL and SUPABASE_ANON_KEY`;
+      return ((await r.json()) as { disable_signup?: boolean }).disable_signup ? true : "sign-up is on: anyone could create an account; turn it off in Supabase";
+    }),
+    one("job history table", async () => {
+      if (!service) return "SUPABASE_SERVICE_KEY unset: jobs won't survive a restart";
+      const r = await get(`${sbUrl}/rest/v1/agent_keyboard_jobs?select=job_id&limit=1`, {
+        apikey: service, ...(service.startsWith("eyJ") ? { Authorization: `Bearer ${service}` } : {}),
+      });
+      return r.ok || `Supabase answered ${r.status}: run server/sql/jobs.sql`;
+    }),
+    one("Claude login", async () =>
+      /^sk-ant-/.test(env.CLAUDE_CODE_OAUTH_TOKEN ?? "") || !!env.ANTHROPIC_API_KEY || existsSync(join(homedir(), ".claude", ".credentials.json")) ||
+      "CLAUDE_CODE_OAUTH_TOKEN is missing or malformed: run `claude setup-token`"),
+  ];
+  let sites: Site[] = [];
+  try { sites = loadSites(); } catch { /* boot already refused a bad SITES */ }
+  for (const site of sites) {
+    list.push(one(`${site.id}: can push to the repo`, async () => {
+      const path = /github\.com\/(.+?)\.git$/.exec(site.repo)?.[1];
+      if (!path) return true; // not GitHub: nothing to ask
+      const r = await get(`https://api.github.com/repos/${path}`, { Authorization: `Bearer ${env.GH_TOKEN ?? ""}` });
+      if (!r.ok) return `GitHub answered ${r.status}: give GH_TOKEN access to this repo`;
+      return ((await r.json()) as { permissions?: { push?: boolean } }).permissions?.push || "GH_TOKEN can read but not push: give it Contents read/write";
+    }));
+    list.push(one(`${site.id}: script tag on ${site.domain}`, async () => {
+      const html = await (await get(`https://${site.domain}/`)).text();
+      return (html.includes("/widget.js") && html.includes(`data-site="${site.id}"`)) || `not found on the home page: paste the script tag before </body>`;
+    }));
+    if (site.sandbox) list.push(one(`${site.id}: sandboxes`, async () =>
+      !!env.AK_INTERNAL_SECRET || "AK_INTERNAL_SECRET unset: the agent can't create sandboxes"));
+  }
+  return Promise.all(list);
+}
+
 const clientIp = (req: Request) => req.header("fly-client-ip") ?? req.ip ?? "?";
 
 export function setupRouter(): Router {
@@ -327,14 +389,22 @@ export function setupRouter(): Router {
     const out = await setupSupabase(input);
     res.status(out.ok ? 200 : 502).json(out);
   });
-  // Is the new instance up? (The page can't fetch it directly: its CORS only allows the user's site.)
+  r.get("/check", async (_req, res) => {
+    const checks = await runChecks();
+    res.json({ ok: checks.every((c) => c.ok), checks });
+  });
+  // Is the new instance up, and how do its checks look? (The page can't fetch it
+  // directly: the instance's CORS only allows the user's own site.)
   r.get("/setup/health", async (req, res) => {
     const app = String(req.query.app ?? "");
     if (!/^[a-z][a-z0-9-]{1,40}[a-z0-9]$/.test(app)) return void res.status(400).json({ error: "bad app name" });
     try {
       const h = await fetch(`https://${app}.fly.dev/health`, { signal: AbortSignal.timeout(8000) });
       const body = (await h.json().catch(() => ({}))) as { service?: string };
-      res.json({ ok: h.ok && body.service === "agent-keyboard" });
+      if (!h.ok || body.service !== "agent-keyboard") return void res.json({ ok: false });
+      const c = await fetch(`https://${app}.fly.dev/check`, { signal: AbortSignal.timeout(30_000) });
+      const { checks } = (await c.json().catch(() => ({}))) as { checks?: Check[] };
+      res.json({ ok: true, checks: Array.isArray(checks) ? checks : [] });
     } catch {
       res.json({ ok: false });
     }
