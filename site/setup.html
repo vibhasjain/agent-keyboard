@@ -67,7 +67,7 @@ button:disabled{ opacity:.55; cursor:progress; }
         <label style="grid-column:span 2">Domain <span class="hint">where the site lives</span><input name="domain" required placeholder="blog.example.com" /></label>
       </div>
       <label style="margin-top:14px">Preview URL <span class="hint">Optional. Lets the bar try bigger changes on a preview branch first. <code>{branch}</code> is filled in.</span>
-        <input name="preview" placeholder="https://{branch}--mysite.netlify.app" /></label>
+        <input name="preview" placeholder="https://{branch}.mysite.pages.dev" /></label>
     </fieldset>
     <fieldset>
       <legend>2 · Claude</legend>
@@ -134,17 +134,22 @@ button:disabled{ opacity:.55; cursor:progress; }
     var slug = x.name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
     if (!f.elements.app.value) f.elements.app.value = (slug + '-ak').replace(/^[^a-z]+/, '').slice(0, 42);
     detect.textContent = 'Checking how it deploys…';
-    Promise.all(['netlify.toml', 'vercel.json', 'fly.toml'].map(function(name){
+    Promise.all(['netlify.toml', 'vercel.json', 'fly.toml', 'wrangler.toml', 'wrangler.jsonc', 'wrangler.json'].map(function(name){
       return gh('/repos/' + x.full_name + '/contents/' + name, true).then(function(r){ return r.ok ? r.text() : null; }).catch(function(){ return null; });
     })).then(function(files){
-      var host = files[0] != null ? 'Netlify' : files[1] != null ? 'Vercel' : files[2] != null ? 'Fly' : '';
+      var wrangler = files[3] || files[4] || files[5];
+      var cf = /\.pages\.dev$/.test(home) || (wrangler && /pages_build_output_dir/.test(wrangler));
+      var host = files[0] != null ? 'Netlify' : files[1] != null ? 'Vercel' : files[2] != null ? 'Fly' : cf ? 'Cloudflare Pages' : '';
       var flyApp = files[2] && /^app\s*=\s*["']([^"']+)/m.exec(files[2]);
-      var domain = home || (flyApp ? flyApp[1] + '.fly.dev' : host === 'Vercel' ? slug + '.vercel.app' : host === 'Netlify' ? slug + '.netlify.app' : '');
+      var cfName = (wrangler && /^\s*"?name"?\s*[=:]\s*["']([^"']+)/m.exec(wrangler) || [])[1] || slug;
+      var domain = home || (flyApp ? flyApp[1] + '.fly.dev' : host === 'Vercel' ? slug + '.vercel.app' : host === 'Netlify' ? slug + '.netlify.app' : cf ? cfName + '.pages.dev' : '');
       f.elements.domain.value = domain;
-      f.elements.preview.value = host === 'Netlify' || /\.netlify\.app$/.test(domain)
-        ? 'https://{branch}--' + (/\.netlify\.app$/.test(domain) ? domain.split('.')[0] : slug) + '.netlify.app' : '';
+      var netlify = host === 'Netlify' || /\.netlify\.app$/.test(domain);
+      cf = cf || /\.pages\.dev$/.test(domain);
+      f.elements.preview.value = netlify ? 'https://{branch}--' + (/\.netlify\.app$/.test(domain) ? domain.split('.')[0] : slug) + '.netlify.app'
+        : cf ? 'https://{branch}.' + (/\.pages\.dev$/.test(domain) ? domain.split('.')[0] : cfName) + '.pages.dev' : '';
       detect.textContent = (host ? 'Looks like ' + host + '. ' : '') + 'Check the branch and domain below.' +
-        (f.elements.preview.value ? ' Turn on branch deploys for all branches in Netlify so previews work.' : '');
+        (netlify ? ' Turn on branch deploys for all branches in Netlify so previews work.' : cf ? ' Preview deployments must be on (the default) in Cloudflare Pages.' : '');
     });
   });
 

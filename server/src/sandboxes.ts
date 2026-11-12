@@ -182,7 +182,8 @@ export function sandboxForOrigin(origin: string | undefined): Sandbox | null {
 
 /** `ak/<slug>` → its preview URL under the site's template. */
 export function previewUrl(site: Site, branch: string): string {
-  const b = branch.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  let b = branch.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+  if (site.sandbox!.preview.includes(".pages.dev")) b = b.slice(0, 28); // Cloudflare Pages truncates branch aliases
   return new URL(site.sandbox!.preview.replace(/\{branch\}/g, b).replace(/\{domain\}/g, site.domain)).origin + "/";
 }
 
