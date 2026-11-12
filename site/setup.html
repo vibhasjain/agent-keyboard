@@ -89,7 +89,7 @@ button:disabled{ opacity:.55; cursor:progress; }
         <input name="flyToken" type="password" required /></label>
       <div class="row" style="margin-top:14px">
         <label>App name <span class="hint">→ name.fly.dev</span><input name="app" required pattern="[a-z][a-z0-9\-]{1,40}[a-z0-9]" placeholder="my-agent-keyboard" /></label>
-        <label>Region <span class="hint">3 letters</span><input name="region" value="iad" required pattern="[a-z]{3}" /></label>
+        <label>Region <span class="hint">near you</span><select name="region" required><option value="ams">Amsterdam</option><option value="iad" selected>Ashburn, VA</option><option value="ord">Chicago</option><option value="dfw">Dallas</option><option value="fra">Frankfurt</option><option value="jnb">Johannesburg</option><option value="lhr">London</option><option value="lax">Los Angeles</option><option value="bom">Mumbai</option><option value="cdg">Paris</option><option value="sjc">San Jose</option><option value="ewr">Secaucus, NJ</option><option value="sin">Singapore</option><option value="arn">Stockholm</option><option value="syd">Sydney</option><option value="gru">São Paulo</option><option value="nrt">Tokyo</option><option value="yyz">Toronto</option></select></label>
         <label>Org <span class="hint">slug</span><input name="org" value="personal" required /></label>
       </div>
     </fieldset>

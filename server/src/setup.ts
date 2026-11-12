@@ -208,7 +208,7 @@ async function sbKeys(token: string, ref: string): Promise<string | { anon: stri
 
 /** Fly region → the nearest Supabase region. */
 function sbRegion(fly: string): string {
-  if (/^(ams|arn|cdg|fra|waw|mad|otp)$/.test(fly)) return "eu-central-1";
+  if (/^(ams|arn|cdg|fra|jnb|waw|mad|otp)$/.test(fly)) return "eu-central-1";
   if (fly === "lhr") return "eu-west-2";
   if (/^(sin|hkg|bom)$/.test(fly)) return "ap-southeast-1";
   if (fly === "nrt") return "ap-northeast-1";
