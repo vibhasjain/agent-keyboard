@@ -78,9 +78,8 @@ button:disabled{ opacity:.55; cursor:progress; }
     </fieldset>
     <fieldset>
       <legend>3 · Sign-in</legend>
-      <label>Supabase access token <span class="hint"><a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener">Create one</a> (free account). We create an <code>agent-keyboard</code> project with sign-up turned off.</span>
+      <label>Supabase access token <span class="hint"><a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener">Create one</a> (free account). We create an <code>agent-keyboard</code> project with sign-up turned off. Your login for the bar is your Supabase account email: Supabase emails you a link to set a password once the bar is on your site.</span>
         <input name="supabaseToken" type="password" required /></label>
-      <label style="margin-top:14px">Your email <span class="hint">the one on your Supabase account. Supabase emails you a link to set your password once the bar is on your site.</span><input name="email" type="email" required /></label>
     </fieldset>
     <fieldset>
       <legend>4 · Server (Fly)</legend>
@@ -192,13 +191,15 @@ button:disabled{ opacity:.55; cursor:progress; }
     if (v('preview')) site.sandbox = { preview: v('preview') };
     go.disabled = true; go.textContent = 'Working…';
     out.replaceChildren(el('p', null, 'Setting up sign-in on Supabase (a new project takes 1–3 minutes). Keep this tab open.'));
-    post('/setup/supabase', { supabaseToken: v('supabaseToken'), email: v('email'), region: v('region'), domain: site.domain }).then(function(sb){
+    var email;
+    post('/setup/supabase', { supabaseToken: v('supabaseToken'), region: v('region'), domain: site.domain }).then(function(sb){
       out.replaceChildren(); if (sb.error) throw new Error(sb.error); steps(sb);
       if (!sb.ok) throw new Error('Fix the problem above and press the button again; finished steps are skipped.');
+      email = sb.email;
       out.append(el('p', null, 'Deploying your server to Fly…'));
       return post('/setup/deploy', {
         flyToken: v('flyToken'), app: v('app'), region: v('region'), org: v('org'), supabaseToken: v('supabaseToken'), supabaseRef: sb.ref,
-        secrets: { SITES: JSON.stringify([site]), ALLOWED_EMAIL: v('email'), GH_TOKEN: v('GH_TOKEN'), CLAUDE_CODE_OAUTH_TOKEN: v('CLAUDE_CODE_OAUTH_TOKEN') }
+        secrets: { SITES: JSON.stringify([site]), ALLOWED_EMAIL: email, GH_TOKEN: v('GH_TOKEN'), CLAUDE_CODE_OAUTH_TOKEN: v('CLAUDE_CODE_OAUTH_TOKEN') }
       });
     }).then(function(res){
       out.lastChild.remove(); if (res.error) throw new Error(res.error); steps(res);
@@ -210,7 +211,7 @@ button:disabled{ opacity:.55; cursor:progress; }
         out.querySelector('ol:last-of-type').append(li);
         if (h.checks && h.checks.length) { out.append(el('p', null, 'Health check (the script tag one passes once you paste it; recheck at ' + location.origin + location.pathname + '?check=' + v('app') + '):')); steps({ steps: h.checks.map(function(c){ return { step: c.name, ok: c.ok, detail: c.detail }; }) }); }
         var tag = '<script src="' + res.url + '/widget.js" data-site="' + site.id + '" defer></' + 'script>';
-        out.append(el('p', null, 'Done. Paste this before </body> on ' + site.domain + ', push it, then open the email from Supabase sent to ' + v('email') + ' and set your password in the bar (the link lasts 24 hours; press the button again for a new one):'));
+        out.append(el('p', null, 'Done. Paste this before </body> on ' + site.domain + ', push it, then open the email from Supabase sent to ' + email + ' and set your password in the bar (the link lasts 24 hours; press the button again for a new one):'));
         out.append(el('pre', null, tag));
         var copy = el('button', null, 'Copy script tag'); copy.type = 'button';
         copy.onclick = function(){ navigator.clipboard.writeText(tag).then(function(){ copy.textContent = 'Copied'; }); };

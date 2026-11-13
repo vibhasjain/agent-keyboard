@@ -219,24 +219,23 @@ function sbRegion(fly: string): string {
   return "us-east-1";
 }
 
-type SbInput = { supabaseToken: string; email: string; region: string; domain: string };
+type SbInput = { supabaseToken: string; region: string; domain: string };
 
 export function parseSbInput(body: unknown): string | SbInput {
   const b = (body ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   const supabaseToken = str(b.supabaseToken);
-  const email = str(b.email).toLowerCase();
   const region = str(b.region) || "iad";
   const domain = str(b.domain);
   if (!supabaseToken) return "supabaseToken is required";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "a valid email is required";
   if (!/^[a-z]{3}$/.test(region)) return "region must be a 3-letter Fly region code, e.g. iad";
   if (!/^(?!-)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(domain)) return "domain must be a bare host like blog.example.com";
-  return { supabaseToken, email, region, domain };
+  return { supabaseToken, region, domain };
 }
 
-/** Create (or reuse) the "agent-keyboard" project, lock sign-up, add the jobs table and invite the owner. */
-export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?: string; steps: Step[] }> {
+/** Create (or reuse) the "agent-keyboard" project, lock sign-up, add the jobs table and invite the owner
+ *  (the Supabase account's own email, so only someone who can read that inbox gets in). */
+export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?: string; email?: string; steps: Step[] }> {
   const steps: Step[] = [];
   const hide = [input.supabaseToken];
   const fail = (step: string, e: unknown) => {
@@ -245,6 +244,14 @@ export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?
     return { ok: false, steps };
   };
   const t = input.supabaseToken;
+  let email: string;
+  try {
+    email = String(((await sb(t, "/profile")) as { primary_email?: string }).primary_email ?? "").toLowerCase();
+    if (!email.includes("@")) throw new Error("Supabase didn't return your account email");
+    steps.push({ step: `your email: ${email}`, ok: true });
+  } catch (e) {
+    return fail("read your email", e);
+  }
   let ref: string;
   try {
     const projects = (await sb(t, "/projects")) as { id: string; name: string }[];
@@ -306,7 +313,7 @@ export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?
     const send = (path: string) => fetch(`https://${ref}.supabase.co/auth/v1/${path}`, {
       method: "POST",
       headers: auth,
-      body: JSON.stringify({ email: input.email }),
+      body: JSON.stringify({ email }),
       signal: AbortSignal.timeout(30_000),
     });
     let r = await send("invite");
@@ -316,7 +323,7 @@ export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?
   } catch (e) {
     return fail("email your sign-in link", e);
   }
-  return { ok: true, ref, steps };
+  return { ok: true, ref, email, steps };
 }
 
 type Check = { name: string; ok: boolean; detail?: string };
