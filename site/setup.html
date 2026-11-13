@@ -13,7 +13,7 @@
 <style>
 :root{
   --bg:#0a0a0a; --bg-2:#111110; --ink:#f5f1ea; --ink-2:#b8b2a7; --ink-3:#8a847a;
-  --rule:#211f1c; --rule-2:#2a2723; --amber:#ffb86b; --warm:#e7d3b8; --ok:#6dd396; --err:#f97066;
+  --rule:#211f1c; --rule-2:#2a2723; --amber:#ffb86b; --warm:#e7d3b8;
   --sans:"Inter",-apple-system,system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
 }
 *{ box-sizing:border-box; margin:0; padding:0; }
@@ -24,205 +24,50 @@ em{ font-style:normal; color:var(--warm); }
 .top{ display:flex; align-items:center; gap:10px; color:var(--ink-2); text-decoration:none; font-weight:500; margin-bottom:40px; }
 .top img{ width:30px; height:auto; image-rendering:pixelated; }
 h1{ font-size:clamp(30px,5vw,40px); font-weight:500; letter-spacing:-.02em; line-height:1.1; text-wrap:balance; }
-.lede{ color:var(--ink-2); margin:14px 0 32px; }
-fieldset{ border:1px solid var(--rule); border-radius:14px; padding:20px; margin-bottom:18px; background:var(--bg-2); }
-legend{ padding:0 8px; color:var(--ink-2); font-size:13px; font-weight:500; letter-spacing:.04em; text-transform:uppercase; }
-label{ display:block; margin-top:14px; font-size:14px; font-weight:500; }
-label:first-of-type{ margin-top:0; }
-.hint{ display:block; color:var(--ink-3); font-weight:400; font-size:13px; margin-top:2px; }
-input, textarea, select{ width:100%; margin-top:6px; padding:10px 12px; border-radius:9px; border:1px solid var(--rule-2);
-  background:var(--bg); color:var(--ink); font:16px var(--mono); }
-select{ appearance:none; padding-right:36px; background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23b8b2a7' stroke-width='1.5'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center; }
-select:disabled{ opacity:.6; }
-input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
-.row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
-.row label{ margin-top:0; }
+h2{ font-size:18px; font-weight:500; margin:32px 0 10px; }
+.lede{ color:var(--ink-2); margin:14px 0 8px; }
+ol, ul{ padding-left:22px; color:var(--ink-2); }
+li{ margin:6px 0; }
+li strong{ color:var(--ink); font-weight:500; }
 code{ font-family:var(--mono); font-size:.9em; color:var(--ink); }
-button{ font:inherit; font-weight:500; cursor:pointer; border:0; border-radius:999px; padding:12px 22px; background:var(--amber); color:#1a1206; }
-button:disabled{ opacity:.55; cursor:progress; }
-.note{ color:var(--ink-3); font-size:13px; margin-top:14px; }
-#out{ margin-top:26px; }
-#out ol{ list-style:none; font:14px var(--mono); }
-#out li{ padding:4px 0; color:var(--ink-2); }
-#out li.ok::before{ content:"✓ "; color:var(--ok); }
-#out li.bad::before{ content:"✗ "; color:var(--err); }
-#out pre{ white-space:pre-wrap; word-break:break-word; background:var(--bg-2); border:1px solid var(--rule); border-radius:9px; padding:12px; margin-top:8px; font:13px var(--mono); color:var(--ink-2); }
-.err{ color:var(--err); }
-@media (max-width:560px){ .row{ grid-template-columns:1fr; } }
+.cmd{ display:flex; gap:12px; align-items:flex-start; background:var(--bg-2); border:1px solid var(--rule); border-radius:12px; padding:14px 16px; }
+.cmd code{ flex:1; white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:1.6; }
+button{ font:13px var(--sans); font-weight:500; cursor:pointer; border:1px solid var(--rule-2); border-radius:999px; padding:6px 14px; background:transparent; color:var(--ink-2); }
+button:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
+.note{ color:var(--ink-3); font-size:14px; margin-top:12px; }
 </style>
 </head>
 <body>
 <main>
   <a class="top" href="/"><img src="/typewriter-mark.png" alt="" width="30" height="16" /> Agent Keyboard</a>
   <h1>Run Agent Keyboard on your own accounts</h1>
-  <p class="lede">This deploys the server into <em>your</em> Fly account, running on your own Claude subscription. It's free. Your tokens go straight into your own Fly and Supabase accounts and are never stored or logged here (<a href="https://github.com/vibhasjain/agent-keyboard/blob/main/server/src/setup.ts">see the code</a>). Your GitHub token stays in this page: it's only used to read your repos.</p>
+  <p class="lede">Claude Code sets it up with you, on your own computer: the server goes into <em>your</em> Fly account and runs on your own Claude subscription. Your keys never pass through us, and you never paste one into the chat.</p>
 
-  <form id="f" autocomplete="off">
-    <fieldset>
-      <legend>1 · Your site</legend>
-      <label>GitHub token <span class="hint"><a id="ghnew" href="https://github.com/settings/personal-access-tokens/new?name=Agent+Keyboard&amp;description=Lets+Agent+Keyboard+edit+your+site&amp;contents=write&amp;pull_requests=write" target="_blank" rel="noopener">Create one</a>: pick your site's repo, then give it Contents and Pull requests read/write. No Workflows.</span>
-        <input name="GH_TOKEN" type="password" required /></label>
-      <label>Repo <span class="hint" id="detect">Paste the token to list your repos.</span>
-        <select name="repo" required disabled><option value="">—</option></select></label>
-      <div class="row" style="margin-top:14px">
-        <label>Branch <span class="hint">deploys from</span><input name="branch" required /></label>
-        <label style="grid-column:span 2">Domain <span class="hint">where the site lives</span><input name="domain" required placeholder="blog.example.com" /></label>
-      </div>
-      <label style="margin-top:14px">Preview URL <span class="hint">Optional: leave it blank if you're not sure. It's where your host shows a branch before it goes live, so the bar can try bigger changes there first. We fill it in for Netlify and Cloudflare Pages; otherwise copy a preview link from your host and put <code>{branch}</code> where the branch name goes, e.g. <code>https://{branch}--mysite.netlify.app</code>.</span>
-        <input name="preview" placeholder="blank = no previews" /></label>
-    </fieldset>
-    <fieldset>
-      <legend>2 · Claude</legend>
-      <label>Claude token <span class="hint">Run <code>claude setup-token</code> in your terminal (Pro or Max) and paste the result.</span>
-        <input name="CLAUDE_CODE_OAUTH_TOKEN" type="password" required /></label>
-    </fieldset>
-    <fieldset>
-      <legend>3 · Sign-in</legend>
-      <label>Supabase access token <span class="hint"><a href="https://supabase.com/dashboard/account/tokens" target="_blank" rel="noopener">Create one</a> (free account). We create an <code>agent-keyboard</code> project with sign-up turned off. Your login for the bar is your Supabase account email: Supabase emails you a link to set a password once the bar is on your site.</span>
-        <input name="supabaseToken" type="password" required /></label>
-    </fieldset>
-    <fieldset>
-      <legend>4 · Server (Fly)</legend>
-      <label>Fly org token <span class="hint"><a href="https://fly.io/app/sign-up" target="_blank" rel="noopener">Sign up</a> if needed, then run <code>fly tokens create org</code>. Used once; the server keeps only a token scoped to its own app.</span>
-        <input name="flyToken" type="password" required /></label>
-      <div class="row" style="margin-top:14px">
-        <label>App name <span class="hint">→ name.fly.dev</span><input name="app" required pattern="[a-z][a-z0-9\-]{1,40}[a-z0-9]" placeholder="my-agent-keyboard" /></label>
-        <label>Region <span class="hint">near you</span><select name="region" required><option value="ams">Amsterdam</option><option value="iad" selected>Ashburn, VA</option><option value="ord">Chicago</option><option value="dfw">Dallas</option><option value="fra">Frankfurt</option><option value="jnb">Johannesburg</option><option value="lhr">London</option><option value="lax">Los Angeles</option><option value="bom">Mumbai</option><option value="cdg">Paris</option><option value="sjc">San Jose</option><option value="ewr">Secaucus, NJ</option><option value="sin">Singapore</option><option value="arn">Stockholm</option><option value="syd">Sydney</option><option value="gru">São Paulo</option><option value="nrt">Tokyo</option><option value="yyz">Toronto</option></select></label>
-        <label>Org <span class="hint">slug</span><input name="org" value="personal" required /></label>
-      </div>
-    </fieldset>
-    <button id="go" type="submit">Set it all up</button>
-    <p class="note">Takes 3–8 minutes. Safe to run again if a step fails: finished steps are skipped. Fly bills your account directly (about $2–6/month); Supabase's free tier is enough.</p>
-  </form>
-  <div id="out" aria-live="polite"></div>
+  <h2>1. What you need</h2>
+  <ul>
+    <li>A Claude <strong>Pro or Max</strong> plan, and <a href="https://code.claude.com/docs/en/setup" target="_blank" rel="noopener">Claude Code</a> installed.</li>
+    <li>Free accounts on <strong>GitHub</strong>, <strong>Fly.io</strong> and <strong>Supabase</strong>. Fly bills you directly, about $2–6 a month.</li>
+    <li>A website, or nothing yet: Claude can start one from an empty repo, host it and point your domain at it.</li>
+  </ul>
+
+  <h2>2. Run this in your terminal</h2>
+  <div class="cmd"><code id="cmd">gh repo fork vibhasjain/agent-keyboard --clone &amp;&amp; cd agent-keyboard &amp;&amp; claude "set up Agent Keyboard"</code><button type="button" id="copy">Copy</button></div>
+  <p class="note">No <code>gh</code>? Install it from <a href="https://cli.github.com" target="_blank" rel="noopener">cli.github.com</a>, or fork the repo on <a href="https://github.com/vibhasjain/agent-keyboard" target="_blank" rel="noopener">GitHub</a> and clone it.</p>
+
+  <h2>3. What Claude does with you</h2>
+  <ol>
+    <li>Asks about your site, or creates one: repo, hosting, and the DNS record for your domain.</li>
+    <li>Signs you in to GitHub, Fly and the rest through your browser. For the few keys the server needs, it gives you a one-line command for a separate terminal window, so you paste each key where it stays hidden.</li>
+    <li>Sets up Supabase sign-in, deploys the server to Fly and checks every piece works.</li>
+    <li>Adds the script tag to your site. You sign in to the bar and ask for your first change.</li>
+  </ol>
+  <p class="note">About an hour, mostly waiting on the first build. Open source, MIT: <a href="https://github.com/vibhasjain/agent-keyboard/blob/main/.claude/skills/self-host/SKILL.md" target="_blank" rel="noopener">read the steps Claude follows</a>.</p>
 </main>
 <script>
-(function(){
-  var API = 'https://agent-keyboard.fly.dev';
-  var f = document.getElementById('f'), out = document.getElementById('out'), go = document.getElementById('go');
-  var sel = f.elements.repo, detect = document.getElementById('detect'), repos = [];
-  function el(tag, cls, text){ var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-  function v(n){ return f.elements[n].value.trim(); }
-  function gh(path, raw){
-    return fetch('https://api.github.com' + path, { headers: { Authorization: 'Bearer ' + v('GH_TOKEN'), Accept: raw ? 'application/vnd.github.raw' : 'application/vnd.github+json' } });
-  }
-
-  // GitHub runs in the browser: list the repos this token can push to.
-  f.elements.GH_TOKEN.addEventListener('change', function(){
-    if (!v('GH_TOKEN')) return;
-    detect.textContent = 'Loading your repos…';
-    gh('/user/repos?per_page=100&sort=pushed').then(function(r){
-      if (!r.ok) throw new Error(r.status === 401 ? 'GitHub rejected that token.' : 'GitHub error ' + r.status + '.');
-      return r.json();
-    }).then(function(list){
-      repos = list.filter(function(x){ return x.permissions && x.permissions.push; });
-      sel.replaceChildren(el('option', null, repos.length ? 'Pick a repo' : 'No repos this token can push to'));
-      sel.firstChild.value = '';
-      repos.forEach(function(x, i){ var o = el('option', null, x.full_name); o.value = i; sel.append(o); });
-      sel.disabled = !repos.length;
-      detect.textContent = repos.length ? 'The repo the bar will edit.' : 'Give the token Contents read/write on your site\'s repo.';
-    }).catch(function(e){ detect.textContent = e.message; detect.className = 'hint err'; });
-  });
-
-  // Guess the host, branch, domain and preview pattern from the repo's config files.
-  sel.addEventListener('change', function(){
-    var x = repos[sel.value]; if (!x) return;
-    f.elements.branch.value = x.default_branch;
-    var home = ''; try { home = x.homepage ? new URL(x.homepage).host : ''; } catch (e) {}
-    var slug = x.name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
-    if (!f.elements.app.value) f.elements.app.value = (slug + '-ak').replace(/^[^a-z]+/, '').slice(0, 42);
-    detect.textContent = 'Checking how it deploys…';
-    Promise.all(['netlify.toml', 'vercel.json', 'fly.toml', 'wrangler.toml', 'wrangler.jsonc', 'wrangler.json'].map(function(name){
-      return gh('/repos/' + x.full_name + '/contents/' + name, true).then(function(r){ return r.ok ? r.text() : null; }).catch(function(){ return null; });
-    })).then(function(files){
-      var wrangler = files[3] || files[4] || files[5];
-      var cf = /\.pages\.dev$/.test(home) || (wrangler && /pages_build_output_dir/.test(wrangler));
-      var host = files[0] != null ? 'Netlify' : files[1] != null ? 'Vercel' : files[2] != null ? 'Fly' : cf ? 'Cloudflare Pages' : '';
-      var flyApp = files[2] && /^app\s*=\s*["']([^"']+)/m.exec(files[2]);
-      var cfName = (wrangler && /^\s*"?name"?\s*[=:]\s*["']([^"']+)/m.exec(wrangler) || [])[1] || slug;
-      var domain = home || (flyApp ? flyApp[1] + '.fly.dev' : host === 'Vercel' ? slug + '.vercel.app' : host === 'Netlify' ? slug + '.netlify.app' : cf ? cfName + '.pages.dev' : '');
-      f.elements.domain.value = domain;
-      var netlify = host === 'Netlify' || /\.netlify\.app$/.test(domain);
-      cf = cf || /\.pages\.dev$/.test(domain);
-      f.elements.preview.value = netlify ? 'https://{branch}--' + (/\.netlify\.app$/.test(domain) ? domain.split('.')[0] : slug) + '.netlify.app'
-        : cf ? 'https://{branch}.' + (/\.pages\.dev$/.test(domain) ? domain.split('.')[0] : cfName) + '.pages.dev' : '';
-      detect.textContent = (host ? 'Looks like ' + host + '. ' : '') + 'Check the branch and domain below.' +
-        (netlify ? ' Turn on branch deploys for all branches in Netlify so previews work.' : cf ? ' Preview deployments must be on (the default) in Cloudflare Pages.' : '');
-    });
-  });
-
-  function steps(res){
-    var ol = el('ol');
-    (res.steps || []).forEach(function(s){
-      var li = el('li', s.ok ? 'ok' : 'bad', s.step); ol.append(li);
-      if (s.detail) li.append(el('pre', null, s.detail));
-    });
-    out.append(ol);
-  }
-  function post(path, body){
-    return fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function(r){ return r.json().catch(function(){ throw new Error('The installer answered ' + r.status + ' instead of JSON. It may not be deployed on ' + API + ' yet.'); }); });
-  }
-  function healthy(app, tries){
-    return fetch(API + '/setup/health?app=' + app).then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(h){
-      if (h.ok || tries <= 0) return h;
-      return new Promise(function(r){ setTimeout(r, 5000); }).then(function(){ return healthy(app, tries - 1); });
-    });
-  }
-
-  // ?check=<app>: the health page for an existing server.
-  var checkApp = new URLSearchParams(location.search).get('check');
-  if (checkApp) {
-    f.hidden = true;
-    document.querySelector('h1').textContent = 'Health of ' + checkApp + '.fly.dev';
-    document.querySelector('.lede').textContent = 'Each line is a live check of your server. Fix any ✗ and reload.';
-    out.replaceChildren(el('p', null, 'Checking…'));
-    healthy(checkApp, 0).then(function(h){
-      out.replaceChildren();
-      if (!h.ok) { out.append(el('p', 'err', 'Your server is not answering. Run `fly logs -a ' + checkApp + '` to see why.')); return; }
-      steps({ steps: [{ step: 'server is up', ok: true }].concat((h.checks || []).map(function(c){ return { step: c.name, ok: c.ok, detail: c.detail }; })) });
-    });
-  }
-
-  f.addEventListener('submit', function(ev){
-    ev.preventDefault();
-    var x = repos[sel.value];
-    var site = { id: x.name.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, ''), repo: x.clone_url, branch: v('branch'), domain: v('domain').replace(/^https?:\/\//, '').replace(/\/.*$/, '') };
-    if (v('preview')) site.sandbox = { preview: v('preview') };
-    go.disabled = true; go.textContent = 'Working…';
-    out.replaceChildren(el('p', null, 'Setting up sign-in on Supabase (a new project takes 1–3 minutes). Keep this tab open.'));
-    var email;
-    post('/setup/supabase', { supabaseToken: v('supabaseToken'), region: v('region'), domain: site.domain }).then(function(sb){
-      out.replaceChildren(); if (sb.error) throw new Error(sb.error); steps(sb);
-      if (!sb.ok) throw new Error('Fix the problem above and press the button again; finished steps are skipped.');
-      email = sb.email;
-      out.append(el('p', null, 'Deploying your server to Fly…'));
-      return post('/setup/deploy', {
-        flyToken: v('flyToken'), app: v('app'), region: v('region'), org: v('org'), supabaseToken: v('supabaseToken'), supabaseRef: sb.ref,
-        secrets: { SITES: JSON.stringify([site]), ALLOWED_EMAIL: email, GH_TOKEN: v('GH_TOKEN'), CLAUDE_CODE_OAUTH_TOKEN: v('CLAUDE_CODE_OAUTH_TOKEN') }
-      });
-    }).then(function(res){
-      out.lastChild.remove(); if (res.error) throw new Error(res.error); steps(res);
-      if (!res.ok) throw new Error('Fix the problem above and press the button again; finished steps are skipped.');
-      out.append(el('p', null, 'Waiting for your server to answer…'));
-      return healthy(v('app'), 24).then(function(h){
-        out.lastChild.remove();
-        var li = el('li', h.ok ? 'ok' : 'bad', h.ok ? 'server is up' : 'server not answering yet: check `fly logs -a ' + v('app') + '`');
-        out.querySelector('ol:last-of-type').append(li);
-        if (h.checks && h.checks.length) { out.append(el('p', null, 'Health check (the script tag one passes once you paste it; recheck at ' + location.origin + location.pathname + '?check=' + v('app') + '):')); steps({ steps: h.checks.map(function(c){ return { step: c.name, ok: c.ok, detail: c.detail }; }) }); }
-        var tag = '<script src="' + res.url + '/widget.js" data-site="' + site.id + '" defer></' + 'script>';
-        out.append(el('p', null, 'Done. Paste this before </body> on ' + site.domain + ', push it, then open the email from Supabase sent to ' + email + ' and set your password in the bar (the link lasts 24 hours; press the button again for a new one):'));
-        out.append(el('pre', null, tag));
-        var copy = el('button', null, 'Copy script tag'); copy.type = 'button';
-        copy.onclick = function(){ navigator.clipboard.writeText(tag).then(function(){ copy.textContent = 'Copied'; }); };
-        out.append(copy);
-        f.elements.flyToken.value = ''; f.elements.supabaseToken.value = '';
-      });
-    }).catch(function(e){
-      out.append(el('p', 'err', e instanceof TypeError ? 'Could not reach the installer. Check your connection and try again.' : e.message));
-    }).finally(function(){ go.disabled = false; go.textContent = 'Set it all up'; });
-  });
-})();
+document.getElementById('copy').onclick = function(){
+  var b = this;
+  navigator.clipboard.writeText(document.getElementById('cmd').textContent).then(function(){ b.textContent = 'Copied'; });
+};
 </script>
 <script src="https://agent-keyboard.fly.dev/widget.js" data-site="halo" data-accent="#ffb86b" data-theme="dark" data-guest-demo defer></script>
 </body>

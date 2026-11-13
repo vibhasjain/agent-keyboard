@@ -1,6 +1,6 @@
 ---
 name: self-host
-description: Set up a self-hosted Agent Keyboard server end to end with the user — Supabase, GitHub token, Claude token, Fly.io deploy, SITES config, and the script tag to paste. Use when someone has cloned the agent-keyboard repo and asks to set up, install, self-host, or deploy Agent Keyboard (or "get the bar working on my site"). Not for operating an already-running instance (that's self-ops).
+description: Set up a self-hosted Agent Keyboard server end to end with the user — their site (existing, or a new one from an empty repo, including hosting and the domain's DNS), Supabase, GitHub token, Claude token, Fly.io deploy, SITES config, and the script tag. Use when someone has cloned the agent-keyboard repo and asks to set up, install, self-host, or deploy Agent Keyboard (or "get the bar working on my site"). Not for operating an already-running instance (that's self-ops).
 ---
 
 # Set up a self-hosted Agent Keyboard
@@ -12,11 +12,20 @@ questions, the commands that verify each step, and the pitfalls.
 
 Rules:
 - One step at a time. Say what's next, ask only for what that step needs, verify it, move on.
-- Never print a secret back. Shell variables don't survive between your commands, so keep pasted
-  values in `~/.agent-keyboard-setup.env` (outside the repo, `chmod 600`) and `source` it in each
-  command. Delete it at the end.
+- **Tokens never go through the chat.** Prefer browser logins (`flyctl auth login`, `gh auth login`,
+  `netlify login`, `wrangler login`): the CLI keeps the credential and you never see it. For the
+  tokens the server needs (`SBP`, `GH_TOKEN`, `CLAUDE_TOKEN`, `PASSWORD`), have the user run this **in a
+  separate terminal window** (your shell can't take hidden input), with NAME filled in (`bash -c` so it works from zsh too; `%q` keeps odd characters safe to `source`):
+
+  ```bash
+  bash -c 'read -rsp "Paste NAME, then Enter: " v && echo && umask 077 && printf "NAME=%q\n" "$v" >> ~/.agent-keyboard-setup.env && echo saved'
+  ```
+
+  If they paste a token into the chat anyway, tell them to revoke it and make a new one. Use the values
+  only via `source ~/.agent-keyboard-setup.env` inside your commands; never `cat` the file or echo a
+  value. Delete the file at the end.
 - If a check fails, stop and fix it there. Don't carry a broken step forward.
-- Tell the user honestly that this takes about an hour, mostly waiting on the Fly build.
+- Tell the user honestly that this takes about an hour (longer from scratch), mostly waiting on the Fly build.
 
 ## 0. Preflight
 
@@ -33,6 +42,9 @@ server's CLI runs on it) — see the checklist at the top of `SELF_HOSTING.md`.
 
 ## 1. Ask about the site
 
+First ask whether they already have a website, or are starting from scratch (no repo, or an empty
+one). Starting from scratch → do **1b** first, then come back here with its answers.
+
 Ask, in one message:
 1. The site's GitHub repo (`owner/name`) and the branch its host deploys from (usually `main`).
 2. The live domain, bare (`blog.example.com`, no `https://`, no path).
@@ -43,15 +55,31 @@ Ask, in one message:
 
 Check the repo exists and note whether it's private: `gh repo view OWNER/NAME --json visibility,defaultBranchRef`.
 
+## 1b. No site yet
+
+The bar only appears on a live page, so put one online before anything else.
+1. Repo: `gh repo create NAME --private --clone` (or clone their empty one). Commit a minimal
+   `index.html` (a title and a line of text is enough; the bar will build the rest) and push.
+2. Host: ask which they want; suggest Netlify or Cloudflare Pages (free, branch previews, which
+   sandboxes use). Log in with the host's CLI (browser login), create the site connected to the
+   GitHub repo so every push to `main` deploys, and confirm the `*.netlify.app` / `*.pages.dev` URL
+   serves the page.
+3. Domain (if they have one): add it in the host, then tell them the exact DNS record to add at
+   their registrar (a subdomain is a CNAME to the host's target; an apex needs the host's ALIAS/A
+   records: read the host's docs for the current values). Check with `dig +short DOMAIN` and
+   `curl -sI https://DOMAIN`. DNS and the certificate can take a while: carry on with the default
+   URL as the domain meanwhile, and change `domain` in SITES later (step 5).
+
 ## 2. Supabase (SELF_HOSTING.md step 2)
 
 They create the project at supabase.com (region near the Fly region) and give you the project ref
 (the `xxxx` in `https://xxxx.supabase.co`). Then offer two paths:
 
-**A. They paste a Supabase access token** (supabase.com/dashboard/account/tokens, `sbp_…`). You do it:
+**A. A Supabase access token** (supabase.com/dashboard/account/tokens, `sbp_…`), saved as `SBP` with the
+hidden-input line above. You do the rest:
 
 ```bash
-REF=xxxx; SBP=sbp_...           # from the user; don't echo
+source ~/.agent-keyboard-setup.env; REF=xxxx
 API=https://api.supabase.com/v1/projects/$REF
 # keys → SUPABASE_ANON_KEY (name "anon"), SUPABASE_SERVICE_KEY (name "service_role")
 curl -sS -H "Authorization: Bearer $SBP" "$API/api-keys" | jq -r '.[] | "\(.name)"'
@@ -63,21 +91,21 @@ curl -sS -X PATCH "$API/config/auth" -H "Authorization: Bearer $SBP" -H "Content
   -d '{"disable_signup":true,"site_url":"https://DOMAIN","uri_allow_list":"https://DOMAIN/**,https://YOUR-APP.fly.dev/**"}'
 ```
 
-Read the keys into variables with `jq -r '.[] | select(.name=="anon") | .api_key'` (and
-`service_role`) rather than printing them.
+Append the keys to `~/.agent-keyboard-setup.env` as `ANON_KEY` / `SERVICE_KEY` with
+`jq -r '.[] | select(.name=="anon") | .api_key'` (and `service_role`) rather than printing them.
 
 **B. No token** — walk them through step 2 of `SELF_HOSTING.md` in the dashboard, one item at a
 time: Email provider on, **Allow new users to sign up: off**, paste and run `server/sql/jobs.sql` in
 the SQL editor, add `https://DOMAIN/**` under Authentication → URL Configuration → Redirect URLs, then
 copy the Project URL, anon key and service_role key from Project Settings → API.
 
-Either way, create the owner's user with the admin API (works with signups off). Ask them for a
-password, or generate one and tell them to save it:
+Either way, create the owner's user with the admin API (works with signups off). They choose the
+password and save it as `PASSWORD` with the hidden-input line (never ask for it in chat):
 
 ```bash
 curl -sS -X POST "https://$REF.supabase.co/auth/v1/admin/users" \
   -H "apikey: $SERVICE_KEY" -H "Authorization: Bearer $SERVICE_KEY" -H "Content-Type: application/json" \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"email_confirm\":true}" | jq '{id, email}'
+  -d "$(jq -n --arg e "$EMAIL" --arg p "$PASSWORD" '{email:$e, password:$p, email_confirm:true}')" | jq '{id, email}'
 ```
 
 Verify: `curl -sS "https://$REF.supabase.co/auth/v1/settings" -H "apikey: $ANON_KEY" | jq .disable_signup` → `true`.
@@ -101,10 +129,12 @@ curl -s -o /dev/null -w "%{http_code}\n" -u "x-access-token:$GH_TOKEN" \
   "https://github.com/OWNER/NAME.git/info/refs?service=git-receive-pack"
 ```
 
+Save it as `GH_TOKEN` with the hidden-input line.
+
 ## 4. Claude token (SELF_HOSTING.md step 4)
 
-They run `claude setup-token` in their own terminal (it's interactive) and paste the `sk-ant-oat…`
-token. Verify: `CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_TOKEN" claude -p "reply ok"` prints `ok`.
+They run `claude setup-token` in their own terminal (it's interactive) and save the `sk-ant-oat…`
+token as `CLAUDE_TOKEN` with the hidden-input line. Verify: `CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_TOKEN" claude -p "reply ok"` prints `ok`.
 
 ## 5. SITES
 
@@ -191,6 +221,7 @@ the id, and the page must be served from `domain`):
 <script src="https://APP.fly.dev/widget.js" data-site="ID" defer></script>
 ```
 
-Offer to add it to their site's repo for them if it's cloned locally. Finish with step 8 ("First run"):
-sign in with the email and password from step 2, and ask for something small. Mention the optional CI
+Offer to add it to their site's repo for them if it's cloned locally (from 1b it is: add it, commit,
+push). Then `curl -s https://APP.fly.dev/check | jq` should pass every check. Finish with step 8 ("First run"):
+sign in with their email and the password they saved in step 2, and ask for something small. Mention the optional CI
 autodeploy (step 6) and delete `~/.agent-keyboard-setup.env`.

@@ -105,7 +105,7 @@ git diff $OLD HEAD -- server/.env.example   # settings this update added
 
 ### Image-based instances (`AK_IMAGE`, no fork)
 
-Instances made by the one-click installer (`agentkeyboard.com/setup`) run the public image `$AK_IMAGE`
+Instances deployed from the prebuilt image run the public image `$AK_IMAGE`
 (`ghcr.io/vibhasjain/agent-keyboard:latest`, rebuilt on every upstream deploy) and hold an app-scoped
 `FLY_API_TOKEN`. Updating = moving this machine to the newest build of that tag:
 
@@ -122,8 +122,7 @@ one, set `AK_FORK_REPO`, and the fork path above takes over.
 
 ## Health check
 
-`curl -s localhost:8080/check` (public at `https://$FLY_APP_NAME.fly.dev/check`; the owner's page is
-`agentkeyboard.com/setup.html?check=$FLY_APP_NAME`) self-tests Supabase (sign-up off), the jobs table, the
+`curl -s localhost:8080/check` (public at `https://$FLY_APP_NAME.fly.dev/check`) self-tests Supabase (sign-up off), the jobs table, the
 Claude login, and per site: GH_TOKEN can push, the script tag is on the domain, sandboxes are enabled.
 It also runs once at boot (`fly logs`, lines `agent-keyboard: check …`). Results are cached 60 s.
 

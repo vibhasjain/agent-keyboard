@@ -1279,7 +1279,7 @@ app.post("/realtime/token", authed, async (_req, res) => {
 // Ring webhook + focus registry (see ring.ts).
 app.use(ringRouter());
 
-// One-click self-host installer (see setup.ts). Public, rate-limited, stateless.
+// GET /check: the instance's self-test (see setup.ts). Public, no secrets in it.
 app.use(setupRouter());
 // Self-test once after boot, so a broken config shows up in `fly logs` (also at GET /check).
 setTimeout(() => void runChecks().then((cs) => {
