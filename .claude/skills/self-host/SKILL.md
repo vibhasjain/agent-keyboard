@@ -11,7 +11,9 @@ with the user rather than handing them the doc. This file only adds what the doc
 questions, the commands that verify each step, and the pitfalls.
 
 Rules:
-- One step at a time. Say what's next, ask only for what that step needs, verify it, move on.
+- **One question per message.** Never send a numbered questionnaire. Work out whatever you can
+  yourself and offer it as a default the user can just confirm ("I'll call it `blog`, OK?").
+- One step at a time. Say what's next in a sentence, verify it, move on.
 - **Tokens never go through the chat.** Prefer browser logins (`flyctl auth login`, `gh auth login`,
   `netlify login`, `wrangler login`): the CLI keeps the credential and you never see it. For the
   tokens the server needs (`SBP`, `GH_TOKEN`, `CLAUDE_TOKEN`, `PASSWORD`), have the user run this **in a
@@ -25,7 +27,8 @@ Rules:
   only via `source ~/.agent-keyboard-setup.env` inside your commands; never `cat` the file or echo a
   value. Delete the file at the end.
 - If a check fails, stop and fix it there. Don't carry a broken step forward.
-- Tell the user honestly that this takes about an hour (longer from scratch), mostly waiting on the Fly build.
+- Don't quote a total time up front. When a slow step starts (the Fly build is several minutes), say
+  so then.
 
 ## 0. Preflight
 
@@ -42,18 +45,23 @@ server's CLI runs on it) — see the checklist at the top of `SELF_HOSTING.md`.
 
 ## 1. Ask about the site
 
-First ask whether they already have a website, or are starting from scratch (no repo, or an empty
-one). Starting from scratch → do **1b** first, then come back here with its answers.
+Ask only these, one at a time, waiting for each answer:
+1. "Do you already have a website, or are we starting from scratch?" Scratch → do **1b**, which
+   answers the rest.
+2. "Which GitHub repo is it?" Offer their recent repos from `gh repo list --limit 10` to pick from.
 
-Ask, in one message:
-1. The site's GitHub repo (`owner/name`) and the branch its host deploys from (usually `main`).
-2. The live domain, bare (`blog.example.com`, no `https://`, no path).
-3. Where it's hosted: Netlify, Vercel, Cloudflare Pages, other.
-4. A short id for the site (lowercase, e.g. `blog`) — it becomes `data-site`.
-5. Their login email (becomes `ALLOWED_EMAIL`), and whether anyone else will use the bar.
-6. A Fly app name (global, e.g. `agent-keyboard-<their-name>`) and region (`fly platform regions`).
+Then work out the rest yourself and confirm it in one short message ("Here's what I found: … Anything
+to change?"), asking only about what you couldn't find:
+- Branch: the default branch (`gh repo view OWNER/NAME --json visibility,defaultBranchRef`; note if private).
+- Host: from the repo's `netlify.toml` / `vercel.json` / `wrangler.toml` / `fly.toml`, or the repo's
+  homepage URL.
+- Domain (bare, no `https://`): the repo homepage, the host's CLI if logged in, or a `CNAME` file.
+- Site id (becomes `data-site`): the repo name, lowercased.
+- Login email (`ALLOWED_EMAIL`): `flyctl auth whoami` or `gh api user --jq .email`.
+- Fly app name: `agent-keyboard-<github-username>`; region: the one `fly platform regions` marks
+  closest, or `iad`.
 
-Check the repo exists and note whether it's private: `gh repo view OWNER/NAME --json visibility,defaultBranchRef`.
+Ask whether anyone else will use the bar later, at step 6, not now.
 
 ## 1b. No site yet
 
@@ -156,6 +164,8 @@ time; small changes go straight live. Nothing is forced. They need:
 - If they don't want sandboxes, drop the `sandbox` key; every change then pushes straight to `branch`.
 
 ## 6. Email (only if others will use the bar)
+
+Ask: "Will anyone besides you use the bar?" No → skip this step.
 
 Read "Email: set up Resend" in `SELF_HOSTING.md`. Recommend it from the start when anyone besides the
 owner will use the bar: Supabase's built-in mailer sends only about 2 invites an hour, and @mentions
