@@ -68,8 +68,8 @@ button:disabled{ opacity:.55; cursor:progress; }
         <label>Branch <span class="hint">deploys from</span><input name="branch" required /></label>
         <label style="grid-column:span 2">Domain <span class="hint">where the site lives</span><input name="domain" required placeholder="blog.example.com" /></label>
       </div>
-      <label style="margin-top:14px">Preview URL <span class="hint">Optional. Lets the bar try bigger changes on a preview branch first. <code>{branch}</code> is filled in.</span>
-        <input name="preview" placeholder="https://{branch}.mysite.pages.dev" /></label>
+      <label style="margin-top:14px">Preview URL <span class="hint">Optional: leave it blank if you're not sure. It's where your host shows a branch before it goes live, so the bar can try bigger changes there first. We fill it in for Netlify and Cloudflare Pages; otherwise copy a preview link from your host and put <code>{branch}</code> where the branch name goes, e.g. <code>https://{branch}--mysite.netlify.app</code>.</span>
+        <input name="preview" placeholder="blank = no previews" /></label>
     </fieldset>
     <fieldset>
       <legend>2 · Claude</legend>
