@@ -219,28 +219,26 @@ function sbRegion(fly: string): string {
   return "us-east-1";
 }
 
-type SbInput = { supabaseToken: string; email: string; password: string; region: string; domain: string };
+type SbInput = { supabaseToken: string; email: string; region: string; domain: string };
 
 export function parseSbInput(body: unknown): string | SbInput {
   const b = (body ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
   const supabaseToken = str(b.supabaseToken);
   const email = str(b.email).toLowerCase();
-  const password = typeof b.password === "string" ? b.password : "";
   const region = str(b.region) || "iad";
   const domain = str(b.domain);
   if (!supabaseToken) return "supabaseToken is required";
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "a valid email is required";
-  if (password.length < 8) return "password must be at least 8 characters";
   if (!/^[a-z]{3}$/.test(region)) return "region must be a 3-letter Fly region code, e.g. iad";
   if (!/^(?!-)[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(domain)) return "domain must be a bare host like blog.example.com";
-  return { supabaseToken, email, password, region, domain };
+  return { supabaseToken, email, region, domain };
 }
 
-/** Create (or reuse) the "agent-keyboard" project, lock sign-up, add the jobs table and the owner login. */
+/** Create (or reuse) the "agent-keyboard" project, lock sign-up, add the jobs table and invite the owner. */
 export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?: string; steps: Step[] }> {
   const steps: Step[] = [];
-  const hide = [input.supabaseToken, input.password];
+  const hide = [input.supabaseToken];
   const fail = (step: string, e: unknown) => {
     const msg = hide.reduce((out, v) => out.split(v).join("[hidden]"), String((e as Error)?.message ?? e));
     steps.push({ step, ok: false, detail: msg.slice(0, 600) });
@@ -282,9 +280,10 @@ export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?
   }
   try {
     // Sign-up off: the anon key is public, so the only accounts are the ones made here or by invite.
+    // Email links last 24 h: the owner sets their password once the bar is on their site.
     await sb(t, `/projects/${ref}/config/auth`, {
       method: "PATCH",
-      body: JSON.stringify({ disable_signup: true, site_url: `https://${input.domain}`, uri_allow_list: `https://${input.domain}/**` }),
+      body: JSON.stringify({ disable_signup: true, mailer_otp_exp: 86400, site_url: `https://${input.domain}`, uri_allow_list: `https://${input.domain}/**` }),
     });
     steps.push({ step: "lock sign-up", ok: true });
   } catch (e) {
@@ -302,17 +301,20 @@ export async function setupSupabase(input: SbInput): Promise<{ ok: boolean; ref?
     if (typeof keys === "string") throw new Error(keys);
     const auth = { apikey: keys.service, "Content-Type": "application/json",
       ...(keys.service.startsWith("eyJ") ? { Authorization: `Bearer ${keys.service}` } : {}) };
-    const r = await fetch(`https://${ref}.supabase.co/auth/v1/admin/users`, {
+    // No password here: Supabase emails an invite and the bar on their site asks for one.
+    // Already invited (a re-run): send a fresh link instead, in case the first expired.
+    const send = (path: string) => fetch(`https://${ref}.supabase.co/auth/v1/${path}`, {
       method: "POST",
       headers: auth,
-      body: JSON.stringify({ email: input.email, password: input.password, email_confirm: true }),
+      body: JSON.stringify({ email: input.email }),
       signal: AbortSignal.timeout(30_000),
     });
-    // Already there (a re-run): keep it, the owner's password stays as first set.
-    if (!r.ok && r.status !== 422) throw new Error(`Supabase auth ${r.status}: ${(await r.text()).slice(0, 300)}`);
-    steps.push({ step: "create your login", ok: true });
+    let r = await send("invite");
+    if (r.status === 422) r = await send("recover");
+    if (!r.ok) throw new Error(`Supabase auth ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    steps.push({ step: "email your sign-in link", ok: true });
   } catch (e) {
-    return fail("create your login", e);
+    return fail("email your sign-in link", e);
   }
   return { ok: true, ref, steps };
 }
