@@ -32,6 +32,8 @@ label:first-of-type{ margin-top:0; }
 .hint{ display:block; color:var(--ink-3); font-weight:400; font-size:13px; margin-top:2px; }
 input, textarea, select{ width:100%; margin-top:6px; padding:10px 12px; border-radius:9px; border:1px solid var(--rule-2);
   background:var(--bg); color:var(--ink); font:16px var(--mono); }
+select{ appearance:none; padding-right:36px; background:var(--bg) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none' stroke='%23b8b2a7' stroke-width='1.5'%3E%3Cpath d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E") no-repeat right 14px center; }
+select:disabled{ opacity:.6; }
 input:focus-visible, textarea:focus-visible, select:focus-visible, button:focus-visible{ outline:2px solid var(--amber); outline-offset:2px; }
 .row{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
 .row label{ margin-top:0; }
