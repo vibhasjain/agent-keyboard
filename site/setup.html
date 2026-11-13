@@ -162,7 +162,7 @@ button:disabled{ opacity:.55; cursor:progress; }
   }
   function post(path, body){
     return fetch(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      .then(function(r){ return r.json(); });
+      .then(function(r){ return r.json().catch(function(){ throw new Error('The installer answered ' + r.status + ' instead of JSON. It may not be deployed on ' + API + ' yet.'); }); });
   }
   function healthy(app, tries){
     return fetch(API + '/setup/health?app=' + app).then(function(r){ return r.json(); }).catch(function(){ return {}; }).then(function(h){
