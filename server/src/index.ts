@@ -45,7 +45,6 @@ import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
 import { seedCodexConfig, seedSkills } from "./skills.js";
-import { startUsagePush } from "./usage.js";
 import {
   startJob,
   tail,
@@ -1366,7 +1365,6 @@ app.listen(port, () => {
     console.log(`agent-keyboard: AK_FORK_REPO unset — "update yourself" is off; set it to your fork (owner/agent-keyboard) to enable it`);
   }
   startTailscale();
-  startUsagePush();
 });
 
 // LinkedIn-only residential egress (see tailscale-up.sh): bring up the
