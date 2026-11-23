@@ -286,15 +286,10 @@ function mount(): void {
   let told = ''
   subscribe(() => {
     const job = getState().job
-    const detail = {
-      working: job.phase === 'sending' || (job.phase === 'streaming' && !job.idle),
-      phase: job.phase,
-      line: job.phase === 'streaming' ? job.line : '',
-    }
-    const now = JSON.stringify(detail)
-    if (now === told) return
-    told = now
-    window.dispatchEvent(new CustomEvent('agentkeyboard:job', { detail }))
+    const line = job.phase === 'streaming' ? job.line : ''
+    const working = job.phase === 'sending' || (job.phase === 'streaming' && !job.idle)
+    if (told === (told = job.phase + working + line)) return
+    dispatchEvent(new CustomEvent('agentkeyboard:job', { detail: { working, phase: job.phase, line } }))
   })
 
   // data-summon: invisible until summoned — except mid-invite, where hiding
