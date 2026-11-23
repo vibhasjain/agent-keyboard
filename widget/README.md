@@ -64,6 +64,17 @@ The widget reads its own `<script>` tag and needs no config from the embedder:
 Auth is hand-rolled GoTrue REST (no `supabase-js`); the session is stored under
 `localStorage['agent-keyboard-auth']`.
 
+## Page API
+
+The host page can drive the bar through `window.__agentKeyboard`:
+
+- `show()` / `hide()` / `toggle()` / `visible()`: the whole widget.
+- `send(text)`: hand the bar a prompt from the page's own button. It is sent as the signed-in person,
+  from the current page. Returns `false` when nobody is signed in (the transcript opens on its sign-in form).
+- `agentkeyboard:job` (a `CustomEvent` on `window`, fired when the job changes): `detail` is
+  `{ working, phase, line }`, where `line` is the status line the pill shows. Enough for a button to
+  show a busy state and what the agent is doing.
+
 ## Protocol
 
 The widget talks to the server over a small HTTP + SSE contract. Auth is a `Bearer <jwt>` header on

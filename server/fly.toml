@@ -38,6 +38,9 @@ swap_size_mb = 1024
   # idling 3 min starved its own page agents (nutrition/movies/…) after a relay.
   # 45s keeps follow-ups snappy but hands the lock over quickly.
   AK_SESSION_IDLE_MS = "45000"
+  # Stop the machine after this many minutes with no request and no job (0 or
+  # unset = always on).
+  IDLE_STOP_MINUTES = "15"
   # Volume fontconfig: chromium-headless-shell ignores $HOME font paths, so PDF
   # rendering (cv-jobs worker) resolves fonts via this conf on /data instead.
   FONTCONFIG_FILE = "/data/fontconfig/fonts.conf"
@@ -69,11 +72,14 @@ swap_size_mb = 1024
 [http_service]
   internal_port = 8080
   force_https = true
-  # Keep one machine warm so the in-process job registry + site mutex are always
-  # available; the durable checkouts and session JSONLs persist on the volume.
+  # The machine sleeps when idle (owner, 2026-11-23), but Fly's auto-stop stays
+  # off: it only sees inbound connections and would stop the machine under a
+  # running job. The server stops itself instead (IDLE_STOP_MINUTES in [env],
+  # startIdleStop in src/index.ts) and Fly starts it on the next request. The
+  # checkouts and session JSONLs persist on the volume.
   auto_stop_machines = "off"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
 # Persistent volume holds HOME=/data: per-site git checkouts (FIXED cwd paths,
 # session-hash stable) and the Claude Code session JSONLs (memory + compaction).

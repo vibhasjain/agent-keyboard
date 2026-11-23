@@ -113,6 +113,37 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   }),
 );
+// Idle stop (IDLE_STOP_MINUTES; unset = always on). Fly's own auto-stop only
+// sees inbound connections, so it would stop the machine under a job whose tab
+// was closed. The server knows better: it exits 0 only when no request is
+// open, no job is queued or running, and nothing has called for that long;
+// Fly starts the machine again on the next request (auto_start_machines).
+// A cron slot slept through runs at the next wake (cron.ts catches up).
+let lastActivity = Date.now();
+let openRequests = 0;
+app.use((_req, res, next) => {
+  lastActivity = Date.now();
+  openRequests++;
+  res.on("close", () => {
+    openRequests--;
+    lastActivity = Date.now();
+  });
+  next();
+});
+function startIdleStop(): void {
+  const idleMs = Number(process.env.IDLE_STOP_MINUTES ?? 0) * 60_000;
+  if (!(idleMs > 0)) return;
+  setInterval(() => {
+    if (openRequests > 0 || listActive().some((job) => job.status === "queued" || job.status === "running")) {
+      lastActivity = Date.now();
+      return;
+    }
+    if (Date.now() - lastActivity < idleMs) return;
+    console.log(`[idle] nothing for ${idleMs / 60_000} min, stopping; the next request starts the machine`);
+    void shutdown("idle");
+  }, 60_000).unref();
+}
+
 // The widget on a sandbox's preview still says data-site="<site>": route its
 // calls to the sandbox, so a preview can never edit the live site.
 app.use((req, _res, next) => {
@@ -1290,6 +1321,7 @@ app.listen(port, () => {
     publishBrowserStatus,
   );
   if (process.env.JOBS_CRON_DISABLED !== "1") startJobsCron();
+  startIdleStop();
   startCheckoutPruning(SITES);
   // Idle sandboxes: a note in the sandbox's own conversation first, then archived.
   const sandboxPrune = () =>

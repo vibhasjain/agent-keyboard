@@ -10,7 +10,7 @@ import { CONFIG, initConfig, resolveTheme, shouldMountHere } from './config'
 import { el, icon, on, show } from './dom'
 import { injectFonts } from './fonts'
 import { isGuestDemo, loadGuestDemo } from './guest-demo'
-import { bootRehydrate, discoverJobs } from './jobstore'
+import { bootRehydrate, discoverJobs, start } from './jobstore'
 import { getState, patchUi, subscribe } from './state'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
@@ -267,8 +267,35 @@ function mount(): void {
       else api.show()
       return api.visible()
     },
+    // A page's own button hands the bar a prompt, sent as the signed-in
+    // person from this page. false = nobody is signed in: the transcript
+    // opens on its sign-in form instead.
+    send: (text: string): boolean => {
+      if (getState().auth !== 'authed') {
+        api.show()
+        patchUi({ mode: 'expanded' })
+        return false
+      }
+      start({ text, page: location.pathname })
+      return true
+    },
   }
   window.__agentKeyboard = api
+  // …and follows the job: `agentkeyboard:job` on window whenever it changes,
+  // with the same status line the pill shows.
+  let told = ''
+  subscribe(() => {
+    const job = getState().job
+    const detail = {
+      working: job.phase === 'sending' || (job.phase === 'streaming' && !job.idle),
+      phase: job.phase,
+      line: job.phase === 'streaming' ? job.line : '',
+    }
+    const now = JSON.stringify(detail)
+    if (now === told) return
+    told = now
+    window.dispatchEvent(new CustomEvent('agentkeyboard:job', { detail }))
+  })
 
   // data-summon: invisible until summoned — except mid-invite, where hiding
   // would bury the set-a-password form the link just opened. With

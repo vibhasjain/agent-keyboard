@@ -79,7 +79,11 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   `localStorage['agent-keyboard-auth']`.
 - **Durability** — Fly volume mounted at `/data` (= `HOME`) holds the per-site checkouts (fixed cwd
   paths so Claude Code session hashes stay stable) and the session JSONLs (memory + compaction). One
-  warm machine keeps the in-process job registry + per-site mutex available.
+  machine holds the in-process job registry + per-site mutex. With `IDLE_STOP_MINUTES` set (15 in
+  `server/fly.toml`) the server exits after that long with no request and no queued or running job
+  (`startIdleStop`), the machine stops, and Fly starts it on the next request. Fly's own auto-stop
+  stays off: it only sees inbound connections and would stop the machine under a job whose tab was
+  closed. A cron slot slept through runs at the next wake.
 - **SSE protocol** — the contract the widget speaks: `POST /sites/:id/messages` (response IS the
   stream), `GET /jobs/:id/stream` (re-attach), `GET /jobs?siteId=`, `POST /sites/:id/uploads`
   (multipart `photo`), `GET /sites/:id/conversation`, `GET|PUT /sites/:id/notes[/:name]` + `POST /sites/:id/notes-images`, `GET …/notes-images/:file` (Notes — full-screen
