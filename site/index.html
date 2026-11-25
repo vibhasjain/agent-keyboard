@@ -109,7 +109,6 @@ a:hover{ color:var(--amber); }
   border:1px solid var(--rule-2); border-radius:999px; padding:6px 12px;
   white-space:nowrap;
 }
-.gh-pill svg{ width:16px; height:16px; flex:none; }
 .gh-pill:hover{ color:var(--amber); border-color:rgba(255,184,107,.4); }
 
 /* ---- hero ---- */
@@ -322,10 +321,7 @@ footer .meta a:hover{ color:var(--amber); }
   <div class="top">
     <div class="brand"><img class="mark" src="typewriter-mark.png" width="41" height="22" alt=""><b>Agent Keyboard</b></div>
     <div class="top-right">
-      <a class="gh-pill" href="https://github.com/vibhasjain/agent-keyboard">
-        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-        vibhasjain/agent-keyboard
-      </a>
+      <a class="gh-pill" id="acct" href="/signin">Sign in</a>
     </div>
   </div>
 
@@ -339,7 +335,7 @@ footer .meta a:hover{ color:var(--amber); }
       a real Claude Code session edits the repo and ships it while you watch.</p>
 
     <div class="cta-row">
-      <a class="btn primary" href="/dashboard">Get started</a>
+      <a class="btn primary" id="start-cta" href="/dashboard">Get started</a>
       <button class="btn ghost demo-cta" type="button"><span aria-hidden="true">✻</span>Demo</button>
     </div>
     <p class="claude-cta"><a id="claude-cta" href="https://claude.ai/customize/connectors?modal=add-custom-connector&amp;connectorName=Agent%20Keyboard&amp;connectorUrl=https%3A%2F%2Fagentkeyboard.com%2Fmcp" target="_blank" rel="noopener">or get started in Claude →</a></p>
@@ -355,7 +351,14 @@ footer .meta a:hover{ color:var(--amber); }
           // refused (the 24 h link expired, or the server was mid-deploy): get a fresh link and reconnect
           events.onerror = () => { if (events.readyState === EventSource.CLOSED) { events = null; setTimeout(claudeCheck, 5000); } };
         }
-        if (!me.signedIn || !me.claude) return;
+        if (!me.signedIn) return;
+        // signed in: their account up top, "Your sites" instead of Get started, no Demo (they have the bar already)
+        const acct = document.getElementById('acct');
+        acct.textContent = me.login;
+        acct.href = '/dashboard';
+        document.getElementById('start-cta').textContent = 'Your sites';
+        document.querySelectorAll('.demo-cta').forEach(b => b.style.display = 'none');
+        if (!me.claude) return;
         const a = document.getElementById('claude-cta');
         a.textContent = 'Manage in Claude →';
         a.href = 'https://claude.ai/new?q=' + encodeURIComponent("Let's work on my Agent Keyboard sites");
