@@ -5,6 +5,12 @@ description: Invite a new user to Agent Keyboard by email — Supabase emails th
 
 # provision-user
 
+**Managed instance?** If `AK_RECOVER_URL` in your environment points at agentkeyboard.com, you're on
+a managed Sprite and this skill can't work here (there's no `SUPABASE_SERVICE_KEY`). Don't try. Tell
+the owner to invite (or remove) teammates under **Teammates** on https://agentkeyboard.com/dashboard,
+or to ask Claude with the Agent Keyboard connector (`invite_teammate`). Either way they get a join
+link to send.
+
 Give a new person access to Agent Keyboard: one command creates (or recovers)
 their Supabase account, emails them a set-your-password link, and adds their
 email to the server's allow-list so the auth gate accepts them.
