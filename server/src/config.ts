@@ -74,8 +74,7 @@ function isUrl(s: string): boolean {
  * problem. The result is the allow-list: the agent may only ever operate on one
  * of these checkouts, never an arbitrary repo.
  */
-export function loadSites(): Site[] {
-  const raw = process.env.SITES ?? "";
+export function loadSites(raw = process.env.SITES ?? ""): Site[] {
   if (!raw.trim()) {
     throw new Error(`SITES is empty. Set a JSON array, e.g. ${SITES_EXAMPLE}`);
   }

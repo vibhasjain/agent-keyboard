@@ -99,6 +99,7 @@ COPY server/codex-config.toml /app/codex-config.toml
 # from /app/email-templates on every deployment (they aren't in a site's checkout,
 # so without this the branded invite falls back to an improvised template).
 COPY server/email-templates /app/email-templates
+COPY server/sql /app/sql
 
 # The widget bundle served at GET /widget.js, and the demo bundle at /demo.js.
 COPY --from=widget /w/dist/widget.js /app/widget/widget.js
