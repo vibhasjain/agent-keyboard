@@ -816,16 +816,18 @@ app.post("/auth/handoff", authed, async (req, res) => {
 
 /** Inject a follow-up message into a running streaming session (M2). 404/409 if
  *  the site is unknown or the job isn't an open streaming session. */
-app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
+app.post("/sites/:siteId/jobs/:jobId/messages", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   if (!site) {
     res.status(404).json({ error: "unknown site" });
     return;
   }
   if (denySite(req, res, site.id)) return;
-  const text = typeof (req.body as { text?: unknown })?.text === "string" ? (req.body as { text: string }).text : "";
-  if (!text.trim()) {
-    res.status(400).json({ error: "text required" });
+  const body = (req.body ?? {}) as { text?: unknown; attachmentIds?: unknown };
+  const text = typeof body.text === "string" ? body.text : "";
+  const attachmentIds = Array.isArray(body.attachmentIds) ? body.attachmentIds.map(String) : [];
+  if (!text.trim() && attachmentIds.length === 0) {
+    res.status(400).json({ error: "text or attachmentIds required" });
     return;
   }
   // The job must belong to the site in the URL — otherwise the site check
@@ -839,9 +841,10 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, (req, res) => {
   // the transcript can attribute them; the page is unknown here, "/" is fine.
   const user = authedUser(req);
   if (user?.email) lastSender.set(site.id, user.email);
+  const attachmentPaths = attachmentIds.length ? await resolveAttachments(site.id, attachmentIds) : [];
   const ok = appendToJob(
     req.params.jobId ?? "",
-    buildPrompt(site, { text: text + notesNote(site.id, text) + pathScopeNote(user, site.id), page: "/", attachmentPaths: [], sender: user?.email }),
+    buildPrompt(site, { text: text + notesNote(site.id, text) + pathScopeNote(user, site.id), page: "/", attachmentPaths, sender: user?.email }),
   );
   if (!ok) {
     res.status(409).json({ error: "job not accepting messages" });

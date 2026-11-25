@@ -799,7 +799,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     // One sequence for the look-ahead: a chip tapped in the last history message is
     // answered by a user turn that lands in `live`, so it has to cross the boundary.
     // Sends still waiting behind a running job count too, so a tapped chip lights at once.
-    const waiting = [...getPendingFollowups(), ...getQueued().map((q) => q.text)].map((text) => ({ role: 'user', text }))
+    const waiting = [...getPendingFollowups(), ...getQueued()].map((q) => ({ role: 'user', text: q.text }))
     const turns = [...history, ...live, ...waiting]
     for (let i = 0; i < history.length; i++) listEl.appendChild(nodeForMessage(history[i], answerFor(turns, i)))
     for (let i = 0; i < live.length; i++) {
@@ -890,8 +890,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const q = getQueued()
     const followups = getPendingFollowups()
     clearNode(queuedBox)
-    for (const text of followups) {
-      const line = msgEl('user', text, { sender: localSender() })
+    for (const f of followups) {
+      const line = msgEl('user', f.text, { thumbs: f.thumbs, files: f.files, sender: localSender() })
       line.classList.add('queued')
       queuedBox.appendChild(line)
     }

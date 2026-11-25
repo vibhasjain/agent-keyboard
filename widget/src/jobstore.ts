@@ -60,9 +60,10 @@ let lastStatusSignature = ''
 // `result` frame is a TURN boundary (not the end), and follow-ups are injected
 // into it via the append endpoint instead of queuing a fresh job. A `closed`
 // frame ends the session. pendingUserTexts pairs each turn's reply with the user
-// text that produced it (FIFO): head = the turn being processed now.
+// text (and attachments) that produced it (FIFO): head = the turn being processed now.
 let sessionStreaming = false
-let pendingUserTexts: string[] = []
+type PendingTurn = { text: string; thumbs?: string[]; files?: string[] }
+let pendingUserTexts: PendingTurn[] = []
 
 // Turns completed during this page load (rendered under any server-fetched history).
 // `thumbs` = the user's attached photos; `files` = non-image attachments;
@@ -158,12 +159,12 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
 export function getActivePrompt(): string | null {
   const p = getState().job.phase
   if (p !== 'sending' && p !== 'streaming') return null
-  return (sessionStreaming ? (pendingUserTexts[0] ?? prompt) : prompt) || null
+  return (sessionStreaming ? (pendingUserTexts[0]?.text ?? prompt) : prompt) || null
 }
 
 /** Follow-ups injected into the live session that haven't started their turn yet
  *  (rendered dim, like the client-side queue). */
-export function getPendingFollowups(): readonly string[] {
+export function getPendingFollowups(): readonly PendingTurn[] {
   return sessionStreaming ? pendingUserTexts.slice(1) : []
 }
 
@@ -551,14 +552,15 @@ function onTurnComplete(data: Record<string, unknown>): void {
   dropTrailingErrors()
   sessionStreaming = true
   const reply = String(data.reply ?? '') || currentFullText()
-  const userText = pendingUserTexts.shift() ?? prompt
+  const userText = pendingUserTexts.shift()?.text ?? prompt
   if (userText || activeThumbs?.length || activeFiles?.length) {
     liveTurns.push({ role: 'user', text: userText, thumbs: activeThumbs, files: activeFiles })
   }
   liveTurns.push({ role: 'assistant', text: reply, images: imageUrls(data) })
-  activeThumbs = undefined // attachments belong to the opening turn only
-  activeFiles = undefined
-  prompt = pendingUserTexts[0] ?? ''
+  const next = pendingUserTexts[0] // the follow-up now being worked on, with its attachments
+  activeThumbs = next?.thumbs
+  activeFiles = next?.files
+  prompt = next?.text ?? ''
   setStreaming({
     fullText: '',
     done: [],
@@ -865,14 +867,14 @@ export function start(input: {
   sendEpoch++ // let the transcript force-scroll to this send
   if (discovering || isBusy()) {
     // Live streaming session → inject the follow-up into the running job rather
-    // than queuing a fresh one. Text-only (the append endpoint takes no files).
-    if (sessionStreaming && jobId && input.text.trim() && !input.attachmentIds?.length) {
-      const t = input.text
+    // than queuing a fresh one.
+    if (sessionStreaming && jobId && (input.text.trim() || input.attachmentIds?.length)) {
+      const t: PendingTurn = { text: input.text, thumbs: input.thumbs?.length ? input.thumbs : undefined, files: input.files?.length ? input.files : undefined }
       pendingUserTexts.push(t)
       const js = getState().job
       if (js.phase === 'streaming') setJob({ ...js, idle: false }) // resting → working immediately
       else if (js.phase === 'sending') setJob({ ...js })
-      api.appendMessage(CONFIG.site, jobId, t).catch(() => {
+      api.appendMessage(CONFIG.site, jobId, t.text, input.attachmentIds).catch(() => {
         // Append failed → fall back to the client-side queue.
         const i = pendingUserTexts.lastIndexOf(t)
         if (i >= 0) pendingUserTexts.splice(i, 1)
@@ -913,7 +915,7 @@ export function start(input: {
   terminal = false
   jobFinished = false
   attempt = 0
-  pendingUserTexts = [input.text] // first turn; shifted off when its result lands (streaming only)
+  pendingUserTexts = [{ text: input.text }] // first turn; shifted off when its result lands (streaming only)
   setJob({ phase: 'sending', startedAt })
 
   // Persist the in-flight send BEFORE the POST: a reload in the POST→job-frame

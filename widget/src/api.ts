@@ -238,10 +238,10 @@ export const api = {
     jsonFetch(`/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
 
   /** Inject a follow-up message into a running streaming session (409 if it's not open). */
-  appendMessage: (siteId: string, jobId: string, text: string): Promise<{ ok: boolean }> =>
+  appendMessage: (siteId: string, jobId: string, text: string, attachmentIds?: string[]): Promise<{ ok: boolean }> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/jobs/${encodeURIComponent(jobId)}/messages`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, attachmentIds }),
     }),
 
   /** Clean slate: stop active work, reset checkout to origin, and clear conversation context.
