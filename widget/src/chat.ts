@@ -845,14 +845,14 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         liveSubagents = el('div', 'ak-agents')
         liveTodos = el('div', 'ak-todos')
         liveBody = el('div')
-        liveAsst.append(h, liveSubagents, liveTodos, lineEl('asst', '●', liveBody))
+        liveAsst.append(lineEl('asst', '●', liveBody), h, liveSubagents, liveTodos) // reply above the working line, like Claude Code
         listEl.appendChild(liveAsst)
       }
       const streaming = job.phase === 'streaming' ? job : null
       if (liveSubagents) renderSubagents(liveSubagents, streaming?.subagents)
       if (liveTodos) renderTodos(liveTodos, streaming?.todos)
       if (liveTimer) {
-        // The streamed reply already renders in the ● body below; don't echo its tail here too.
+        // The streamed reply already renders in the ● body above; don't echo its tail here too.
         const line = streaming && streaming.lineState !== 'assistant' ? streaming.line : ''
         const detail = (line || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
         liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
