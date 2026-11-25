@@ -857,8 +857,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         const detail = (line || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
         liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
       }
-      // Hold back the block still being written; it shows once the next tool or status starts.
-      const fullText = streaming && streaming.lineState !== 'assistant' ? streaming.fullText : ''
+      const fullText = streaming?.fullText ?? ''
       if (liveBody) liveBody.innerHTML = fullText ? renderMarkdown(fullText) : ''
       const asstLine = liveBody?.closest('.ak-t') as HTMLElement | null
       if (asstLine) show(asstLine, !!fullText)
