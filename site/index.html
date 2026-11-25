@@ -352,10 +352,8 @@ footer .meta a:hover{ color:var(--amber); }
           events.onerror = () => { if (events.readyState === EventSource.CLOSED) { events = null; setTimeout(claudeCheck, 5000); } };
         }
         if (!me.signedIn) return;
-        // signed in: their account up top, "Your sites" instead of Get started, no Demo (they have the bar already)
-        const acct = document.getElementById('acct');
-        acct.textContent = me.login;
-        acct.href = '/dashboard';
+        // signed in: no Sign in pill (Your sites covers it), "Your sites" instead of Get started, no Demo (they have the bar already)
+        document.getElementById('acct').style.display = 'none';
         document.getElementById('start-cta').textContent = 'Your sites';
         document.querySelectorAll('.demo-cta').forEach(b => b.style.display = 'none');
         if (!me.claude) return;
