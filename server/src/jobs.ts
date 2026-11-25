@@ -53,6 +53,7 @@ interface Job {
   statusLine: Record<string, unknown>;
   lastAssistant: Record<string, unknown> | null;
   lastTodos: Record<string, unknown> | null;
+  idle: boolean; // streaming session resting between turns (its last turn's result already sent)
   result: Record<string, unknown> | null;
   error: Record<string, unknown> | null;
   createdAt: number;
@@ -221,10 +222,12 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
         job.result = { ...job.result, usage: payload };
         await maybeFlush(job);
       } else if (event === "status") {
+        job.idle = false;
         job.statusLine = payload as Record<string, unknown>;
         publish(job, event, withBrowserStatus(job.siteId, job.statusLine));
         await maybeFlush(job);
       } else if (event === "assistant") {
+        job.idle = false;
         job.lastAssistant = payload as Record<string, unknown>;
         publish(job, event, payload);
       } else if (event === "todos") {
@@ -246,6 +249,7 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
           break;
         }
         // Streaming session: a turn ended, but the session stays open for more.
+        job.idle = true;
         await maybeFlush(job);
       } else {
         publish(job, event, payload);
@@ -319,6 +323,7 @@ export async function startJob(opts: {
     statusLine: { phase: "queued", detail: "Waiting for a free slot" },
     lastAssistant: null,
     lastTodos: null,
+    idle: false,
     result: null,
     error: null,
     createdAt: now,
@@ -357,7 +362,7 @@ export async function startJob(opts: {
  * terminal publish can slip past a live tail.
  */
 export async function* tail(job: Job): AsyncGenerator<Frame> {
-  yield ["job", { job_id: job.jobId, target: job.siteId, status: job.status, streaming: job.streaming }];
+  yield ["job", { job_id: job.jobId, target: job.siteId, status: job.status, streaming: job.streaming, idle: job.idle }];
   if (TERMINAL.has(job.status)) {
     if (Object.keys(job.statusLine).length) yield ["status", withBrowserStatus(job.siteId, job.statusLine)];
     if (job.lastAssistant) yield ["assistant", job.lastAssistant];
@@ -367,9 +372,13 @@ export async function* tail(job: Job): AsyncGenerator<Frame> {
   const q = new SubQueue();
   job.subscribers.add(q);
   try {
-    if (Object.keys(job.statusLine).length) yield ["status", withBrowserStatus(job.siteId, job.statusLine)];
-    if (job.lastAssistant) yield ["assistant", job.lastAssistant];
-    if (job.lastTodos) yield ["todos", job.lastTodos];
+    // Resting between turns: the last turn already landed in history, so don't
+    // replay its stale progress frames (they'd show a phantom "Working…").
+    if (!job.idle) {
+      if (Object.keys(job.statusLine).length) yield ["status", withBrowserStatus(job.siteId, job.statusLine)];
+      if (job.lastAssistant) yield ["assistant", job.lastAssistant];
+      if (job.lastTodos) yield ["todos", job.lastTodos];
+    }
     for (;;) {
       const item = await q.get();
       if (item === null) {
@@ -400,7 +409,10 @@ export function appendToJob(jobId: string, text: string): boolean {
   const job = registry.get(jobId);
   if (!job || TERMINAL.has(job.status) || !job.input) return false;
   const ok = job.input.push(text);
-  if (ok) job.updatedAt = Date.now();
+  if (ok) {
+    job.updatedAt = Date.now();
+    job.idle = false;
+  }
   return ok;
 }
 

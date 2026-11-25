@@ -426,7 +426,8 @@ function onFrame(name: string, data: Record<string, unknown>): void {
       persist() // fire-and-forget guarantee: persist BEFORE we show streaming
       outboxRemove(activeIdemKey) // the durable active-job key owns recovery now
     }
-    setStreaming({ disconnected: false })
+    // idle: a streaming session resting between turns (the server skips the replay).
+    setStreaming({ disconnected: false, idle: data.idle === true })
     return
   }
   if (!jobId) return
