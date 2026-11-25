@@ -137,6 +137,7 @@ h1 .mode::after{ content:""; display:inline-block; width:.06em; height:.9em; mar
 .lede code{ font-family:var(--mono); font-size:.86em; color:var(--warm); }
 
 /* ---- cta row ---- */
+.claude-cta{ margin:16px 0 0; font-size:14px; } .claude-cta a{ color:var(--ink-3); } .claude-cta a:hover{ color:var(--amber); }
 .cta-row{ display:flex; flex-wrap:wrap; justify-content:center; gap:12px; margin:28px auto 0; }
 .btn{
   display:inline-flex; align-items:center; gap:9px;
@@ -341,6 +342,16 @@ footer .meta a:hover{ color:var(--amber); }
       <a class="btn primary" href="/dashboard">Get started</a>
       <button class="btn ghost demo-cta" type="button"><span aria-hidden="true">✻</span>Demo</button>
     </div>
+    <p class="claude-cta"><a id="claude-cta" href="https://claude.ai/customize/connectors?modal=add-custom-connector&amp;connectorName=Agent%20Keyboard&amp;connectorUrl=https%3A%2F%2Fagentkeyboard.com%2Fmcp" target="_blank" rel="noopener">or get started in Claude →</a></p>
+    <script>
+      // Signed in with Claude already connected (the dashboard's check): a new Claude chat instead of the connector dialog
+      fetch('/cloud/me').then(r => r.json()).then(me => {
+        if (!me.signedIn || !me.claude) return;
+        const a = document.getElementById('claude-cta');
+        a.textContent = 'Manage in Claude →';
+        a.href = 'https://claude.ai/new?q=' + encodeURIComponent("Let's work on my Agent Keyboard sites");
+      }).catch(() => {});
+    </script>
 
   </header>
 </div>
