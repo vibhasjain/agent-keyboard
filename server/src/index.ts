@@ -1359,6 +1359,9 @@ app.listen(port, () => {
   void (async () => {
     const requeue = await listRequeueableJobs().catch(() => [] as JobRow[]);
     await interruptRunningJobs();
+    // Only now: run earlier, the continuation's fresh job row raced into the
+    // requeue list above and was sent twice (duplicate redeploy messages).
+    void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
     const secret = process.env.AK_INTERNAL_SECRET ?? "";
     if (!secret) return;
     for (const row of requeue) {
@@ -1387,7 +1390,6 @@ app.listen(port, () => {
         .catch((e) => console.error(`[boot] requeue ${row.job_id} failed`, String(e)));
     }
   })().catch((e) => console.error("[boot] job sweep failed", e));
-  void resumeAfterRedeploy().catch((e) => console.error("[boot] auto-resume failed", e));
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
   void seedCodexConfig().catch((e) => console.error("[boot] codex config seed failed", e));
   // "Update yourself" pushes to the fork: warn now, not mid-request, if GH_TOKEN can't.
