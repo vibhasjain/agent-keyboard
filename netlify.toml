@@ -13,6 +13,11 @@
   status = 200
   force = true
 [[redirects]]
+  from = "/signin"
+  to = "https://agent-keyboard-cloud.fly.dev/signin"
+  status = 200
+  force = true
+[[redirects]]
   from = "/cloud/*"
   to = "https://agent-keyboard-cloud.fly.dev/cloud/:splat"
   status = 200
