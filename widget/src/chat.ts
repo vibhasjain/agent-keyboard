@@ -1033,9 +1033,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     }
     const justOpened = !wasExpanded
     wasExpanded = true
-    // Turns completed while collapsed must render immediately; refresh the tail
-    // in the background so history can absorb/reorder them when the fetch returns.
-    if (justOpened && !loading && getLiveTurns().length !== lastLoadTurnCount) {
+    // A live turn carries only the final reply; refresh the tail in the background
+    // whenever one lands so history swaps in the full turn (intermediate text + tools).
+    if (!loading && getLiveTurns().length !== lastLoadTurnCount) {
       void loadHistory()
     }
     const pinned = isPinned()
