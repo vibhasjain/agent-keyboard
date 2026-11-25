@@ -192,6 +192,9 @@ actually shipped is narrower and real: the prompt bar in this repo that edits th
 app you're using via its own git repo. When editing, describe the **shipped** product, not the old SDK pitch.
 
 ## Working agreements
+- **Managed control plane** — `github.com/vibhasjain/agent-keyboard-cloud` (branch `main`) holds the managed
+  service from Notes #12 (auth.md sign-up, Sprite provisioning, dashboard). Agents here may clone it to
+  `.tmp/agent-keyboard-cloud/`, work there and push to its `main`. The Sprite install script stays in this repo.
 - **Pixel art requests** (Make Me Pixels style, from anyone in this session) → the `make-me-pixels` skill
   (`.claude/skills/make-me-pixels/`): make it here, in this job, visible in the requester's thread. Never route it to the
   owner's `makemepixels` Agent Keyboard session; that queue is his alone.
