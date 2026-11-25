@@ -1,6 +1,18 @@
 [build]
   publish = "site"
 
+# Self-hosting is no longer advertised: the old setup page goes to the managed setup.
+[[redirects]]
+  from = "/setup"
+  to = "/start"
+  status = 301
+  force = true
+[[redirects]]
+  from = "/setup.html"
+  to = "/start"
+  status = 301
+  force = true
+
 # Managed Agent Keyboard (control plane on Fly, private repo agent-keyboard-cloud)
 [[redirects]]
   from = "/start"
@@ -20,5 +32,21 @@
 [[redirects]]
   from = "/cloud/*"
   to = "https://agent-keyboard-cloud.fly.dev/cloud/:splat"
+  status = 200
+  force = true
+# The MCP server (spec #14) and its OAuth endpoints.
+[[redirects]]
+  from = "/mcp"
+  to = "https://agent-keyboard-cloud.fly.dev/mcp"
+  status = 200
+  force = true
+[[redirects]]
+  from = "/oauth/*"
+  to = "https://agent-keyboard-cloud.fly.dev/oauth/:splat"
+  status = 200
+  force = true
+[[redirects]]
+  from = "/.well-known/*"
+  to = "https://agent-keyboard-cloud.fly.dev/.well-known/:splat"
   status = 200
   force = true

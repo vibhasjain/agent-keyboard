@@ -13,14 +13,14 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black" />
 <meta name="apple-mobile-web-app-title" content="Agent Keyboard" />
 <title>Agent Keyboard — Change your app by talking to it</title>
-<meta name="description" content="One script tag on your app. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session that edits your codebase and commits it, right where you're looking. Open source, self-hosted, your keys, MIT." />
+<meta name="description" content="One script tag on your app. Ask for a change — typed, dictated, or photographed — and your own server runs a real Claude Code session that edits your codebase and commits it, right where you're looking. Open source, runs on your own accounts, your keys, MIT." />
 
 <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png?v=5" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=6" />
 
 <meta property="og:type" content="website" />
 <meta property="og:title" content="Agent Keyboard" />
-<meta property="og:description" content="Ask for a change, right where you're looking. A real Claude Code session edits your codebase and commits it. Open source, self-hosted, your keys, MIT." />
+<meta property="og:description" content="Ask for a change, right where you're looking. A real Claude Code session edits your codebase and commits it. Open source, runs on your own accounts, your keys, MIT." />
 <meta property="og:url" content="https://agentkeyboard.com/" />
 <meta property="og:image" content="https://agentkeyboard.com/og-twitter-card.jpg?v=5" />
 <meta property="og:image:secure_url" content="https://agentkeyboard.com/og-twitter-card.jpg?v=5" />
@@ -30,7 +30,7 @@
 <meta property="og:image:alt" content="Agent Keyboard prompt bar editing a live app" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="Agent Keyboard" />
-<meta name="twitter:description" content="Ask for a change, right where you're looking. A real Claude Code session edits your codebase and commits it. Open source, self-hosted, your keys, MIT." />
+<meta name="twitter:description" content="Ask for a change, right where you're looking. A real Claude Code session edits your codebase and commits it. Open source, runs on your own accounts, your keys, MIT." />
 <meta name="twitter:image" content="https://agentkeyboard.com/og-twitter-card.jpg?v=5" />
 <meta name="twitter:image:alt" content="Agent Keyboard prompt bar editing a live app" />
 
@@ -366,7 +366,7 @@ footer .meta a:hover{ color:var(--amber); }
       <code><span class="a">&lt;script</span> <span class="k">src</span>=<span class="s">"https://agent-keyboard.fly.dev/widget.js"</span> <span class="k">data-site</span>=<span class="s">"halo"</span> <span class="k">defer</span><span class="a">&gt;&lt;/script&gt;</span></code>
       <button class="copybtn" data-copy="&lt;script src=&quot;https://agent-keyboard.fly.dev/widget.js&quot; data-site=&quot;halo&quot; defer&gt;&lt;/script&gt;">copy</button>
     </div>
-    <p class="install-note"><a href="/start">Get your own in about 5 minutes</a>, all in the browser: it runs on a Sprite in your own Fly account (about $1/month) with your own Claude plan, even if you don't have a site yet. Or self-host: <a href="/setup">Claude Code sets it up with you</a>. Open source · MIT.</p>
+    <p class="install-note"><a href="/start">Get your own in about 5 minutes</a>, all in the browser: it runs on a Sprite in your own Fly account (about $1/month) with your own Claude plan, even if you don't have a site yet. Open source · MIT.</p>
   </div>
 </div>
 
@@ -498,9 +498,10 @@ footer .meta a:hover{ color:var(--amber); }
       </details>
       <details class="qa">
         <summary><h3>How long does setup take?</h3></summary>
-        <p>About an hour, mostly waiting on builds. You run your own server on Fly.io, with Supabase for
-          sign-in and a GitHub token to push. Clone the repo and run <code>claude</code> in it: the bundled
-          setup skill walks you through each step and checks it works. The script tag is the last step.</p>
+        <p>About 5 minutes, all in the browser at <a href="/start">agentkeyboard.com/start</a>: sign in with GitHub,
+          connect Cloudflare (your site's hosting), confirm a code on Fly.io and sign in to Claude. It runs in your own
+          accounts on your own Claude plan, and we add the script tag for you. Prefer Claude? Add our MCP server,
+          <code>agentkeyboard.com/mcp</code>, and Claude walks you through the same steps.</p>
       </details>
       <details class="qa">
         <summary><h3>Can I keep my existing workflow?</h3></summary>
