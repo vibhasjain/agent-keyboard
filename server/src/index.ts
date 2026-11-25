@@ -70,6 +70,7 @@ import {
 } from "./jobstore.js";
 import { openSse, startKeepalive, writeFrame } from "./sse.js";
 import { startBrowserDetection, streamScreen, withBrowserStatus } from "./screen.js";
+import { devServer, proxyDev, proxyDevUpgrade } from "./devserver.js";
 
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -1324,11 +1325,14 @@ setTimeout(() => void runChecks().then((cs) => {
 // Chromium + profile per task, never the agent's own CDP browsers.
 app.use(browserTasksRouter());
 
-// Sites this server also hosts (serve:true, e.g. a starter site on a Sprite): a GET
-// no route matched serves the checkout, which every push updates. A pruned or
-// not-yet-cloned checkout is cloned on the first request.
-const SERVED = new Map(SITES.filter((s) => s.serve).map((s) => [s.domain, { site: s, files: express.static(checkoutPath(s.id), { dotfiles: "ignore" }) }]));
-app.get(/.*/, async (req, res, next) => {
+// Sites this server also hosts (serve:true, e.g. a starter site on a Sprite): a
+// request no route matched serves the checkout, which every push updates; a repo
+// with an npm "dev" script runs it and is proxied to it (devserver.ts). A pruned
+// or not-yet-cloned checkout is cloned on the first request.
+const SERVED = new Map(
+  SITES.filter((s) => s.serve).map((s, i) => [s.domain, { site: s, port: 5100 + i, files: express.static(checkoutPath(s.id), { dotfiles: "ignore" }) }]),
+);
+app.use(async (req, res, next) => {
   const served = SERVED.get(req.hostname);
   if (!served) return next();
   try {
@@ -1336,12 +1340,19 @@ app.get(/.*/, async (req, res, next) => {
   } catch (e) {
     return next(e);
   }
+  const dev = devServer(served.site.id, checkoutPath(served.site.id), served.port);
+  if (dev === "starting")
+    return res
+      .status(503)
+      .set("Retry-After", "3")
+      .send('<!doctype html><meta http-equiv="refresh" content="3"><title>Starting…</title><p style="font:16px system-ui;padding:2em">Starting the site\'s dev server… this page reloads by itself.</p>');
+  if (dev) return proxyDev(req, res, dev);
   served.files(req, res, next);
 });
 
 // ─── boot + graceful shutdown ────────────────────────────────────────────────
 const port = Number(process.env.PORT ?? 8080);
-app.listen(port, () => {
+const httpServer = app.listen(port, () => {
   console.log(`agent-keyboard listening on :${port}`);
   startBrowserDetection(
     () => listActive().filter((job) => job.status === "running").map((job) => job.site_id),
@@ -1426,6 +1437,13 @@ app.listen(port, () => {
     console.log(`agent-keyboard: AK_FORK_REPO unset — "update yourself" is off; set it to your fork (owner/agent-keyboard) to enable it`);
   }
   startTailscale();
+});
+// Hot reload for a served site's dev server (its WebSocket).
+httpServer.on("upgrade", (req, socket, head) => {
+  const served = SERVED.get((req.headers.host ?? "").replace(/:\d+$/, ""));
+  const dev = served && devServer(served.site.id, checkoutPath(served.site.id), served.port);
+  if (typeof dev === "number") proxyDevUpgrade(req, socket as import("node:net").Socket, head, dev);
+  else socket.destroy();
 });
 
 // LinkedIn-only residential egress (see tailscale-up.sh): bring up the
