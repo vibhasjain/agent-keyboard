@@ -285,8 +285,7 @@ footer .meta a:hover{ color:var(--amber); }
 
 @media (max-width:720px){
   .grid{ grid-template-columns:1fr; }
-  .top{ display:none; } /* brand and Sign in both drop on phones; Get started covers sign-in */
-  .top.signed-in{ display:flex; } /* signed in: the brand and the account menu */
+  .top:not(.signed-in) .top-right{ display:none; } /* phones: the brand always stays; Sign in drops (Get started covers it), the account menu shows once signed in */
   section{ padding:44px 0; }
   .asks{ grid-template-columns:1fr; }
 }
