@@ -1323,6 +1323,21 @@ setTimeout(() => void runChecks().then((cs) => {
 // Chromium + profile per task, never the agent's own CDP browsers.
 app.use(browserTasksRouter());
 
+// Sites this server also hosts (serve:true, e.g. a starter site on a Sprite): a GET
+// no route matched serves the checkout, which every push updates. A pruned or
+// not-yet-cloned checkout is cloned on the first request.
+const SERVED = new Map(SITES.filter((s) => s.serve).map((s) => [s.domain, { site: s, files: express.static(checkoutPath(s.id), { dotfiles: "ignore" }) }]));
+app.get(/.*/, async (req, res, next) => {
+  const served = SERVED.get(req.hostname);
+  if (!served) return next();
+  try {
+    await ensureCheckout(served.site);
+  } catch (e) {
+    return next(e);
+  }
+  served.files(req, res, next);
+});
+
 // ─── boot + graceful shutdown ────────────────────────────────────────────────
 const port = Number(process.env.PORT ?? 8080);
 app.listen(port, () => {
