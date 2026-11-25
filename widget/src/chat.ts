@@ -781,6 +781,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   let liveAsst: HTMLElement | null = null
   let liveDone: HTMLElement | null = null
   let liveDoneParts: unknown = null
+  let liveDoneHeld = false
   let liveTimer: HTMLElement | null = null
   let liveTodos: HTMLElement | null = null
   let liveSubagents: HTMLElement | null = null
@@ -861,15 +862,21 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         const detail = (line || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
         liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
       }
-      if (liveDone && streaming?.done !== liveDoneParts) {
+      const fullText = streaming?.fullText ?? ''
+      // The newest tool is still running (shown in the working line) until text streams
+      // after it, so hold its row back until then instead of showing it twice.
+      if (liveDone && (streaming?.done !== liveDoneParts || !fullText !== liveDoneHeld)) {
         // This turn's earlier text blocks and tool rows, kept above the live block.
         liveDoneParts = streaming?.done
+        liveDoneHeld = !fullText
         clearNode(liveDone)
-        for (const part of streaming?.done ?? []) {
-          liveDone.appendChild(part.type === 'tools' ? toolRun(part.tools) : msgEl('assistant', part.text))
-        }
+        const parts = streaming?.done ?? []
+        parts.forEach((part, i) => {
+          const tools = part.type === 'tools' && !fullText && i === parts.length - 1 ? part.tools.slice(0, -1) : part.type === 'tools' ? part.tools : null
+          if (tools) { if (tools.length) liveDone!.appendChild(toolRun(tools)) }
+          else if (part.type === 'text') liveDone!.appendChild(msgEl('assistant', part.text))
+        })
       }
-      const fullText = streaming?.fullText ?? ''
       if (liveBody) liveBody.innerHTML = fullText ? renderMarkdown(fullText) : ''
       const asstLine = liveBody?.closest('.ak-t') as HTMLElement | null
       if (asstLine) show(asstLine, !!fullText)
