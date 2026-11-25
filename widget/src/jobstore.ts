@@ -130,7 +130,7 @@ export function reconcileLiveTurns(history: ConversationMessage[]): boolean {
       if (m.role !== 'user') continue
       const matches = target
         ? normTurnText(m.text) === target
-        : (!!t.thumbs?.length || !!t.files?.length) && ((m.attachments ?? m.photos ?? 0) > 0) && !normTurnText(m.text)
+        : (!!t.thumbs?.length || !!t.files?.length) && ((m.attachments ?? m.photos ?? 0) > 0 || !!m.thumbs?.length) && !normTurnText(m.text)
       if (matches) {
         drop.add(i)
         const liveReply = liveTurns[i + 1]

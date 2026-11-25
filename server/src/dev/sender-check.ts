@@ -17,4 +17,10 @@ assert.equal(withAttach.sender, "c@d.io");
 assert.equal(withAttach.attachments, 1);
 assert.equal(withAttach.text, "look");
 
+const withPhoto = cleanUserText(
+  "hi\n\nAttachment(s) attached — use the Read tool to inspect: .tmp/uploads/09b0c6ce-118b-4b0e-96c8-60e25a74c35a.jpg, .tmp/uploads/09b0c6ce-118b-4b0e-96c8-60e25a74c35b-doc.pdf",
+);
+assert.deepEqual(withPhoto.thumbs, ["09b0c6ce-118b-4b0e-96c8-60e25a74c35a.jpg"]);
+assert.equal(withPhoto.attachments, 1);
+
 console.log("sender-check ok");

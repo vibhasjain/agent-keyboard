@@ -180,7 +180,7 @@ function msgEl(
     const body = el('div')
     if (extras?.thumbs?.length) body.appendChild(thumbRow(extras.thumbs))
     if (extras?.files?.length) body.appendChild(attachmentMarker(extras.files.length, 'file'))
-    if (extras?.attachments && !extras?.thumbs?.length && !extras?.files?.length) body.appendChild(attachmentMarker(extras.attachments))
+    if (extras?.attachments && !extras?.files?.length) body.appendChild(attachmentMarker(extras.attachments))
     else if (extras?.photos && !extras?.thumbs?.length) body.appendChild(photoMarker(extras.photos))
     const line = el('div')
     if (extras?.sender) {
@@ -359,7 +359,7 @@ function nodeForMessage(m: ConversationMessage, answer?: string): HTMLElement {
   const node = msgEl(m.role, m.text, {
     attachments: m.attachments,
     photos: m.photos,
-    thumbs: m.thumbs,
+    thumbs: m.thumbs?.map((u) => (u.startsWith('/') ? CONFIG.api + u : u)),
     files: m.files,
     images,
     sender: m.sender,
@@ -832,7 +832,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       const dupOfHistory =
         !!lastUser &&
         ((!!prompt && norm(lastUser.text) === norm(prompt)) ||
-          (activeAttachmentOnly && !norm(lastUser.text) && (lastUser.attachments ?? lastUser.photos ?? 0) > 0))
+          (activeAttachmentOnly && !norm(lastUser.text) && ((lastUser.attachments ?? lastUser.photos ?? 0) > 0 || !!lastUser.thumbs?.length)))
       if (!guest && !liveUser && !dupOfHistory) {
         // Prompt and attachment previews are fixed for the lifetime of a job — build once.
         liveUser = msgEl('user', prompt || '', { thumbs: activeThumbs, files: activeFiles, sender: localSender() })

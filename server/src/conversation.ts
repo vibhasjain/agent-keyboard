@@ -38,6 +38,8 @@ export interface ChatMessage {
   to?: string[];
   // Images the agent showed with this reply (photos.ts outputsLog), as asset paths.
   images?: string[];
+  // Photos attached to a user turn, as asset paths (kept 30 days, photos.ts).
+  thumbs?: string[];
 }
 
 /** Claude Code slugs a project dir as its absolute cwd with `/` and `.` → `-`. */
@@ -68,15 +70,20 @@ export async function sessionFilePath(sessionId: string, cwd: string): Promise<s
  * clean. Returns the count from the stripped boilerplate so the widget can show
  * a marker (the staged files themselves are deleted after the job).
  */
-export function cleanUserText(raw: string): { text: string; attachments: number; photos: number; sender?: string } {
+export function cleanUserText(raw: string): { text: string; attachments: number; photos: number; thumbs: string[]; sender?: string } {
   let attachments = 0;
+  const thumbs: string[] = [];
   let photos = 0;
   let sender: string | undefined;
   const text = raw.replace(/^Earlier in this chat \(for context\)[\s\S]*?\nEnd of earlier context\.\n\n/, "")
     .split("\n")
     .filter((l) => {
       if (/^Attachment\(s\) attached( — use the Read tool[^:]*)?:/i.test(l)) {
-        attachments += (l.match(/\.tmp\//g) ?? []).length || 1;
+        // Camera/pasted photos are staged as <uuid>.jpg and stay servable as
+        // thumbnails; only the rest count toward the "N attachments" marker.
+        const imgs = [...l.matchAll(/\.tmp\/uploads\/([a-f0-9-]{36}\.jpg)/gi)].map((m) => m[1]!);
+        thumbs.push(...imgs);
+        attachments += ((l.match(/\.tmp\//g) ?? []).length || 1) - imgs.length;
         return false;
       }
       if (/^Photo\(s\) attached( — use the Read tool[^:]*)?:/i.test(l)) {
@@ -93,7 +100,7 @@ export function cleanUserText(raw: string): { text: string; attachments: number;
     })
     .join("\n")
     .trim();
-  return { text, attachments, photos, ...(sender ? { sender } : {}) };
+  return { text, attachments, photos, thumbs, ...(sender ? { sender } : {}) };
 }
 
 function userText(content: unknown): string | null {
@@ -161,13 +168,14 @@ export function parseConversation(raw: string, checkoutRoot: string): ChatMessag
       const text = userText(o.message?.content);
       if (text) {
         const clean = cleanUserText(text);
-        if (clean.text || clean.attachments || clean.photos)
+        if (clean.text || clean.attachments || clean.photos || clean.thumbs.length)
           all.push({
             id: o.uuid ?? `u${idx}`,
             role: "user",
             text: clean.text,
             ...(clean.attachments ? { attachments: clean.attachments } : {}),
             ...(clean.photos ? { photos: clean.photos } : {}),
+            ...(clean.thumbs.length ? { thumbs: clean.thumbs } : {}),
             ...(clean.sender ? { sender: clean.sender } : {}),
             ts,
             tools: [],
@@ -223,10 +231,13 @@ async function readSegment(siteId: string, conversationId: string): Promise<Chat
     all.splice(i < 0 ? all.length : i, 0, note);
   }
 
+  const asset = (n: string) => `/sites/${encodeURIComponent(siteId)}/assets/${n}`;
+  for (const m of all) if (m.thumbs) m.thumbs = m.thumbs.map(asset);
+
   // Shown images belong to the last reply written before they were collected.
   for (const shown of await readShownImages(siteId, sessionId)) {
     const reply = all.findLast((m) => m.role === "assistant" && m.ts && m.ts <= shown.ts);
-    if (reply) (reply.images ??= []).push(...shown.names.map((n) => `/sites/${encodeURIComponent(siteId)}/assets/${n}`));
+    if (reply) (reply.images ??= []).push(...shown.names.map(asset));
   }
 
   return all;

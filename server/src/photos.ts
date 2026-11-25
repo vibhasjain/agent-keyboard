@@ -8,6 +8,7 @@
 
 import { mkdir, writeFile, readdir, readFile, stat, rm, rename, appendFile } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { checkoutPath } from "./checkouts.js";
 
@@ -125,11 +126,18 @@ export async function resolveAttachments(siteId: string, ids: string[]): Promise
   return out;
 }
 
-/** Delete specific staged uploads (repo-relative paths) for a site (post-job cleanup). */
+/** Post-job cleanup of staged uploads (repo-relative paths). Photos (<uuid>.jpg)
+ *  move to the outputs dir so the chat history keeps their thumbnails (30 days);
+ *  other files are deleted. */
 export async function cleanupUploads(siteId: string, relPaths: string[]): Promise<void> {
   const base = checkoutPath(siteId);
+  await mkdir(outputsDir(siteId), { recursive: true }).catch(() => {});
   await Promise.all(
-    relPaths.map((p) => rm(join(base, p), { force: true }).catch(() => {})),
+    relPaths.map((p) => {
+      const abs = join(base, p);
+      const name = basename(p);
+      return (SERVED_NAME_RE.test(name) ? rename(abs, join(outputsDir(siteId), name)) : rm(abs, { force: true })).catch(() => {});
+    }),
   );
 }
 
@@ -241,5 +249,8 @@ export async function collectOutputs(siteId: string, sessionId: string): Promise
  *  strict uuid+ext pattern is what keeps the open route from path-traversing. */
 export function outputPath(siteId: string, name: string): string | null {
   if (!SERVED_NAME_RE.test(name)) return null;
-  return join(outputsDir(siteId), name);
+  const out = join(outputsDir(siteId), name);
+  // A photo attached to a running job is still in uploads until the job ends.
+  const staged = join(uploadsDir(siteId), name);
+  return existsSync(out) || !existsSync(staged) ? out : staged;
 }
