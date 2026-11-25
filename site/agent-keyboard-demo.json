@@ -139,7 +139,7 @@
     },
     "Ask how it works": {
       "prompt": "What actually happens after I press send?",
-      "reply": "The widget sends your prompt to your small self-hosted server. That server syncs an allow-listed repo, resumes a durable Claude Code session in a fixed checkout, edits and verifies the app, commits as **Agent Keyboard**, and pushes. Your existing host deploys the push.",
+      "reply": "The widget sends your prompt to your own small server. That server syncs an allow-listed repo, resumes a durable Claude Code session in a fixed checkout, edits and verifies the app, commits as **Agent Keyboard**, and pushes. Your existing host deploys the push.",
       "options": ["What can it edit?", "Is it safe?", "What does it cost?", "How do I install it?"],
       "stages": [
         { "at": 180, "line": "Prompt reaches your Fly server", "state": "dim" },
@@ -168,7 +168,7 @@
     },
     "What does it cost?": {
       "prompt": "What does this cost to run?",
-      "reply": "Mostly services you may already have: a Claude Code subscription does the editing, Supabase can handle auth on its free tier, and a small Fly machine hosts the durable server. An OpenAI key is optional and only used for voice transcription.",
+      "reply": "Mostly services you may already have: your Claude subscription does the editing, a Sprite in your own Fly account runs the server (about $1/month), and Cloudflare Pages hosts your site on its free tier.",
       "options": ["How do I install it?", "Is it safe?", "What can it edit?", "Back to the start"],
       "stages": [
         { "at": 180, "line": "Adding up the moving parts", "state": "thinking" }
@@ -176,10 +176,10 @@
     },
     "How do I install it?": {
       "prompt": "How do I put this on my own apps?",
-      "reply": "Fork the MIT repo, configure your Supabase project, Fly app, Claude token, fine-grained GitHub token, and `SITES` allow-list, then add one script tag to each app. The self-hosting guide is written for a working setup in under an hour.",
+      "reply": "Go to agentkeyboard.com/start: sign in with GitHub, pick your repo, connect Cloudflare, confirm a code on Fly.io and sign in to Claude. About 5 minutes, in your own accounts, and we add the script tag for you. Prefer Claude? Add our MCP server at agentkeyboard.com/mcp.",
       "options": ["What can it edit?", "Is it safe?", "What does it cost?", "Back to the start"],
       "stages": [
-        { "at": 180, "line": "Opening the self-hosting path", "state": "thinking" },
+        { "at": 180, "line": "Opening the setup page", "state": "thinking" },
         { "at": 950, "line": "Connecting the first allow-listed repo", "state": "tool" }
       ]
     }
