@@ -30,6 +30,17 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
 
+  # Managed Sprites (agent-keyboard-cloud) reinstall from GitHub, so tell the control plane right away
+  # instead of waiting for its hourly pass. No secret (forks) → skipped.
+  sprites:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          KEY: ${{ secrets.AK_RELEASE_KEY }}
+        run: |
+          [ -n "$KEY" ] || exit 0
+          curl -fsS --retry 3 -X POST https://agent-keyboard-cloud.fly.dev/cloud/release -H "x-release-key: $KEY" -H "Content-Type: application/json" -d '{}'
+
   # Public image for one-click installs (Notes: 11 One-click self-host). Installer-made
   # instances run ghcr.io/<owner>/agent-keyboard:latest and "update yourself" redeploys it.
   image:
