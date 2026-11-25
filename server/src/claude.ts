@@ -959,6 +959,8 @@ export async function* runMessageJob(
             // so the NEXT message streams on its own instead of concatenating into
             // one growing run-on blob. The final reply (no tool after it) is
             // unaffected, and result.reply comes from the CLI's result line anyway.
+            // Flush the finished block first: the throttled last frame may be partial.
+            emitAssistant(true);
             streamed = "";
             snapshot = "";
             queue.push(["status", { phase: "tool", detail: e.detail }]);
@@ -1210,9 +1212,9 @@ export async function* runStreamingSession(
     }, pageSlug).catch(() => {});
     let resultWork: Promise<void> = Promise.resolve();
     const best = () => (streamed.length >= snapshot.length ? streamed : snapshot);
-    const emitAssistant = () => {
+    const emitAssistant = (force = false) => {
       const now = Date.now();
-      if (now - lastAssistantEmit >= ASSISTANT_THROTTLE_MS) {
+      if (force || now - lastAssistantEmit >= ASSISTANT_THROTTLE_MS) {
         lastAssistantEmit = now;
         const text = best();
         if (text) queue.push(["assistant", { text }]);
@@ -1327,6 +1329,7 @@ export async function* runStreamingSession(
             queue.push(["status", { phase: "thinking", detail: thinkingTail.split(/\s+/).join(" ").trim().slice(-120) }]);
           }
         } else if (e.t === "tool") {
+          emitAssistant(true); // flush the finished block; the throttled last frame may be partial
           streamed = "";
           snapshot = "";
           queue.push(["status", { phase: "tool", detail: e.detail }]);
