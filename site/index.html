@@ -350,7 +350,11 @@ footer .meta a:hover{ color:var(--amber); }
       let rev, events;
       const claudeCheck = () => fetch('/cloud/me').then(r => r.json()).then(me => {
         // server push straight from the control plane (signed URL from /cloud/me; Netlify's proxy would buffer it)
-        if (me.events && !events) (events = new EventSource(me.events)).onmessage = e => { if (rev && e.data !== rev) claudeCheck(); rev = e.data; };
+        if (me.events && !events) {
+          (events = new EventSource(me.events)).onmessage = e => { if (rev && e.data !== rev) claudeCheck(); rev = e.data; };
+          // refused (the 24 h link expired, or the server was mid-deploy): get a fresh link and reconnect
+          events.onerror = () => { if (events.readyState === EventSource.CLOSED) { events = null; setTimeout(claudeCheck, 5000); } };
+        }
         if (!me.signedIn || !me.claude) return;
         const a = document.getElementById('claude-cta');
         a.textContent = 'Manage in Claude →';
