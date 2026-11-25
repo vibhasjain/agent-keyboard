@@ -1,6 +1,7 @@
 // The single source of truth: a tiny pub/sub store with three orthogonal slices
 // (auth · job · ui). Components read the current slice and re-render on notify.
 
+import type { ConversationPart } from './api'
 export type AuthState = 'unknown' | 'anon' | 'authed'
 
 // The line's visual state maps 1:1 to a ticker colour. 'dim' covers the neutral
@@ -31,6 +32,7 @@ export type JobState =
       line: string
       lineState: LineState
       fullText: string
+      done?: ConversationPart[] // this turn's finished text blocks + tool rows, above the live one
       todos?: TodoItem[]
       subagents?: Subagent[]
       browser?: boolean

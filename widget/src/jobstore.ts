@@ -5,7 +5,7 @@
 // Fire-and-forget guarantee: we transition sending → streaming only AFTER the jobId
 // is persisted to localStorage, so closing the tab never loses the job.
 
-import { api, HttpError, SIGNED_OUT, type ConversationMessage, type GitInfo } from './api'
+import { api, HttpError, SIGNED_OUT, type ConversationMessage, type ConversationPart, type GitInfo } from './api'
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
@@ -369,6 +369,7 @@ interface StreamPatch {
   line?: string
   lineState?: LineState
   fullText?: string
+  done?: ConversationPart[]
   todos?: TodoItem[]
   subagents?: Subagent[]
   browser?: boolean
@@ -387,6 +388,7 @@ function setStreaming(patch: StreamPatch): void {
     line: patch.line ?? prev?.line ?? '',
     lineState: patch.lineState ?? prev?.lineState ?? 'dim',
     fullText: patch.fullText ?? prev?.fullText ?? '',
+    done: patch.done ?? prev?.done,
     todos: patch.todos ?? prev?.todos,
     subagents: patch.subagents ?? prev?.subagents,
     browser: patch.browser ?? prev?.browser,
@@ -458,7 +460,10 @@ function onFrame(name: string, data: Record<string, unknown>): void {
         })
       } else {
         lastStatusSignature = signature
-        setStreaming({ line: detail, lineState: lineStateFor(phase), browser })
+        // The server clears its live text at each tool call (the next message streams
+        // on its own), so bank the finished block and the tool row here.
+        const done = phase === 'tool' && cur.phase === 'streaming' ? withTool(cur.done ?? [], cur.fullText, detail) : undefined
+        setStreaming({ line: detail, lineState: lineStateFor(phase), browser, ...(done ? { done, fullText: '' } : {}) })
       }
       break
     }
@@ -508,6 +513,15 @@ function frameHandler(gen: number): (name: string, data: Record<string, unknown>
   }
 }
 
+function withTool(done: ConversationPart[], text: string, tool: string): ConversationPart[] {
+  const out = [...done]
+  if (text) out.push({ type: 'text', text })
+  const last = out[out.length - 1]
+  if (last?.type === 'tools') out[out.length - 1] = { type: 'tools', tools: [...last.tools, tool] }
+  else out.push({ type: 'tools', tools: [tool] })
+  return out
+}
+
 function currentFullText(): string {
   const j = getState().job
   return j.phase === 'streaming' ? j.fullText : ''
@@ -547,6 +561,7 @@ function onTurnComplete(data: Record<string, unknown>): void {
   prompt = pendingUserTexts[0] ?? ''
   setStreaming({
     fullText: '',
+    done: [],
     line: pendingUserTexts.length ? 'Working…' : '',
     lineState: 'dim',
     // No queued follow-up → the session is just resting (open for injection). Mark

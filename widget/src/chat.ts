@@ -779,6 +779,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // live bubble nodes (kept alive between tokens so scrolling stays smooth)
   let liveUser: HTMLElement | null = null
   let liveAsst: HTMLElement | null = null
+  let liveDone: HTMLElement | null = null
+  let liveDoneParts: unknown = null
   let liveTimer: HTMLElement | null = null
   let liveTodos: HTMLElement | null = null
   let liveSubagents: HTMLElement | null = null
@@ -790,7 +792,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
 
   const rebuildStatic = () => {
     clearNode(listEl)
-    liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
+    liveUser = liveAsst = liveDone = liveTimer = liveBody = liveTodos = liveSubagents = null
+    liveDoneParts = null
     const live = getLiveTurns()
     // One sequence for the look-ahead: a chip tapped in the last history message is
     // answered by a user turn that lands in `live`, so it has to cross the boundary.
@@ -845,7 +848,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         liveSubagents = el('div', 'ak-agents')
         liveTodos = el('div', 'ak-todos')
         liveBody = el('div')
-        liveAsst.append(lineEl('asst', '●', liveBody), h, liveSubagents, liveTodos) // reply above the working line, like Claude Code
+        liveDone = el('div')
+        liveAsst.append(liveDone, lineEl('asst', '●', liveBody), h, liveSubagents, liveTodos) // reply above the working line, like Claude Code
         listEl.appendChild(liveAsst)
       }
       const streaming = job.phase === 'streaming' ? job : null
@@ -857,6 +861,14 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         const detail = (line || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
         liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
       }
+      if (liveDone && streaming?.done !== liveDoneParts) {
+        // This turn's earlier text blocks and tool rows, kept above the live block.
+        liveDoneParts = streaming?.done
+        clearNode(liveDone)
+        for (const part of streaming?.done ?? []) {
+          liveDone.appendChild(part.type === 'tools' ? toolRun(part.tools) : msgEl('assistant', part.text))
+        }
+      }
       const fullText = streaming?.fullText ?? ''
       if (liveBody) liveBody.innerHTML = fullText ? renderMarkdown(fullText) : ''
       const asstLine = liveBody?.closest('.ak-t') as HTMLElement | null
@@ -864,7 +876,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     } else if (liveUser || liveAsst) {
       liveUser?.remove()
       liveAsst?.remove()
-      liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
+      liveUser = liveAsst = liveDone = liveTimer = liveBody = liveTodos = liveSubagents = null
+    liveDoneParts = null
     }
     // queued sends + pending session follow-ups render dim after the live block
     const q = getQueued()
@@ -899,7 +912,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
   // rebuildStatic() when the fetch resolves.
   const renderSkeleton = () => {
     clearNode(listEl)
-    liveUser = liveAsst = liveTimer = liveBody = liveTodos = liveSubagents = null
+    liveUser = liveAsst = liveDone = liveTimer = liveBody = liveTodos = liveSubagents = null
+    liveDoneParts = null
     for (const w of ['58%', '82%', '40%', '70%']) {
       const row = el('div', 'ak-skel-row', (n) => (n.style.width = w))
       row.appendChild(el('div', 'ak-shimmer'))
