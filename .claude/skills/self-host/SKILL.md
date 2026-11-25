@@ -83,8 +83,9 @@ Ask whether anyone else will use the bar later, at step 6, not now.
 The bar only appears on a live page, so put one online before anything else.
 1. Repo: `gh repo create NAME --private --clone` (or clone their empty one). Commit a minimal
    `index.html` (a title and a line of text is enough; the bar will build the rest) and push.
-2. Host: ask which they want; suggest Netlify or Cloudflare Pages (free, branch previews, which
-   sandboxes use). Log in with the host's CLI (browser login), create the site connected to the
+2. Host: default to Cloudflare Pages (free: 500 builds a month, branch previews, which sandboxes use);
+   use Netlify only if they ask for it (its free plan allows only about 20 live deploys a month, and
+   every change made through the bar is one). Log in with the host's CLI (browser login), create the site connected to the
    GitHub repo so every push to `main` deploys, and confirm the `*.netlify.app` / `*.pages.dev` URL
    serves the page.
 3. Domain (if they have one): add it in the host, then tell them the exact DNS record to add at
@@ -171,6 +172,8 @@ echo "$SITES" | jq -e 'length > 0 and all(.[]; .id and .repo and .branch and .do
 Sandboxes (see "Sandboxes" in `SELF_HOSTING.md`): explain that `sandbox` makes them *available* — the
 agent offers one for bigger changes and the user picks "Build in a sandbox" or "Just do it live" each
 time; small changes go straight live. Nothing is forced. They need:
+- **Cloudflare Pages:** the project name (the part before `.pages.dev`); previews are
+  `"sandbox": {"preview": "https://{branch}.PROJECT.pages.dev"}`. Branch previews are on by default.
 - **Netlify:** the site name (the part before `.netlify.app`, in Site configuration → General) and
   **Branch deploys: All** under Build & deploy → Branches and deploy contexts. If `netlify` CLI is
   logged in, `netlify sites:list` shows the name.
