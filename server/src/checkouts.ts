@@ -126,21 +126,27 @@ async function doEnsureCheckout(site: Site): Promise<string> {
   if (existsSync(join(dir, ".git"))) return guardLive(site, dir);
 
   await mkdir(CHECKOUTS_DIR, { recursive: true });
+  // Clone beside the target and rename when done: a clone that fails or is killed
+  // mid-way (restart) would otherwise leave a .git the check above takes for good.
+  const tmp = `${dir}.cloning`;
+  await rm(tmp, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true });
   try {
     await execFileP(
       "git",
-      ["clone", "--branch", site.branch, tokenizedRemote(site.repo), dir],
+      ["clone", "--branch", site.branch, tokenizedRemote(site.repo), tmp],
       { env: process.env, maxBuffer: 16 * 1024 * 1024 },
     );
+    await rename(tmp, dir);
   } catch (e) {
-    // A half-written clone can still have a .git, which the existsSync check above
-    // would then take for a good checkout. Clear it so the retry actually retries.
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    await rm(tmp, { recursive: true, force: true }).catch(() => {});
     const err = scrubToken(e) as { message?: string };
     // GitHub answers a token that can't see the repo with 403 / "not found" /
     // auth failed, none of which say what to fix. Name it (this rides to the bar too).
-    if (/\b403\b|not found|authentication failed|could not read username|write access/i.test(err?.message ?? "")) {
-      const hint = `GH_TOKEN cannot access ${site.repo} — give the token this repo (Repository access → Only select repositories) with Contents: Read and write`;
+    if (/\b403\b|not found|authentication failed|could not read username|could not read from remote|write access/i.test(err?.message ?? "")) {
+      const hint = site.repo.startsWith("git@")
+        ? `this machine's ssh key cannot access ${site.repo} — add ~/.ssh's public key to the repo as a deploy key with write access`
+        : `GH_TOKEN cannot access ${site.repo} — give the token this repo (Repository access → Only select repositories) with Contents: Read and write`;
       console.error(`agent-keyboard: ${hint}`);
       if (err) err.message = `${hint}\n${err.message}`;
     }

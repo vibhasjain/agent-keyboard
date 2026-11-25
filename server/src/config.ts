@@ -7,7 +7,7 @@
 
 export interface Site {
   id: string;
-  repo: string; // https clone URL ending .git (token is injected at clone/sync time)
+  repo: string; // https clone URL ending .git (token is injected at clone/sync time), or git@host:owner/name.git (deploy key)
   branch: string;
   domain: string; // bare host, no scheme
   // Optional safety valve: publish the agent's commit to THIS branch (a review
@@ -102,9 +102,10 @@ export function loadSites(raw = process.env.SITES ?? ""): Site[] {
     if (seen.has(id)) {
       throw new Error(`SITES has a duplicate id ${JSON.stringify(id)} — every id must be unique`);
     }
-    if (typeof repo !== "string" || !/^https:\/\/.+\.git$/.test(repo) || !isUrl(repo)) {
+    // https (pushed with GH_TOKEN) or ssh (pushed with the machine's deploy key, no token).
+    if (typeof repo !== "string" || !((/^https:\/\/.+\.git$/.test(repo) && isUrl(repo)) || /^git@[\w.-]+:[\w.-]+\/[\w.-]+\.git$/.test(repo))) {
       throw new Error(
-        `${at}.repo must be an https:// clone URL ending in .git (e.g. "https://github.com/you/blog.git"), got ${JSON.stringify(repo)}`,
+        `${at}.repo must be an https:// or git@host: clone URL ending in .git (e.g. "https://github.com/you/blog.git"), got ${JSON.stringify(repo)}`,
       );
     }
     if (typeof branch !== "string" || !branch.trim()) {
@@ -183,7 +184,6 @@ const REQUIRED: { name: string; hint: string }[] = [
   { name: "ALLOWED_EMAIL", hint: "the email(s) allowed to drive the agent — one, or a comma-separated few" },
   { name: "SUPABASE_URL", hint: "your Supabase project URL, e.g. https://xxxx.supabase.co" },
   { name: "SUPABASE_ANON_KEY", hint: "the Supabase anon/public key (safe to expose; RLS + the owner gate protect writes)" },
-  { name: "GH_TOKEN", hint: "a fine-grained GitHub PAT with push access to the site repos" },
 ];
 
 const LABEL_W = 16;
@@ -225,6 +225,7 @@ export function assertServerConfig(): void {
     if (!process.env[name]?.trim()) process.stderr.write(`agent-keyboard: ${name} unset — ${effect}\n`);
   };
   warn("SUPABASE_SERVICE_KEY", "job persistence disabled — reloaded clients can't re-attach; user provisioning disabled too");
+  warn("GH_TOKEN", "https site repos can't be pushed (ssh repos use the machine's deploy key) and sandbox publish is disabled");
   warn("OPENAI_API_KEY", "voice dictation disabled");
   warn("CLAUDE_CODE_OAUTH_TOKEN", "Claude Code CLI has no auth — jobs will fail (run `claude setup-token`)");
   warn("AK_PUBLIC_URL", "user-provisioning invite links fall back to the Supabase project's Site URL instead of this server's /welcome page");

@@ -179,7 +179,7 @@ SITES=[{"id":"blog","repo":"https://github.com/you/blog.git","branch":"main","do
 ```
 
 - `id` — the slug you put in the embed tag's `data-site`.
-- `repo` — https clone URL; the `GH_TOKEN` is injected at clone/sync time.
+- `repo` — https clone URL (the `GH_TOKEN` is injected at clone/sync time), or `git@github.com:owner/name.git` to push with the machine's ssh deploy key instead (no `GH_TOKEN` needed; sandbox publish still uses it).
 - `branch` — the branch your host deploys from.
 - `domain` — bare host (no scheme). Drives CORS (`https://domain` and `https://www.domain` are
   auto-allowed) and the `[Sent from …]` context handed to the agent.

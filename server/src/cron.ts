@@ -362,7 +362,8 @@ export function startJobsCron(): void {
     return;
   }
 
-  const envJobs = loadCronJobs();
+  // The legacy default targets cv-jobs; a server without that site must not fire it.
+  const envJobs = loadCronJobs().filter((j) => SITES.some((s) => s.id === j.site));
   if (envJobs.length === 0) {
     console.log("[jobs-cron] no enabled JOBS_CRONS schedules — per-site cron knobs are still checked every tick");
   }

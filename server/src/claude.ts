@@ -293,7 +293,7 @@ function scopeNote(site: Site, pushBranch: string = site.branch, sandboxMode: st
     // Every change goes through a sandbox, so no instructions to push here.
   } else if (pushBranch === site.branch) {
     lines.push(
-      `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (Netlify deploys the site from it).`,
+      `When the change is complete, commit it with a clear message and push to the "${site.branch}" branch (the site deploys from it).`,
       `If the push is rejected because the branch moved, run \`git pull --rebase\` and push again.`,
     );
   } else {
