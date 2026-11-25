@@ -38,7 +38,7 @@ for (const [label, turn] of Object.entries(tour.turns)) {
 
 const liveEmbed = site.match(/<script[^>]+src="https:\/\/agent-keyboard\.fly\.dev\/widget\.js"[^>]*><\/script>/)?.[0] || ''
 if (!liveEmbed.includes('data-guest-demo')) fail('AgentKeyboard.com live embed is not opted into the guest demo')
-if (!site.includes('class="btn primary demo-cta"') || !site.includes("new CustomEvent('agent-keyboard:open')")) {
+if (!/class="btn [a-z]+ demo-cta"/.test(site) || !site.includes("new CustomEvent('agent-keyboard:open')")) {
   fail('Interactive demo CTA must dispatch the widget open event')
 }
 if (!bar.includes("agent-keyboard:open")) fail('widget must listen for the host open event')

@@ -15,7 +15,7 @@
   },
   "devDependencies": {
     "@milkdown/crepe": "^7.23.0",
-    "esbuild": "^0.24.2",
+    "esbuild": "^0.25.12",
     "typescript": "^5.7.2"
   }
 }
