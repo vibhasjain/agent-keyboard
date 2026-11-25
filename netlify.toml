@@ -1,2 +1,19 @@
 [build]
   publish = "site"
+
+# Managed Agent Keyboard (control plane on Fly, private repo agent-keyboard-cloud)
+[[redirects]]
+  from = "/start"
+  to = "https://agent-keyboard-cloud.fly.dev/start"
+  status = 200
+  force = true
+[[redirects]]
+  from = "/dashboard"
+  to = "https://agent-keyboard-cloud.fly.dev/dashboard"
+  status = 200
+  force = true
+[[redirects]]
+  from = "/cloud/*"
+  to = "https://agent-keyboard-cloud.fly.dev/cloud/:splat"
+  status = 200
+  force = true
