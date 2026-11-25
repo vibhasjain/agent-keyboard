@@ -852,7 +852,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
       if (liveSubagents) renderSubagents(liveSubagents, streaming?.subagents)
       if (liveTodos) renderTodos(liveTodos, streaming?.todos)
       if (liveTimer) {
-        const detail = ((streaming ? streaming.line : '') || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
+        // The streamed reply already renders in the ● body below; don't echo its tail here too.
+        const line = streaming && streaming.lineState !== 'assistant' ? streaming.line : ''
+        const detail = (line || (streaming ? 'Working…' : 'Sending…')).replace(/\s+/g, ' ')
         liveTimer.textContent = `${detail} (${mmss(Date.now() - job.startedAt)}${streaming?.disconnected ? ' · reconnecting…' : ''})`
       }
       const fullText = streaming?.fullText ?? ''
