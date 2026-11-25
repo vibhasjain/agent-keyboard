@@ -401,25 +401,23 @@ footer .meta a:hover{ color:var(--amber); }
         <span class="arch-chip">dictate</span>
         <span class="arch-chip">photo</span>
       </div>
-      <p class="arch-note">You sign in once through <b>Supabase</b> and prompt the bar right on your app.</p>
+      <p class="arch-note">You sign in once with your email and prompt the bar right on your app.</p>
 
       <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">prompt</span></div>
 
       <!-- the one shared server -->
       <div class="arch-core">
-        <div class="arch-core-title"><em class="think">✻</em> One Fly server</div>
-        <div class="arch-core-sub">A single Claude&nbsp;Code CLI with <b>a durable session per site</b> — it remembers your past changes and picks up right where you left off.</div>
+        <div class="arch-core-title"><em class="think">✻</em> A Sprite in your Fly account</div>
+        <div class="arch-core-sub">One per site, running Claude&nbsp;Code on your own Claude plan with <b>a durable session</b> — it remembers your past changes and picks up right where you left off.</div>
       </div>
 
       <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">commit&nbsp;+&nbsp;push</span></div>
 
       <!-- one server, many repos -->
       <div class="arch-row">
-        <span class="arch-repo">blog.git</span>
-        <span class="arch-repo">shop.git</span>
-        <span class="arch-repo">docs.git</span>
+        <span class="arch-repo">your-site.git</span>
       </div>
-      <p class="arch-note">One push to <b>every repo you connect</b> — your host redeploys.</p>
+      <p class="arch-note">A GitHub Action deploys it to <b>Cloudflare Pages</b>, with a preview link for every sandbox.</p>
 
       <div class="arch-link" aria-hidden="true"><i></i><span class="arch-link-label">deploys</span></div>
 
@@ -490,8 +488,8 @@ footer .meta a:hover{ color:var(--amber); }
     <div class="faq">
       <details class="qa">
         <summary><h3>Is it a browser extension?</h3></summary>
-        <p>No — there's nothing to install in your browser. It's a single <code>&lt;script&gt;</code> tag you
-          add to your app's own code, like an analytics snippet. The bar then appears right inside your running
+        <p>No — there's nothing to install in your browser. It's a single <code>&lt;script&gt;</code> tag in your app's
+          own code, like an analytics snippet, and setup adds it for you. The bar then appears right inside your running
           site once you're signed in. No extension, no separate app.</p>
       </details>
       <details class="qa">
@@ -517,14 +515,14 @@ footer .meta a:hover{ color:var(--amber); }
       </details>
       <details class="qa">
         <summary><h3>Is it safe to point an agent at my codebase?</h3></summary>
-        <p>It only touches repos you allow-list, and every commit is authored by the person who asked for it.
+        <p>It only touches the repo you picked at setup, through the GitHub access you granted, and every commit is authored by the person who asked for it.
           Want to review before it goes live? Ask for a sandbox: a private preview you can click around in,
           published only when you say so. And you can always ask it to roll a change back.</p>
       </details>
       <details class="qa">
         <summary><h3>What does it cost to run?</h3></summary>
-        <p>Mostly things you already pay for: the Claude Code subscription edits, Supabase's free tier
-          does auth, a small Fly VM (often free) hosts. The OpenAI key is optional, for voice.</p>
+        <p>Mostly your Claude plan, which does the editing. The agent runs on a Sprite in your own Fly account
+          (about $1/month, covered by Fly's free plan), and your site is hosted on Cloudflare Pages' free plan.</p>
       </details>
     </div>
   </div>
