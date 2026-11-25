@@ -869,6 +869,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         // This turn's earlier text blocks and tool rows, kept above the live block.
         liveDoneParts = streaming?.done
         liveDoneHeld = !fullText
+        // Keep expanded command groups expanded across the rebuild (groups only append, so index is stable).
+        const open = [...liveDone.querySelectorAll('details')].map((d) => d.open)
         clearNode(liveDone)
         const parts = streaming?.done ?? []
         parts.forEach((part, i) => {
@@ -876,6 +878,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
           if (tools) { if (tools.length) liveDone!.appendChild(toolRun(tools)) }
           else if (part.type === 'text') liveDone!.appendChild(msgEl('assistant', part.text))
         })
+        liveDone.querySelectorAll('details').forEach((d, i) => (d.open = !!open[i]))
       }
       if (liveBody) liveBody.innerHTML = fullText ? renderMarkdown(fullText) : ''
       const asstLine = liveBody?.closest('.ak-t') as HTMLElement | null
