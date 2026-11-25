@@ -44,6 +44,7 @@ import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
+import { runChecks, setupRouter } from "./setup.js";
 import { seedCodexConfig, seedSkills } from "./skills.js";
 import {
   startJob,
@@ -1307,6 +1308,13 @@ app.post("/realtime/token", authed, async (_req, res) => {
 
 // Ring webhook + focus registry (see ring.ts).
 app.use(ringRouter());
+
+// GET /check: the instance's self-test (see setup.ts). Public, no secrets in it.
+app.use(setupRouter());
+// Self-test once after boot, so a broken config shows up in `fly logs` (also at GET /check).
+setTimeout(() => void runChecks().then((cs) => {
+  for (const c of cs) console.log(`agent-keyboard: check ${c.ok ? "ok  " : "FAIL"} ${c.name}${c.detail ? ` — ${c.detail}` : ""}`);
+}), 15_000).unref();
 
 // Isolated browser tasks (see browser.ts) — primary-owner-only, one throwaway
 // Chromium + profile per task, never the agent's own CDP browsers.
