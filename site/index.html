@@ -344,13 +344,16 @@ footer .meta a:hover{ color:var(--amber); }
     </div>
     <p class="claude-cta"><a id="claude-cta" href="https://claude.ai/customize/connectors?modal=add-custom-connector&amp;connectorName=Agent%20Keyboard&amp;connectorUrl=https%3A%2F%2Fagentkeyboard.com%2Fmcp" target="_blank" rel="noopener">or get started in Claude →</a></p>
     <script>
-      // Signed in with Claude already connected (the dashboard's check): a new Claude chat instead of the connector dialog
-      fetch('/cloud/me').then(r => r.json()).then(me => {
+      // Signed in with Claude already connected (the dashboard's check): a new Claude chat instead of the connector dialog.
+      // Checked again whenever the tab comes back, since connecting happens in Claude's tab.
+      const claudeCheck = () => fetch('/cloud/me').then(r => r.json()).then(me => {
         if (!me.signedIn || !me.claude) return;
         const a = document.getElementById('claude-cta');
         a.textContent = 'Manage in Claude →';
         a.href = 'https://claude.ai/new?q=' + encodeURIComponent("Let's work on my Agent Keyboard sites");
       }).catch(() => {});
+      claudeCheck();
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) claudeCheck(); });
     </script>
 
   </header>
