@@ -5,6 +5,10 @@
 
 export const SB_URL = '__AK_SUPABASE_URL__'
 export const SB_ANON = '__AK_SUPABASE_ANON_KEY__'
+// Where "forgot password?" sends you instead of a reset email (AK_RECOVER_URL; managed
+// instances point it at the dashboard). Empty or unsubstituted: Supabase's reset email.
+const RECOVER_RAW = '__AK_RECOVER_URL__'
+export const RECOVER_URL = /^https:\/\//.test(RECOVER_RAW) ? RECOVER_RAW : ''
 
 // Site ids with per-page sessions; the server substitutes this when serving
 // /widget.js (same mechanism as the Supabase placeholders). Unsubstituted

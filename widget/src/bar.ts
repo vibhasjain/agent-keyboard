@@ -6,8 +6,8 @@
 // reparentable composer / auth nodes. Reconciles the DOM on every store change.
 
 import { api, HttpError } from './api'
-import { getPendingInvite, getToken, login, setPasswordWithToken } from './auth'
-import { CONFIG, lsKey } from './config'
+import { getPendingInvite, getToken, login, requestRecovery, setPasswordWithToken } from './auth'
+import { CONFIG, RECOVER_URL, lsKey } from './config'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
 import { attachMentions } from './mentions'
@@ -532,6 +532,11 @@ export function mountBar(shadow: ShadowRoot): void {
     el('div', 'ak-lg-rule'),
     el('div', 'ak-lg-row', (n) => n.append(lgMark(), pwInput, goBtn)),
   )
+  const forgotBtn = el('button', 'ak-lg-forgot', (n) => {
+    n.type = 'button'
+    n.textContent = 'forgot password?'
+  })
+  loginRow.append(forgotBtn)
 
   // Invite / recovery landing: finish setting a password right here (the link
   // redirected to this page with a fresh token — see auth.consumeInviteToken).
@@ -652,6 +657,26 @@ export function mountBar(shadow: ShadowRoot): void {
       goBtn.disabled = false
       clearNode(goBtn)
       goBtn.appendChild(icon('arrow-right', 15)) // restore the arrow
+    }
+  })
+
+  // Forgot password: the configured recovery page (managed: the dashboard, which
+  // signs you back in through GitHub), else a Supabase reset email to this page.
+  on(forgotBtn, 'click', async () => {
+    if (RECOVER_URL) return void window.open(RECOVER_URL, '_blank', 'noopener')
+    const email = emailInput.value.trim()
+    if (!email) {
+      emailInput.placeholder = 'enter your email first'
+      emailInput.focus()
+      return
+    }
+    forgotBtn.disabled = true
+    try {
+      await requestRecovery(email)
+      forgotBtn.textContent = 'check your email for a reset link'
+    } catch (err) {
+      forgotBtn.textContent = err instanceof Error ? err.message : 'could not send the email'
+      forgotBtn.disabled = false
     }
   })
 

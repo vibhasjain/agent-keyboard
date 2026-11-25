@@ -232,7 +232,8 @@ function widgetJs(): Buffer | null {
       "__AK_PAGE_SCOPED_SITES__",
       SITES.filter((s) => s.sessionScope === "page").map((s) => s.id).join(","),
     )
-    .replaceAll("__AK_AGENT_TAGS__", AGENT_TAGS);
+    .replaceAll("__AK_AGENT_TAGS__", AGENT_TAGS)
+    .replaceAll("__AK_RECOVER_URL__", process.env.AK_RECOVER_URL ?? "");
   const buf = Buffer.from(src, "utf8");
   if (process.env.NODE_ENV === "production") widgetJsCache = buf;
   return buf;

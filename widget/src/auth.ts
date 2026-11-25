@@ -210,6 +210,22 @@ export async function login(email: string, password: string): Promise<void> {
   setAuth('authed')
 }
 
+/** Email a password-reset link that lands back on this page, where the bar shows
+ *  the set-a-password form (consumeInviteToken). Supabase only honours redirect URLs
+ *  on its allow-list; others fall back to the project's Site URL. */
+export async function requestRecovery(email: string): Promise<void> {
+  const to = encodeURIComponent(location.origin + location.pathname)
+  const res = await fetch(`${SB_URL}/auth/v1/recover?redirect_to=${to}`, {
+    method: 'POST',
+    headers: { apikey: SB_ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) {
+    const d = (await res.json().catch(() => ({}))) as { error_description?: string; msg?: string }
+    throw new Error(d.error_description || d.msg || `couldn't send the email (${res.status})`)
+  }
+}
+
 export function logout(): void {
   wipeSession()
   setAuth('anon')

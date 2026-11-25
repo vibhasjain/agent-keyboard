@@ -225,6 +225,12 @@ button::-moz-focus-inner{ border:0; }
 .ak-lg-row:focus-within .ak-lg-mark{ color:var(--ak-accent); }
 .ak-login.error .ak-lg-mark{ color:var(--ak-err); }
 .ak-lg-rule{ height:1px; background:var(--ak-rule); }
+.ak-lg-forgot{
+  align-self:flex-end; margin-top:2px; padding:2px 0; border:none; background:none; cursor:pointer;
+  font-family:var(--ak-mono); font-size:11px; color:var(--ak-ink3);
+}
+.ak-lg-forgot:hover, .ak-lg-forgot:focus-visible{ color:var(--ak-accent); }
+.ak-lg-forgot:disabled{ cursor:default; color:var(--ak-ink2); }
 .ak-setpw-label{ font-family:var(--ak-mono); font-size:11.5px; line-height:1.4; color:var(--ak-ink2); padding:4px 0; }
 .ak-login.error .ak-setpw-label{ color:var(--ak-err); }
 .ak-login input{
