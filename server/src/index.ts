@@ -1052,7 +1052,7 @@ app.get("/sites/:siteId/teammates", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
-  res.json((await siteMembers(site.id)).map((email) => ({ email, handle: handleOf(email) })));
+  res.json((await siteMembers(site.id)).map((email) => ({ email, handle: handleOf(email), canEmail: !!process.env.RESEND_API_KEY })));
 });
 
 /** Leave a note for the people (you included) @mentioned in `text`: saved to the transcript,

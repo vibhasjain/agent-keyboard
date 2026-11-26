@@ -100,6 +100,7 @@ function makeComposer(onTeamNote: () => void): Composer {
   // Shown while the draft @mentions someone: off = a note in the chat only
   // (the default), on = also email them. Resets after every send.
   let notify = false
+  let canEmail = false // the server can send email (it has a sender key); learned with the teammate list
   const notifyBtn = el('button', 'ak-notify', (n) => {
     n.type = 'button'
     n.append(icon('mail', 13), 'Email them')
@@ -137,7 +138,11 @@ function makeComposer(onTeamNote: () => void): Composer {
   taWrap.append(ta)
   row.append(taWrap, cam, attach, mic, sendBtn)
   const mentions = attachMentions(ta, taWrap, () => api.listNotes(CONFIG.site).then((l) => [...new Set(l.flatMap((n) => (n.folder ? [n.name, n.folder] : [n.name])))]))
-  const people = attachMentions(ta, taWrap, () => api.teammates(CONFIG.site).then((l) => l.map((t) => t.handle)), '@', 'teammates')
+  const people = attachMentions(ta, taWrap, () => api.teammates(CONFIG.site).then((l) => {
+    canEmail = l.some((t) => t.canEmail)
+    syncSend()
+    return l.map((t) => t.handle)
+  }), '@', 'teammates')
   root.append(photos.el, row, notifyBtn, note)
   show(note, false)
   show(notifyBtn, false)
@@ -225,8 +230,8 @@ function makeComposer(onTeamNote: () => void): Composer {
   const syncSend = () => {
     sendBtn.disabled = false
     const hasMention = /(?:^|\s)@[\w.+-]/.test(ta.value) && !photos.hasAttachments()
-    if (!hasMention) notify = false
-    show(notifyBtn, hasMention)
+    if (!hasMention || !canEmail) notify = false
+    show(notifyBtn, hasMention && canEmail)
     notifyBtn.setAttribute('aria-pressed', String(notify))
   }
   on(notifyBtn, 'click', () => {

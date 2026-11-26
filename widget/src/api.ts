@@ -212,8 +212,8 @@ export const api = {
   listNotes: (siteId: string): Promise<{ name: string; folder?: string }[]> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/notes`),
 
-  /** Everyone with access to this site (you included), for @mention autocomplete. */
-  teammates: (siteId: string): Promise<{ email: string; handle: string }[]> =>
+  /** Everyone with access to this site (you included), for @mention autocomplete. `canEmail`: the server can email them. */
+  teammates: (siteId: string): Promise<{ email: string; handle: string; canEmail: boolean }[]> =>
     jsonFetch(`/sites/${encodeURIComponent(siteId)}/teammates`),
 
   /** Leave a note for the @mentioned teammates: saved to the chat (and emailed if `notify`), no agent turn. */
