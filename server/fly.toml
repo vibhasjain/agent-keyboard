@@ -34,6 +34,9 @@ swap_size_mb = 1024
   HOME = "/data"
   IS_SANDBOX = "1"
   NODE_ENV = "production"
+  # No scheduled jobs on this instance (owner, 2026-11-26): turns off JOBS_CRONS and
+  # every site's cron knob. Jobs run only when someone sends a message.
+  JOBS_CRON_DISABLED = "1"
   # A streaming session holds its SITE's job lock while idle, so home (cv:/)
   # idling 3 min starved its own page agents (nutrition/movies/…) after a relay.
   # 45s keeps follow-ups snappy but hands the lock over quickly.
