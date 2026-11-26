@@ -32,7 +32,7 @@ import {
   isOwnerEmail,
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
-import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
+import { getSite, listSitesPublic, pageSlugFor, SITES, type Site } from "./sites.js";
 import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
 import { buildPrompt, mcpFor, isTeammate, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
@@ -44,6 +44,7 @@ import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
+import { disconnect, listServers, mcpAuthEnabled, mcpAuthRouter, startSignIn, validName } from "./mcpauth.js";
 import { runChecks, setupRouter } from "./setup.js";
 import { keepTranscripts, seedCodexConfig, seedSkills } from "./skills.js";
 import {
@@ -600,6 +601,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const internal = authedUser(req)?.id === "internal";
   const sender = internal && typeof (body as { sender?: unknown }).sender === "string" ? String((body as { sender?: unknown }).sender) : authedUser(req)?.email;
   if (sender) lastSender.set(site.id, sender);
+  if (!internal) publicOrigin = `${/^(localhost|127\.)/.test(req.get("host") ?? "") ? "http" : "https"}://${req.get("host")}`;
   const cron = internal && body.cron === true;
   const freshCron = cron && body.freshCron === true;
   const forceFresh = freshCron ? "fresh cron" : internal && body.forceFresh === true ? "boot requeue" : undefined;
@@ -733,6 +735,56 @@ app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
 // Who sent each site's latest message, so publishing knows who tapped
 // "Publish to live" without trusting the agent to say.
 const lastSender = new Map<string, string>();
+// The origin the bar talks to this server on (the redirect URI for MCP sign-ins when AK_PUBLIC_URL is unset).
+let publicOrigin = "";
+
+/**
+ * Spec 22: the agent connects, lists and disconnects OAuth MCP servers for the
+ * owner (internal secret; the site's latest message must be an owner's). The
+ * owner opens the returned signInUrl; /oauth/callback (mcpauth.ts) finishes it.
+ */
+function mcpOwner(req: Request, res: Response): { key: string; site: Site } | null {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) return void res.status(404).json({ error: "unknown site" }), null;
+  if (denySite(req, res, site.id)) return null;
+  const user = authedUser(req);
+  const by = user?.id === "internal" ? lastSender.get(site.id) : user?.email;
+  if (!mcpAuthEnabled || site.guest) return void res.status(400).json({ error: "MCP sign-in needs AK_INTERNAL_SECRET and a non-guest site" }), null;
+  if (!by || !isOwnerEmail(by)) return void res.status(403).json({ error: "only the site owner can connect or disconnect MCP servers" }), null;
+  return { key: site.sandboxOf?.id ?? site.id, site };
+}
+app.get("/sites/:siteId/mcp-servers", authed, (req, res) => {
+  const o = mcpOwner(req, res);
+  if (o) res.json({ servers: listServers(o.key) });
+});
+app.post("/sites/:siteId/mcp-servers", authed, async (req, res) => {
+  const o = mcpOwner(req, res);
+  if (!o) return;
+  const { url, name, page, client_id, client_secret } = (req.body ?? {}) as Record<string, unknown>;
+  const origin = (process.env.AK_PUBLIC_URL || publicOrigin).replace(/\/$/, "");
+  if (typeof url !== "string" || (name !== undefined && (typeof name !== "string" || !validName(name)))) {
+    res.status(400).json({ error: "url (https) required; name, if given, is lowercase letters, digits and dashes" });
+    return;
+  }
+  if (!origin) {
+    res.status(409).json({ error: "this server doesn't know its public URL yet: set AK_PUBLIC_URL, or send a message from the bar first" });
+    return;
+  }
+  const path = typeof page === "string" && page.startsWith("/") && !page.startsWith("//") ? page : "/";
+  try {
+    res.json(await startSignIn({
+      siteKey: o.key, siteId: o.site.id, url, name: name as string | undefined, origin, back: `https://${o.site.domain}${path}`,
+      clientId: typeof client_id === "string" && client_id ? client_id : undefined,
+      clientSecret: typeof client_secret === "string" && client_secret ? client_secret : undefined,
+    }));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+app.delete("/sites/:siteId/mcp-servers/:name", authed, (req, res) => {
+  const o = mcpOwner(req, res);
+  if (o) res.json({ removed: disconnect(o.key, req.params.name ?? "") });
+});
 
 /**
  * Publish a sandbox to live (its agent calls this, with the internal secret,
@@ -1532,6 +1584,7 @@ app.post("/realtime/token", authed, async (_req, res) => {
 
 // Ring webhook + focus registry (see ring.ts).
 app.use(ringRouter());
+app.use(mcpAuthRouter());
 
 // GET /check: the instance's self-test (see setup.ts). Public, no secrets in it.
 app.use(setupRouter());

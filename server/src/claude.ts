@@ -48,6 +48,7 @@ import {
 import { rotationReason, shortHandoff, turnWatchdog } from "./session-policy.js";
 import { sessionFilePath, readConversation, readSessionUsage } from "./conversation.js";
 import { toolLabel } from "./tool-label.js";
+import { mcpOAuthConfig, mcpOAuthNote } from "./mcpauth.js";
 import { readFile } from "node:fs/promises";
 
 // NaN-guarded env int: a malformed value must not become setTimeout(fn, NaN)
@@ -397,7 +398,12 @@ function streamArgs(
   streaming: boolean,
   cron = false,
   mcp = false,
+  teammate = false,
 ): string[] {
+  // Spec 22: MCP servers the owner signed in to (through the local proxy); not for teammates or guest sites.
+  const key = site.sandboxOf?.id ?? site.id;
+  const oauth = !teammate && !site.guest;
+  const oauthMcp = oauth ? mcpOAuthConfig(key, site.id) : null;
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
     // A sandbox's first turn forks the live conversation it was created from.
@@ -419,11 +425,11 @@ function streamArgs(
     // load user-level settings/skills: ~/.claude/skills on the volume holds the
     // seeded skills (server/skills/) plus anything the agent installs itself.
     "--strict-mcp-config",
-    ...(mcp ? ["--mcp-config", AK_MCP] : []),
+    ...(mcp || oauthMcp ? ["--mcp-config", ...(mcp ? [AK_MCP] : []), ...(oauthMcp ? [oauthMcp] : [])] : []),
     "--setting-sources",
     "user,project",
     "--append-system-prompt",
-    scopeNote(site, pushBranch, harness.settings.sandbox) + " " + harnessNote(site.id, harness, usage),
+    scopeNote(site, pushBranch, harness.settings.sandbox) + (oauth ? mcpOAuthNote(key, site.id) : "") + " " + harnessNote(site.id, harness, usage),
   ];
 }
 
@@ -934,7 +940,7 @@ export async function* runMessageJob(
       const subagents = makeSubagentTracker();
 
       const { child: c, done } = spawnClaude(
-        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT, opts.cron, mcpFor(opts.sender, opts.cron)),
+        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT, opts.cron, mcpFor(opts.sender, opts.cron), isTeammate(opts.sender)),
         dir,
         (e) => {
           if (stopReason) return;
@@ -1308,7 +1314,7 @@ export async function* runStreamingSession(
     const checklist = makeTaskChecklist();
     const subagents = makeSubagentTracker();
     const spawned = spawnClaude(
-      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true, opts.cron, mcpFor(opts.sender, opts.cron)),
+      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true, opts.cron, mcpFor(opts.sender, opts.cron), isTeammate(opts.sender)),
       dir,
       (e) => {
         if (stopReason) return;

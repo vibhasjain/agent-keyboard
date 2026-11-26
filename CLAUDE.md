@@ -107,6 +107,10 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   voice dictation), and `GET /sites/:id/screen` (view-only live browser). Frames: `job` ·
   `status{phase,detail,browser}` · `screen{jpeg,w,h,url,title}` · `assistant{text}` (full replace) ·
   `result{reply,git,…}` · `error`. Full spec lives in `widget/README.md`.
+- **MCP sign-in** (spec 22) — `server/src/mcpauth.ts`: the agent connects an OAuth MCP server for the owner via
+  `POST /sites/:id/mcp-servers` (internal secret; latest sender must be an owner) and posts the returned sign-in link; the
+  server's own `GET /oauth/callback` stores the tokens (AES-GCM, `/data/agent-keyboard/mcp-oauth.json`), and owners'
+  turns get the servers through a local proxy `/mcp-proxy/<site>/<name>` that adds and refreshes the bearer.
 
 ## Deploy
 
