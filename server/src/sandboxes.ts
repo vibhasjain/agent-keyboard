@@ -191,13 +191,13 @@ export function previewUrl(site: Site, branch: string): string {
 export async function createSandbox(
   parent: Site,
   name: string,
-  opts: { forkFrom?: string; createdBy?: string },
+  opts: { forkFrom?: string; createdBy?: string; branch?: string },
 ): Promise<Sandbox> {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/-+$/, "") || "sandbox";
   let slug = base;
   for (let i = 2; registry.has(`${parent.id}${SEP}${slug}`); i++) slug = `${base}-${i}`;
-  const branch = `ak/${slug}`;
-  await createRemoteBranch(parent, branch);
+  const branch = opts.branch ?? `ak/${slug}`; // an existing branch: a sandbox moved from another instance
+  if (!opts.branch) await createRemoteBranch(parent, branch);
   const sb: Sandbox = {
     id: `${parent.id}${SEP}${slug}`,
     parent: parent.id,

@@ -13,10 +13,11 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import type { Response } from "express";
 import { CLAUDE_HOME, conversationIdFor } from "./claude.js";
-import { checkoutPath } from "./checkouts.js";
+import { checkoutPath, ensureCheckout, git } from "./checkouts.js";
 import { readConversation } from "./conversation.js";
 import { saveSettings, settingsPathFor } from "./harness.js";
 import { NOTES_REL, validNoteImage, validNoteName, validOrder, type NoteMeta, type NoteOrder } from "./notes.js";
+import { createSandbox, getSandbox, listSandboxes } from "./sandboxes.js";
 import { SKILLS_SRC } from "./skills.js";
 import { addTeamNote } from "./team.js";
 import type { Site } from "./sites.js";
@@ -24,7 +25,7 @@ import type { Site } from "./sites.js";
 const execFileP = promisify(execFile);
 const MAX_BYTES = 200 * 1024 * 1024;
 const SETTINGS_KEYS = ["model", "effort", "maxBudgetUsd", "maxContextTokens", "idleRotateMinutes", "idleRotateMinTokens", "turnMaxContextTokens", "cron", "pages"];
-const TOP = new Set(["notes", "memory", "skills", "settings.json", "summary.md", "manifest.json"]);
+const TOP = new Set(["notes", "memory", "skills", "settings.json", "summary.md", "manifest.json", "sandboxes", "notes-archive"]);
 
 export const memoryDir = (siteId: string) =>
   join(CLAUDE_HOME, ".claude", "projects", checkoutPath(siteId).replace(/[^a-zA-Z0-9]/g, "-"), "memory");
@@ -55,6 +56,19 @@ export async function streamExport(site: Site, withSkills: boolean, res: Respons
     const notes = join(checkoutPath(site.id), NOTES_REL);
     if (existsSync(notes)) await cp(notes, join(dir, "notes"), { recursive: true, filter: (p) => !/\/(\.base|\.merge-[^/]*)$/.test(p) });
     if (existsSync(memoryDir(site.id))) await cp(memoryDir(site.id), join(dir, "memory"), { recursive: true });
+    const archive = join(checkoutPath(site.id), ".tmp", "notes-archive");
+    if (existsSync(archive)) await cp(archive, join(dir, "notes-archive"), { recursive: true });
+
+    // Open sandboxes: their branch is in the repo already; their notes (with the .base snapshot), memory and recent chat.
+    for (const { name, createdBy } of await listSandboxes(site.id)) {
+      const sb = getSandbox(`${site.id}--sb-${name}`)!, to = join(dir, "sandboxes", name);
+      await mkdir(to, { recursive: true });
+      const sbNotes = join(checkoutPath(sb.id), NOTES_REL);
+      if (existsSync(sbNotes)) await cp(sbNotes, join(to, "notes"), { recursive: true, filter: (p) => !/\/\.merge-[^/]*$/.test(p) });
+      if (existsSync(memoryDir(sb.id))) await cp(memoryDir(sb.id), join(to, "memory"), { recursive: true });
+      await writeFile(join(to, "summary.md"), await summaryOf(sb.id));
+      await writeFile(join(to, "meta.json"), JSON.stringify({ branch: sb.branch, createdBy, createdAt: sb.createdAt, checkout: checkoutPath(sb.id), memoryDir: memoryDir(sb.id) }));
+    }
 
     const settings = await readFile(settingsPathFor(site.id), "utf8").then(JSON.parse).catch(() => ({}));
     const out: Record<string, unknown> = Object.fromEntries(SETTINGS_KEYS.filter((k) => settings[k] !== undefined).map((k) => [k, settings[k]]));
@@ -68,12 +82,7 @@ export async function streamExport(site: Site, withSkills: boolean, res: Respons
         if (!bundled.has(name) && !name.startsWith(".")) await cp(join(src, name), join(dir, "skills", name), { recursive: true, dereference: true });
     }
 
-    const { messages } = await readConversation(site.id, { limit: 40 }).catch(() => ({ messages: [] }));
-    const summary = messages
-      .filter((m) => m.text?.trim())
-      .map((m) => `- **${m.role === "user" ? (m.sender ?? "user") : "agent"}** (${m.ts?.slice(0, 10) ?? ""}): ${m.text.replace(/\s+/g, " ").trim().slice(0, 400)}`)
-      .join("\n");
-    await writeFile(join(dir, "summary.md"), `# Recent conversation\n\n${summary || "(none)"}\n`);
+    await writeFile(join(dir, "summary.md"), await summaryOf(site.id));
     await writeFile(join(dir, "manifest.json"), JSON.stringify({ siteId: site.id, checkout: checkoutPath(site.id), memoryDir: memoryDir(site.id), exportedAt: new Date().toISOString() }));
 
     res.setHeader("Content-Type", "application/gzip");
@@ -86,6 +95,16 @@ export async function streamExport(site: Site, withSkills: boolean, res: Respons
   }
 }
 
+/** The last ~20 exchanges as a short markdown list (no model call). */
+async function summaryOf(siteId: string): Promise<string> {
+  const { messages } = await readConversation(siteId, { limit: 40 }).catch(() => ({ messages: [] }));
+  const summary = messages
+    .filter((m) => m.text?.trim())
+    .map((m) => `- **${m.role === "user" ? (m.sender ?? "user") : "agent"}** (${m.ts?.slice(0, 10) ?? ""}): ${m.text.replace(/\s+/g, " ").trim().slice(0, 400)}`)
+    .join("\n");
+  return `# Recent conversation\n\n${summary || "(none)"}\n`;
+}
+
 // ─── import ──────────────────────────────────────────────────────────────────
 export interface ImportResult {
   notes: number;
@@ -94,6 +113,7 @@ export interface ImportResult {
   settings: string[];
   envNames: string[];
   notesOnly: boolean;
+  sandboxes: string[];
 }
 
 /** Pull `site`'s bundle from `origin` (with an export token, or a user's session `bearer` for notes only) into `into`. */
@@ -113,7 +133,8 @@ export async function importFrom(into: Site, origin: string, site: string, auth:
       await pullNotes(base, site, auth.bearer ?? "", join(dir, "x", "notes"));
     }
     const x = join(dir, "x");
-    const result: ImportResult = { notes: 0, memories: 0, skills: [], settings: [], envNames: [], notesOnly };
+    const live = await ensureCheckout(into); // a missing checkout is cloned fresh, which would wipe anything written first
+    const result: ImportResult = { notes: 0, memories: 0, skills: [], settings: [], envNames: [], notesOnly, sandboxes: [] };
     result.notes = await mergeNotesDir(join(x, "notes"), join(checkoutPath(into.id), NOTES_REL));
 
     const manifest = await readFile(join(x, "manifest.json"), "utf8").then(JSON.parse).catch(() => ({}));
@@ -157,12 +178,45 @@ export async function importFrom(into: Site, origin: string, site: string, auth:
     }
 
     const host = new URL(base).host;
+    // Archived sandbox notes, one folder per sandbox; a name already here keeps what's there.
+    const archive = join(checkoutPath(into.id), ".tmp", "notes-archive");
+    for (const name of await readdir(join(x, "notes-archive")).catch(() => [] as string[]))
+      if (!existsSync(join(archive, name))) await cp(join(x, "notes-archive", name), join(archive, name), { recursive: true });
+    // Open sandboxes: re-register each on its existing branch (still in the repo) with its own notes, memory and recent chat.
+    for (const name of into.sandbox ? await readdir(join(x, "sandboxes")).catch(() => [] as string[]) : []) {
+      const from = join(x, "sandboxes", name);
+      const meta = await readFile(join(from, "meta.json"), "utf8").then(JSON.parse).catch(() => null);
+      if (typeof meta?.branch !== "string" || !/^ak\/[\w-]+$/.test(meta.branch)) continue;
+      if (!(await git(live, ["ls-remote", "--heads", "origin", meta.branch]).catch(() => ""))) continue; // the branch is gone
+      const sb = await createSandbox(into, name, { branch: meta.branch, createdBy: typeof meta.createdBy === "string" ? meta.createdBy : undefined });
+      const notes = join(checkoutPath(sb.id), NOTES_REL);
+      if (existsSync(join(from, "notes"))) {
+        await rm(notes, { recursive: true, force: true });
+        await cp(join(from, "notes"), notes, { recursive: true });
+      }
+      const sbMem = memoryDir(sb.id);
+      await mkdir(sbMem, { recursive: true });
+      const swap = (t: string) =>
+        [[meta.memoryDir, sbMem], [meta.checkout, checkoutPath(sb.id)]].reduce((acc, [a, b]) => (typeof a === "string" && a.startsWith("/") ? acc.split(a).join(b) : acc), t);
+      for (const f of await readdir(join(from, "memory")).catch(() => [] as string[]))
+        if (f.endsWith(".md")) await writeFile(join(sbMem, f), swap(await readFile(join(from, "memory", f), "utf8")));
+      const sbSummary = await readFile(join(from, "summary.md"), "utf8").catch(() => "");
+      await writeFile(
+        join(sbMem, "previous-instance.md"),
+        `---\nname: previous-instance\ndescription: This sandbox moved here from ${host} on ${new Date().toISOString().slice(0, 10)}; its recent conversation there\nmetadata:\n  type: project\n---\n\n` +
+          `This sandbox (branch \`${meta.branch}\`) moved here from ${base} with its notes and memory.\n\n${sbSummary.replace(/^# Recent conversation/, "## Recent conversation there")}`,
+      );
+      const sbIdx = join(sbMem, "MEMORY.md");
+      await writeFile(sbIdx, `${(await readFile(sbIdx, "utf8").catch(() => "# Memory index\n")).trimEnd()}\n- [Previous instance](previous-instance.md) — moved from ${host}; the recent conversation there\n`);
+      result.sandboxes.push(sb.id.split("--sb-")[1]!);
+    }
+
     const summary = await readFile(join(x, "summary.md"), "utf8").catch(() => "");
     await writeFile(
       join(mem, "previous-instance.md"),
       `---\nname: previous-instance\ndescription: This site moved here from ${host} on ${new Date().toISOString().slice(0, 10)}; what came along and the recent conversation there\nmetadata:\n  type: project\n---\n\n` +
         `This site (\`${site}\` on ${base}) moved to this instance on ${new Date().toISOString().slice(0, 10)}. ` +
-        `Brought over: ${result.notes} notes, ${result.memories} memories, settings (${result.settings.join(", ") || "none"}), skills (${result.skills.join(", ") || "none"}).` +
+        `Brought over: ${result.notes} notes, ${result.memories} memories, settings (${result.settings.join(", ") || "none"}), skills (${result.skills.join(", ") || "none"}), sandboxes (${result.sandboxes.join(", ") || "none"}).` +
         (result.envNames.length ? ` The old site had env vars the owner must paste again: ${result.envNames.join(", ")}.` : "") +
         `\n\n${summary.replace(/^# Recent conversation/, "## Recent conversation there")}`,
     );
@@ -177,7 +231,7 @@ export async function importFrom(into: Site, origin: string, site: string, auth:
       role: "assistant",
       text:
         `Moved from ${host}. ` +
-        (notesOnly ? `Notes came along (${result.notes}); memory and settings need ${host} updated first.` : `Notes, memory and settings came along: ${result.notes} notes, ${result.memories} memories${result.skills.length ? `, ${result.skills.length} skills` : ""}.`) +
+        (notesOnly ? `Notes came along (${result.notes}); memory and settings need ${host} updated first.` : `Notes, memory and settings came along: ${result.notes} notes, ${result.memories} memories${result.skills.length ? `, ${result.skills.length} skills` : ""}${result.sandboxes.length ? `, ${result.sandboxes.length} sandboxes (${result.sandboxes.join(", ")})` : ""}.`) +
         (result.envNames.length ? ` Paste these env values again: ${result.envNames.join(", ")}.` : ""),
       tools: [],
       ts: new Date().toISOString(),
