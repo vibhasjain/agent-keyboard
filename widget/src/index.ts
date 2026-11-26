@@ -349,7 +349,10 @@ async function approveExport(ret: string): Promise<void> {
   const form = `${CONFIG.api}/export-consent?form=1&site=${site}&return=${encodeURIComponent(ret)}`
   const token = await getToken()
   if (token && !confirm(`Move this site's notes, memory and settings to ${to.host}? Only if you started this move.`)) return
-  const r = token && (await fetch(`${CONFIG.api}/sites/${site}/export-token`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => null))
+  // Opt-ins (spec 20): Cancel keeps them here.
+  const keys = !!token && confirm(`Also bring your keys (this site's env values)? They're sealed so only the new server can read them.`)
+  const files = !!token && confirm(`Also bring the agent's working files (.tmp/, up to 50 MB)?`)
+  const r = token && (await fetch(`${CONFIG.api}/sites/${site}/export-token`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ keys, files }) }).catch(() => null))
   const t = r && r.ok && ((await r.json()) as { token?: string }).token
   if (!t) return void (location.href = form)
   to.search = new URLSearchParams({ token: t, origin: CONFIG.api, site: CONFIG.site }).toString()

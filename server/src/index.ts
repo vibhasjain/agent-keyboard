@@ -829,16 +829,20 @@ app.get("/export-consent", async (req, res) => {
   label{display:block;color:var(--ink3);font-size:11px;letter-spacing:.06em;margin:14px 0 4px}
   input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;padding:6px 2px;outline:none}
   input:focus{border-bottom-color:var(--amber)}
+  .opt{display:flex;gap:8px;align-items:center;color:var(--ink2);font-size:12.5px;letter-spacing:0;margin:12px 0 0}
+  .opt input{width:auto;accent-color:var(--amber)}
   button{margin-top:22px;background:var(--amber);color:#141310;border:none;border-radius:8px;padding:10px 18px;font:600 13.5px ui-monospace,monospace;cursor:pointer}
   button:disabled{opacity:.5;cursor:default}
   .msg{margin-top:16px;font-size:13px;min-height:1.4em;color:var(--err)}
 </style></head>
 <body><main>
   <h1>Move ${esc(site.id)}</h1>
-  <p>Send this site's notes, memory and settings to <b>${esc(to.host)}</b>? Secret values stay here. Only approve if you started this move.</p>
+  <p>Send this site's notes, memory and settings to <b>${esc(to.host)}</b>? Only approve if you started this move.</p>
   <form id="f">
     <label for="em">email</label><input id="em" type="email" autocomplete="username" required>
     <label for="pw">password</label><input id="pw" type="password" autocomplete="current-password" required>
+    <label class="opt"><input id="keys" type="checkbox"> Bring my keys too (env values, sealed to the new server)</label>
+    <label class="opt"><input id="files" type="checkbox"> Bring the agent's working files (.tmp/, up to 50 MB)</label>
     <button id="go" type="submit">Sign in and approve</button>
   </form>
   <div class="msg" id="msg" role="alert"></div>
@@ -855,7 +859,7 @@ app.get("/export-consent", async (req, res) => {
         body: JSON.stringify({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value }),
       }).then((r) => r.json());
       if (!s.access_token) throw new Error(s.error_description || s.msg || "Wrong email or password.");
-      const r = await fetch(BASE + "/sites/" + encodeURIComponent(SITE) + "/export-token", { method: "POST", headers: { Authorization: "Bearer " + s.access_token } });
+      const r = await fetch(BASE + "/sites/" + encodeURIComponent(SITE) + "/export-token", { method: "POST", headers: { Authorization: "Bearer " + s.access_token, "Content-Type": "application/json" }, body: JSON.stringify({ keys: document.getElementById("keys").checked, files: document.getElementById("files").checked }) });
       const out = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(out.error || "Not allowed (" + r.status + ").");
       const u = new URL(RET);
@@ -880,7 +884,9 @@ app.post("/sites/:siteId/export-token", authed, (req, res) => {
     res.status(403).json({ error: "only the site's owner can move it" });
     return;
   }
-  res.json({ token: mintExportToken(site.id, isOwnerEmail(user.email) && !site.guest) });
+  const owner = isOwnerEmail(user.email), { keys, files } = (req.body ?? {}) as Record<string, unknown>;
+  // Skills are instance-wide; env values and working files are this site's, opt-in (spec 20).
+  res.json({ token: mintExportToken(site.id, { skills: owner && !site.guest, keys: keys === true && (owner || !site.guest), files: files === true && (owner || !site.guest) }) });
 });
 
 /** The bundle (tar.gz), for the holder of an export token for this site. */
@@ -891,7 +897,7 @@ app.get("/sites/:siteId/export", async (req, res) => {
     res.status(401).json({ error: "export token missing, used or expired" });
     return;
   }
-  await streamExport(site, ok.skills, res).catch((e) => {
+  await streamExport(site, ok, req.header("x-ak-export-key") ?? "", res).catch((e) => {
     console.error("[export]", site.id, e);
     if (!res.headersSent) res.status(500).json({ error: "export failed" });
     else res.destroy();
