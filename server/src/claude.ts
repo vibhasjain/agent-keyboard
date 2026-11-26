@@ -90,6 +90,11 @@ const STATE_ROOT = join(DATA_DIR, "agent-keyboard");
 export const AK_MCP = join(CLAUDE_HOME, "ak-mcp.json");
 export const mcpFor = (sender?: string, cron?: boolean): boolean =>
   !!sender && !cron && isOwnerEmail(sender) && existsSync(AK_MCP);
+// The owner's Cloudflare token and the site's Resend key (managed Sprites, specs
+// 13/17) are dropped from teammates' turns. Not airtight: same unix user, so
+// ~/ak.env and /proc are still readable by a determined agent.
+export const OWNER_ENV = ["CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "RESEND_API_KEY"];
+export const isTeammate = (sender?: string): boolean => !!sender && !isOwnerEmail(sender);
 
 // ─── guest fence ─────────────────────────────────────────────────────────────
 // A site marked guest:true in SITES is shared with invited people. Its agent
@@ -120,11 +125,12 @@ export function cdpPortFor(siteId: string): number {
   return 9400 + (h % 600);
 }
 
-/** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites) + harness overrides. */
-export function spawnEnv(site: Site, extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+/** The full env the CLI is spawned with: process.env (minus personal secrets on guest sites, owner secrets on teammates' turns) + harness overrides. */
+export function spawnEnv(site: Site, extra: Record<string, string> = {}, sender?: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...extra };
   for (const key of ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "CODEX_API_KEY"]) delete env[key];
   if (site.guest) for (const k of PERSONAL_ENV) delete env[k];
+  if (isTeammate(sender)) for (const k of OWNER_ENV) delete env[k];
   // Forced after harness env so every browser launched for this site is
   // discoverable on its one stable port.
   return { ...env, AK_CDP_PORT: String(cdpPortFor(site.id)) };
@@ -976,7 +982,7 @@ export async function* runMessageJob(
             queue.push(["status", { phase: "tool", detail: e.detail }]);
           }
         },
-        { env: spawnEnv(site, { ...harness.env, ...authorEnv(opts.sender) }), ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
+        { env: spawnEnv(site, { ...harness.env, ...authorEnv(opts.sender) }, opts.sender), ...(STREAMING_INPUT ? { stdin: userMessageLine(prompt) } : {}) },
       );
       child = c;
       const settled = done.finally(() => queue.close());
@@ -1347,7 +1353,7 @@ export async function* runStreamingSession(
           onResult(e.result);
         }
       },
-      { env: spawnEnv(site, { ...harness.env, ...authorEnv(opts.sender) }), stdin: userMessageLine(prompt), keepStdinOpen: true },
+      { env: spawnEnv(site, { ...harness.env, ...authorEnv(opts.sender) }, opts.sender), stdin: userMessageLine(prompt), keepStdinOpen: true },
     );
     child = spawned.child;
     closeInput = spawned.closeInput;

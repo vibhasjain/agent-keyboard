@@ -34,7 +34,7 @@ import {
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES } from "./sites.js";
 import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
-import { buildPrompt, mcpFor, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
+import { buildPrompt, mcpFor, isTeammate, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
@@ -623,6 +623,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     streaming: !!input,
     input,
     mcp: mcpFor(sender, cron),
+    teammate: isTeammate(sender),
     conversationId,
     sessionId,
     resumeCount: 0,
@@ -837,8 +838,9 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, async (req, res) => {
   // above could be sidestepped by posting another site's jobId under this one.
   const target = getJob(req.params.jobId ?? "");
   // A session spawned with the Agent Keyboard MCP (an owner's turn) never takes a
-  // teammate's message, nor the reverse: the bar queues it for a fresh session.
-  if (!target || target.siteId !== site.id || target.mcp !== mcpFor(authedUser(req)?.email)) {
+  // teammate's message, nor the reverse; same for one spawned with the owner's
+  // secrets (OWNER_ENV). The bar queues it for a fresh session.
+  if (!target || target.siteId !== site.id || target.mcp !== mcpFor(authedUser(req)?.email) || !!target.teammate !== isTeammate(authedUser(req)?.email)) {
     res.status(409).json({ error: "job not accepting messages" });
     return;
   }

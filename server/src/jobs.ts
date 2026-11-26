@@ -65,6 +65,7 @@ interface Job {
   streaming: boolean; // long-lived session: a `result` marks a turn boundary, not the end
   input: InputChannel | null; // follow-up injection channel (streaming sessions only)
   mcp: boolean; // spawned with the injected Agent Keyboard MCP (an owner's turn): only owners' turns may join it
+  teammate: boolean; // a teammate's turn (spawned without OWNER_ENV): only teammates' turns may join it
   conversationId: string | null; // for auto-resume after a self-triggered redeploy
   sessionId: string | null; //     "
   prompt: string; //               the user intent (short-form persisted for resume)
@@ -308,6 +309,7 @@ export async function startJob(opts: {
   streaming?: boolean;
   input?: InputChannel | null;
   mcp?: boolean;
+  teammate?: boolean;
   conversationId?: string | null;
   sessionId?: string | null;
   resumeCount?: number;
@@ -336,6 +338,7 @@ export async function startJob(opts: {
     abort: opts.abort ?? (() => {}),
     streaming: opts.streaming ?? false,
     mcp: opts.mcp ?? false,
+    teammate: opts.teammate ?? false,
     input: opts.input ?? null,
     conversationId: opts.conversationId ?? null,
     sessionId: opts.sessionId ?? null,
