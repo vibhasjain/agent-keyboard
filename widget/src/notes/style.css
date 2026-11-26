@@ -181,15 +181,17 @@
   -webkit-background-clip: text, padding-box !important; background-clip: text, padding-box !important;
 }
 /* ...and so does accent text in the note body: links and inline code (which keeps its tinted box) */
+/* (subtler than the chrome: one 1200px-wide rainbow drifting slowly, so a word shows roughly one colour at a time) */
 .akn-rainbow .milkdown .ProseMirror a {
-  background: linear-gradient(90deg,#ff4f7f,#ff7a33,#22b45e,#3d93ff,#a36bff,#ff4f7f) 0 0 / 200% 100%;
+  background: linear-gradient(90deg,#ff4f7f,#ff7a33,#22b45e,#3d93ff,#a36bff,#ff4f7f) 0 0 / 1200px 100%;
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
-  animation: akn-rainbow 8s linear infinite;
+  animation: akn-rainbow-wide 30s linear infinite;
 }
 .akn-rainbow .milkdown .ProseMirror :not(pre) > code {
-  background: linear-gradient(90deg,#ff4f7f,#ff7a33,#22b45e,#3d93ff,#a36bff,#ff4f7f) 0 0 / 200% 100%, color-mix(in srgb,#211f1c,transparent 40%);
+  background: linear-gradient(90deg,#ff4f7f,#ff7a33,#22b45e,#3d93ff,#a36bff,#ff4f7f) 0 0 / 1200px 100%, color-mix(in srgb,#211f1c,transparent 40%);
   -webkit-background-clip: text, padding-box; background-clip: text, padding-box; -webkit-text-fill-color: transparent;
-  animation: akn-rainbow 8s linear infinite;
+  animation: akn-rainbow-wide 30s linear infinite;
 }
 @keyframes akn-rainbow { to { background-position: -200% 0; } }
+@keyframes akn-rainbow-wide { to { background-position: -1200px 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .akn.akn-rainbow, .akn-rainbow .akn-new, .akn-rainbow .akn-ref, .akn-rainbow .akn-mention-opt, .akn-rainbow .milkdown .ProseMirror :is(a, code) { animation: none; } }
