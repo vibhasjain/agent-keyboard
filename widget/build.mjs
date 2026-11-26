@@ -37,7 +37,8 @@ async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
 // 34: Notes button + lazy loader + [[mention]] autocomplete (~1.2 KB, 2026-10-01).
 // 35: iOS keyboard fixes (scroll snap-back, keep the latest message in view), 2026-10-01.
 // 39: keep expanded command groups open while a turn streams (2026-11-25).
-await bundle('src/index.ts', 'dist/widget.js', 39)
+// 39.5: moving a site's one-tap approval with the dry run and opt-ins (spec 20, 2026-11-26).
+await bundle('src/index.ts', 'dist/widget.js', 39.5)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)
 
 // The notes editor (Milkdown Crepe), lazy-loaded by the widget only when Notes

@@ -60,7 +60,7 @@ import {
   type JobSnapshot,
 } from "./jobs.js";
 import { writePendingResume, resumeAfterRedeploy } from "./resume.js";
-import { importFrom, mintExportToken, redeemExportToken, streamExport } from "./migrate.js";
+import { exportPreview, importFrom, mintExportToken, redeemExportToken, streamExport } from "./migrate.js";
 import {
   getJob as dbGetJob,
   listJobs as dbListJobs,
@@ -831,6 +831,7 @@ app.get("/export-consent", async (req, res) => {
   input:focus{border-bottom-color:var(--amber)}
   .opt{display:flex;gap:8px;align-items:center;color:var(--ink2);font-size:12.5px;letter-spacing:0;margin:12px 0 0}
   .opt input{width:auto;accent-color:var(--amber)}
+  pre{white-space:pre-wrap;color:var(--ink2);font:12.5px/1.6 inherit;border-top:1px solid var(--rule);padding-top:12px;margin:18px 0 0}
   button{margin-top:22px;background:var(--amber);color:#141310;border:none;border-radius:8px;padding:10px 18px;font:600 13.5px ui-monospace,monospace;cursor:pointer}
   button:disabled{opacity:.5;cursor:default}
   .msg{margin-top:16px;font-size:13px;min-height:1.4em;color:var(--err)}
@@ -841,25 +842,40 @@ app.get("/export-consent", async (req, res) => {
   <form id="f">
     <label for="em">email</label><input id="em" type="email" autocomplete="username" required>
     <label for="pw">password</label><input id="pw" type="password" autocomplete="current-password" required>
-    <label class="opt"><input id="keys" type="checkbox"> Bring my keys too (env values, sealed to the new server)</label>
-    <label class="opt"><input id="files" type="checkbox"> Bring the agent's working files (.tmp/, up to 50 MB)</label>
-    <button id="go" type="submit">Sign in and approve</button>
+    <pre id="dry" hidden></pre><div id="opts"></div>
+    <button id="go" type="submit">Sign in</button>
   </form>
   <div class="msg" id="msg" role="alert"></div>
 <script>
   const SB = ${js(process.env.SUPABASE_URL ?? "")}, ANON = ${js(process.env.SUPABASE_ANON_KEY ?? "")}, SITE = ${js(site.id)}, RET = ${js(to.href)};
   const msg = (t) => (document.getElementById("msg").textContent = t);
-  const BASE = location.origin + location.pathname.replace(/\/export-consent$/, ""); // this server, even under a path prefix
+  const BASE = location.origin + location.pathname.replace(/\\/export-consent$/, ""); // this server, even under a path prefix
+  let s = null; // signed in: step 2 shows the dry run, then approves
   document.getElementById("f").addEventListener("submit", async (e) => {
     e.preventDefault();
     const go = document.getElementById("go"); go.disabled = true; msg("");
     try {
-      const s = await fetch(SB.replace(/\\/$/, "") + "/auth/v1/token?grant_type=password", {
-        method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" },
-        body: JSON.stringify({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value }),
-      }).then((r) => r.json());
-      if (!s.access_token) throw new Error(s.error_description || s.msg || "Wrong email or password.");
-      const r = await fetch(BASE + "/sites/" + encodeURIComponent(SITE) + "/export-token", { method: "POST", headers: { Authorization: "Bearer " + s.access_token, "Content-Type": "application/json" }, body: JSON.stringify({ keys: document.getElementById("keys").checked, files: document.getElementById("files").checked }) });
+      if (!s) {
+        s = await fetch(SB.replace(/\\/$/, "") + "/auth/v1/token?grant_type=password", {
+          method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" },
+          body: JSON.stringify({ email: document.getElementById("em").value.trim(), password: document.getElementById("pw").value }),
+        }).then((r) => r.json());
+        if (!s.access_token) { const m = s.error_description || s.msg; s = null; throw new Error(m || "Wrong email or password."); }
+        const p = await fetch(BASE + "/sites/" + encodeURIComponent(SITE) + "/export-preview", { headers: { Authorization: "Bearer " + s.access_token } });
+        const d = await p.json().catch(() => ({}));
+        if (!p.ok) { s = null; throw new Error(d.error || "Not allowed (" + p.status + ")."); }
+        const dry = document.getElementById("dry"); dry.textContent = d.summary; dry.hidden = false;
+        for (const o of d.opts) {
+          const l = document.createElement("label"), c = document.createElement("input");
+          l.className = "opt"; c.type = "checkbox"; c.dataset.key = o.key; l.append(c, " " + o.ask);
+          document.getElementById("opts").append(l);
+        }
+        for (const id of ["em", "pw"]) document.getElementById(id).disabled = true;
+        go.textContent = "Approve the move"; go.disabled = false;
+        return;
+      }
+      const body = Object.fromEntries([...document.querySelectorAll("#opts input")].map((c) => [c.dataset.key, c.checked]));
+      const r = await fetch(BASE + "/sites/" + encodeURIComponent(SITE) + "/export-token", { method: "POST", headers: { Authorization: "Bearer " + s.access_token, "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const out = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(out.error || "Not allowed (" + r.status + ").");
       const u = new URL(RET);
@@ -871,20 +887,40 @@ app.get("/export-consent", async (req, res) => {
 </main></body></html>`);
 });
 
-/** Mint the single-use export token (the consent page, signed in as someone allowed on the site). */
-app.post("/sites/:siteId/export-token", authed, (req, res) => {
+/** The site and its mover (the consent page, signed in as someone allowed on the site), or null after answering. */
+function moverOf(req: express.Request, res: express.Response) {
   const site = getSite(req.params.siteId ?? "");
   const user = authedUser(req);
   if (!site || site.sandboxOf) {
     res.status(404).json({ error: "unknown site" });
-    return;
+    return null;
   }
-  if (denySite(req, res, site.id)) return;
+  if (denySite(req, res, site.id)) return null;
   if (!user?.email || user.id === "internal" || user.id === "relay" || user.scope?.pathPrefix || user.scope?.paths?.[site.id]) {
     res.status(403).json({ error: "only the site's owner can move it" });
-    return;
+    return null;
   }
-  const owner = isOwnerEmail(user.email), { keys, files } = (req.body ?? {}) as Record<string, unknown>;
+  return { site, user: user as typeof user & { email: string } };
+}
+
+/** The dry run shown before approving: what moves, what stays, what to redo, and which opt-ins to ask. */
+app.get("/sites/:siteId/export-preview", authed, async (req, res) => {
+  const m = moverOf(req, res);
+  if (!m) return;
+  const to = String(req.query.to ?? "");
+  const p = await exportPreview(m.site, isOwnerEmail(m.user.email));
+  // The bar's one-tap approval shows this as is; the password page has its own heading.
+  if (/^[a-z0-9.-]+(:\d+)?$/i.test(to)) p.summary = `Move ${m.site.id} to ${to}? Only if you started this move.\n\n${p.summary}`;
+  res.json(p);
+});
+
+/** Mint the single-use export token. */
+app.post("/sites/:siteId/export-token", authed, (req, res) => {
+  const m = moverOf(req, res);
+  if (!m) return;
+  const { site, user } = m;
+  const owner = isOwnerEmail(user.email), b = (req.body ?? {}) as Record<string, unknown>;
+  const keys = b.keys === true || req.query.keys === "1", files = b.files === true || req.query.files === "1"; // the password page posts JSON, the bar a query
   // Skills are instance-wide; env values and working files are this site's, opt-in (spec 20).
   res.json({ token: mintExportToken(site.id, { skills: owner && !site.guest, keys: keys === true && (owner || !site.guest), files: files === true && (owner || !site.guest) }) });
 });

@@ -348,11 +348,13 @@ async function approveExport(ret: string): Promise<void> {
   if (to.protocol !== 'https:') return // never javascript: or the like
   const form = `${CONFIG.api}/export-consent?form=1&site=${site}&return=${encodeURIComponent(ret)}`
   const token = await getToken()
-  if (token && !confirm(`Move this site's notes, memory and settings to ${to.host}? Only if you started this move.`)) return
-  // Opt-ins (spec 20): Cancel keeps them here.
-  const keys = !!token && confirm(`Also bring your keys (this site's env values)? They're sealed so only the new server can read them.`)
-  const files = !!token && confirm(`Also bring the agent's working files (.tmp/, up to 50 MB)?`)
-  const r = token && (await fetch(`${CONFIG.api}/sites/${site}/export-token`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ keys, files }) }).catch(() => null))
+  const h = { headers: { Authorization: `Bearer ${token}` } }
+  // The dry run and the opt-ins come from the server (spec 20 #7); Cancel on an opt-in keeps it here.
+  const p = token && (await fetch(`${CONFIG.api}/sites/${site}/export-preview?to=${to.host}`, h).then((r) => r.ok && r.json(), () => null))
+  if (!p || !confirm(p.summary)) return void (p || (location.href = form))
+  const q = new URLSearchParams()
+  for (const o of p.opts) if (confirm(o.ask)) q.set(o.key, '1')
+  const r = await fetch(`${CONFIG.api}/sites/${site}/export-token?${q}`, { method: 'POST', ...h }).catch(() => null)
   const t = r && r.ok && ((await r.json()) as { token?: string }).token
   if (!t) return void (location.href = form)
   to.search = new URLSearchParams({ token: t, origin: CONFIG.api, site: CONFIG.site }).toString()

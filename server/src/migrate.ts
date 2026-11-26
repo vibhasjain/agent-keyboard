@@ -76,22 +76,64 @@ function unseal(box: string, privateKey: string): string {
   return Buffer.concat([d.update(Buffer.from(b.data!, "base64")), d.final()]).toString("utf8");
 }
 
-/** Copy the agent's .tmp/ working files minus notes, uploads, outputs, links and nested git checkouts, up to WORK_MAX. */
+/** The agent's .tmp/ working files (relative paths) minus notes, uploads, outputs, links, node_modules and nested
+ *  git checkouts, up to WORK_MAX; `skipped` counts files left out over the cap. */
+async function workFiles(from: string): Promise<{ files: string[]; bytes: number; skipped: number }> {
+  const all = await readdir(from, { recursive: true, withFileTypes: true }).catch(() => []);
+  const rel = (d: { parentPath: string; name: string }) => join(d.parentPath, d.name).slice(from.length + 1);
+  const repos = all.filter((d) => d.name === ".git").map((d) => d.parentPath.slice(from.length + 1)); // nested checkouts
+  const out = { files: [] as string[], bytes: 0, skipped: 0 };
+  for (const d of all) {
+    if (!d.isFile()) continue; // links and specials stay behind
+    const r = rel(d), top = r.split("/")[0]!;
+    if (WORK_SKIP.has(top) || /(^|\/)(node_modules|\.git)\//.test(r) || repos.some((g) => r.startsWith(g ? `${g}/` : ""))) continue;
+    const { size } = await lstat(join(from, r));
+    if (out.bytes + size > WORK_MAX) out.skipped++;
+    else (out.files.push(r), (out.bytes += size));
+  }
+  return out;
+}
+
 async function copyWork(from: string, to: string): Promise<void> {
-  let total = 0;
-  await cp(from, to, {
-    recursive: true,
-    filter: async (p) => {
-      if (p === from) return true;
-      const st = await lstat(p);
-      const rel = p.slice(from.length + 1);
-      if (st.isSymbolicLink() || WORK_SKIP.has(rel) || /(^|\/)(node_modules|\.git)$/.test(rel)) return false;
-      if (st.isDirectory()) return !existsSync(join(p, ".git"));
-      if (!st.isFile() || total + st.size > WORK_MAX) return false;
-      total += st.size;
-      return true;
-    },
-  });
+  for (const f of (await workFiles(from)).files) {
+    await mkdir(join(to, f, ".."), { recursive: true });
+    await cp(join(from, f), join(to, f));
+  }
+}
+
+const count = async (dir: string, ext = ".md") => (await readdir(dir).catch(() => [] as string[])).filter((f) => f.endsWith(ext)).length;
+const mb = (n: number) => (n < 1048576 ? `${Math.ceil(n / 1024)} KB` : `${Math.round(n / 1048576)} MB`);
+
+/** The dry run (spec 20 #7): what a move would bring, what stays, what the owner redoes, and the opt-ins to ask. */
+export async function exportPreview(site: Site, owner: boolean): Promise<{ summary: string; opts: { key: "keys" | "files"; ask: string }[] }> {
+  const co = checkoutPath(site.id), tmp = join(co, ".tmp");
+  const settings = await readFile(settingsPathFor(site.id), "utf8").then(JSON.parse).catch(() => ({}));
+  const env = Object.keys(settings.env ?? {}), set = SETTINGS_KEYS.filter((k) => settings[k] !== undefined);
+  const bundled = new Set(await readdir(SKILLS_SRC).catch(() => [] as string[]));
+  const skills = owner && !site.guest ? (await readdir(join(CLAUDE_HOME, ".claude", "skills")).catch(() => [] as string[])).filter((n) => !bundled.has(n) && !n.startsWith(".")) : [];
+  const sandboxes = (await listSandboxes(site.id)).map((s) => s.name);
+  const archived = (await readdir(join(tmp, "notes-archive")).catch(() => [] as string[])).length;
+  const work = await workFiles(tmp);
+  const allowed = owner || !site.guest;
+  const lines = [
+    "Comes over:",
+    `- ${await count(join(co, NOTES_REL))} notes, ${await count(memoryDir(site.id))} memories, a summary of the recent chat`,
+    `- settings: ${set.join(", ") || "none"}`,
+    ...(skills.length ? [`- skills: ${skills.join(", ")}`] : []),
+    ...(sandboxes.length || archived ? [`- ${sandboxes.length} open sandboxes${sandboxes.length ? ` (${sandboxes.join(", ")})` : ""}, ${archived} archived sandboxes' notes`] : []),
+    `- the domain ${site.domain}, ${originsOf(site).length} allowed origins${site.sandbox ? ", the sandbox preview" : ""}`,
+    ...(env.length && allowed ? [`- if you say yes: keys (${env.join(", ")})`] : []),
+    ...(work.files.length && allowed ? [`- if you say yes: ${work.files.length} working files (${mb(work.bytes)})${work.skipped ? `, ${work.skipped} over the 50 MB cap stay` : ""}`] : []),
+    "Stays here:",
+    "- the full chat (only the summary moves); uploads, outputs and git checkouts in .tmp/",
+    ...(owner && !site.guest ? [] : ["- runtime skills (only the instance's owner can move those)"]),
+    "You'll redo:",
+    env.length ? `- if you don't bring keys: paste ${env.join(", ")} again` : "- nothing",
+  ];
+  const opts: { key: "keys" | "files"; ask: string }[] = [];
+  if (env.length && allowed) opts.push({ key: "keys", ask: `Also bring your keys (${env.join(", ")})? They're sealed so only the new server can read them.` });
+  if (work.files.length && allowed) opts.push({ key: "files", ask: `Also bring the agent's ${work.files.length} working files (${mb(work.bytes)} of .tmp/)?` });
+  return { summary: lines.join("\n"), opts };
 }
 
 /** The bar's origins on the old instance: its domain (+www) and EXTRA_ORIGINS, which are instance-wide,
