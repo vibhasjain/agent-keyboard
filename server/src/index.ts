@@ -601,6 +601,8 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const internal = authedUser(req)?.id === "internal";
   const sender = internal && typeof (body as { sender?: unknown }).sender === "string" ? String((body as { sender?: unknown }).sender) : authedUser(req)?.email;
   if (sender) lastSender.set(site.id, sender);
+  const from = req.header("origin");
+  if (from && (STATIC_ORIGINS.has(from) || sandboxForOrigin(from))) lastOrigin.set(site.id, from);
   if (!internal) publicOrigin = `${/^(localhost|127\.)/.test(req.get("host") ?? "") ? "http" : "https"}://${req.get("host")}`;
   const cron = internal && body.cron === true;
   const freshCron = cron && body.freshCron === true;
@@ -737,6 +739,9 @@ app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
 const lastSender = new Map<string, string>();
 // The origin the bar talks to this server on (the redirect URI for MCP sign-ins when AK_PUBLIC_URL is unset).
 let publicOrigin = "";
+// The page origin the site's latest message came from (its real address, which on a hosted
+// Sprite isn't site.domain), so an MCP sign-in returns there.
+const lastOrigin = new Map<string, string>();
 
 /**
  * Spec 22: the agent connects, lists and disconnects OAuth MCP servers for the
@@ -773,7 +778,7 @@ app.post("/sites/:siteId/mcp-servers", authed, async (req, res) => {
   const path = typeof page === "string" && page.startsWith("/") && !page.startsWith("//") ? page : "/";
   try {
     res.json(await startSignIn({
-      siteKey: o.key, siteId: o.site.id, url, name: name as string | undefined, origin, back: `https://${o.site.domain}${path}`,
+      siteKey: o.key, siteId: o.site.id, url, name: name as string | undefined, origin, back: `${lastOrigin.get(o.site.id) ?? `https://${o.site.domain}`}${path}`,
       clientId: typeof client_id === "string" && client_id ? client_id : undefined,
       clientSecret: typeof client_secret === "string" && client_secret ? client_secret : undefined,
     }));
