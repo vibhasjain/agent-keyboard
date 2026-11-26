@@ -170,4 +170,15 @@
 /* data-accent="rainbow": the accent cycles like the bar's (--ak-accent is registered in the widget's index.ts) */
 .akn.akn-rainbow { animation: akn-accent-cycle 8s linear infinite; }
 @keyframes akn-accent-cycle { 0%,100% { --ak-accent: #ff4f7f; } 20% { --ak-accent: #ff7a33; } 30% { --ak-accent: #e6b422; } 40% { --ak-accent: #22b45e; } 60% { --ak-accent: #3d93ff; } 80% { --ak-accent: #a36bff; } }
-@media (prefers-reduced-motion: reduce) { .akn.akn-rainbow { animation: none; } }
+/* ...and accent text drifts a rainbow left to right, like the bar's */
+.akn-rainbow .akn-new, .akn-rainbow .akn-ref, .akn-rainbow .akn-mention-opt[aria-selected='true'] {
+  background: linear-gradient(90deg,#ff4f7f,#ff7a33,#22b45e,#3d93ff,#a36bff,#ff4f7f) 0 0 / 200% 100%;
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  animation: akn-rainbow 8s linear infinite;
+}
+.akn-rainbow .akn-new:hover { /* keep the hover tint under the rainbow (.akn-new:hover sets background !important) */
+  background: linear-gradient(90deg,#ff4f7f,#ff7a33,#22b45e,#3d93ff,#a36bff,#ff4f7f) 0 0 / 200% 100%, #211f1c !important;
+  -webkit-background-clip: text, padding-box !important; background-clip: text, padding-box !important;
+}
+@keyframes akn-rainbow { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .akn.akn-rainbow, .akn-rainbow .akn-new, .akn-rainbow .akn-ref, .akn-rainbow .akn-mention-opt { animation: none; } }
