@@ -795,7 +795,7 @@ app.post("/sites/:siteId/archive", authed, async (req, res) => {
 // ─── moving a site's context to another instance (Notes spec 19, migrate.ts) ──
 /** The owner approves sending one site's notes, memory and settings to `return`
  *  (the managed control plane's callback), which gets a single-use export token. */
-app.get("/export-consent", (req, res) => {
+app.get("/export-consent", async (req, res) => {
   const js = (v: string) => JSON.stringify(v).replace(/</g, "\\u003c");
   const site = getSite(String(req.query.site ?? ""));
   let to: URL | null = null;
@@ -807,6 +807,16 @@ app.get("/export-consent", (req, res) => {
     return;
   }
   const esc = (v: string) => v.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  // One tap: the site's own bar is usually signed in already, so approve there (#ak_export,
+  // widget/src/index.ts; it comes back here with ?form=1 when it isn't). Only if the site is up
+  // and its page carries the bar; otherwise sign in on this page.
+  const page = req.query.form || !site.domain ? "" : await fetch(`https://${site.domain}/`, { signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.text() : ""), () => "");
+  if (page.includes("widget.js") && page.includes(site.id)) {
+    const bar = `https://${site.domain}/#ak_export=${encodeURIComponent(to.href)}`;
+    res.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=${esc(bar)}">
+<title>Agent Keyboard — move ${esc(site.id)}</title><p style="font:14px ui-monospace,monospace">Opening <a href="${esc(bar)}">${esc(site.domain)}</a>…</p>`);
+    return;
+  }
   res.type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex"><title>Agent Keyboard — move ${esc(site.id)}</title>

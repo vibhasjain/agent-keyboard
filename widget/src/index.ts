@@ -3,7 +3,7 @@
 // Renders a collapsed bar synchronously; makes ZERO network requests at boot
 // unless there is a persisted active job AND a stored session to re-attach with.
 
-import { consumeHandoff, consumeInviteToken, getPendingInvite, hasPendingHandoff, hasStoredSession, initAuth, redeemHandoff } from './auth'
+import { consumeHandoff, consumeInviteToken, getPendingInvite, getToken, hasPendingHandoff, hasStoredSession, initAuth, redeemHandoff } from './auth'
 import { screenStream } from './api'
 import { mountBar } from './bar'
 import { CONFIG, initConfig, resolveTheme, shouldMountHere } from './config'
@@ -246,6 +246,7 @@ function mount(): void {
     patchUi({ mode: 'expanded' })
     void discoverJobs()
   })
+  if (exportReturn) void approveExport(exportReturn)
 
   // Page-controlled visibility. hide() collapses the transcript FIRST: when
   // expanded, chat.ts holds a body scroll lock (position:fixed), and hiding
@@ -337,6 +338,24 @@ function mount(): void {
   }
 }
 
+// Moving this site to another instance (spec 19): its server's consent link lands here as
+// #ak_export=<return URL>. Signed in, approving is one tap; otherwise (or if it fails) the
+// server's password page takes over.
+let exportReturn = ''
+async function approveExport(ret: string): Promise<void> {
+  const site = encodeURIComponent(CONFIG.site)
+  const to = new URL(ret)
+  if (to.protocol !== 'https:') return // never javascript: or the like
+  const form = `${CONFIG.api}/export-consent?form=1&site=${site}&return=${encodeURIComponent(ret)}`
+  const token = await getToken()
+  if (token && !confirm(`Move this site's notes, memory and settings to ${to.host}? Only if you started this move.`)) return
+  const r = token && (await fetch(`${CONFIG.api}/sites/${site}/export-token`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => null))
+  const t = r && r.ok && ((await r.json()) as { token?: string }).token
+  if (!t) return void (location.href = form)
+  to.search = new URLSearchParams({ token: t, origin: CONFIG.api, site: CONFIG.site }).toString()
+  location.href = to.href
+}
+
 ;(function boot(): void {
   if (window.__agentKeyboard) return
   const script = document.currentScript as HTMLScriptElement | null
@@ -350,6 +369,11 @@ function mount(): void {
   if (!shouldMountHere(script)) return
   consumeInviteToken() // stash + strip any invite/recovery token from the URL hash
   consumeHandoff() // …or a sandbox sign-in handoff
+  const ex = location.hash.match(/^#ak_export=([^&]+)/) // …or a move's approval
+  if (ex) {
+    exportReturn = decodeURIComponent(ex[1]!)
+    history.replaceState(null, '', location.pathname + location.search)
+  }
   window.__agentKeyboard = true
   if (document.body) mount()
   else document.addEventListener('DOMContentLoaded', mount, { once: true })
