@@ -593,11 +593,12 @@ export function mountBar(shadow: ShadowRoot): void {
   // (it opens the site signed in) and teammates from their join link, so no form.
   const managedFooter = el('div', 'ak-managed-foot', (n) =>
     n.append(
+      el('div', 'ak-setpw-label', (d) => (d.textContent = 'Open this site again from Agent Keyboard to sign back in.')),
       el('a', 'ak-managed-go', (a) => {
         a.href = RECOVER_URL
         a.target = '_blank'
         a.rel = 'noopener'
-        a.textContent = 'Sign in from Your sites'
+        a.textContent = 'Go to Agent Keyboard'
       }),
       el('div', 'ak-setpw-label', (d) => (d.textContent = 'Teammate? Ask the owner for a new invite link.')),
     ),
