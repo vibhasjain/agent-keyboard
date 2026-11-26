@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 const root = await mkdtemp(join(tmpdir(), "ak-policy-"));
 process.env.AGENT_DATA_DIR = root;
 process.env.HOME = root;
+process.env.SKILLS_SRC_DIR = root; // keepTranscripts only runs where the skills source exists (the image)
 process.env.SITES = JSON.stringify([{ id: "test", repo: "https://example.com/test.git", branch: "main", domain: "test.example" }]);
 const { prepareConversation, conversationIdFor, sessionIdFor, rotateConversation } = await import("../claude.js");
 const { defaultHarness, writeLastUsage, loadHarness, fallbackHarness } = await import("../harness.js");
@@ -52,4 +54,25 @@ assert.equal(h.settings.maxBudgetUsd, 2);
 assert.equal(h.settings.idleRotateMinTokens, 1000);
 assert.equal(h.warnings.length, 2);
 assert.equal(fallbackHarness(h.settings).settings.maxContextTokens, 70000);
+// A marker whose transcript the CLI cleaned up is not resumable (resuming it failed every message).
+const { markerPathFor, sessionFileExists } = await import("../claude.js");
+const gone = "site:test:page:gone";
+await mkdir(dirname(markerPathFor(gone)), { recursive: true });
+await writeFile(markerPathFor(gone), sessionIdFor(gone));
+assert.equal(sessionFileExists(checkoutPath("test"), sessionIdFor(gone)), false);
+assert.equal(sessionFileExists(checkoutPath("test"), sessionIdFor(old)), true);
+// Boot keeps transcripts: adds the retention, keeps other settings, never overrides a set value or a broken file.
+const { keepTranscripts } = await import("../skills.js");
+const cli = join(root, "cli/settings.json");
+keepTranscripts(cli);
+assert.deepEqual(JSON.parse(readFileSync(cli, "utf8")), { cleanupPeriodDays: 3650 });
+writeFileSync(cli, JSON.stringify({ theme: "dark" }));
+keepTranscripts(cli);
+assert.deepEqual(JSON.parse(readFileSync(cli, "utf8")), { theme: "dark", cleanupPeriodDays: 3650 });
+writeFileSync(cli, JSON.stringify({ cleanupPeriodDays: 7 }));
+keepTranscripts(cli);
+assert.equal(JSON.parse(readFileSync(cli, "utf8")).cleanupPeriodDays, 7);
+writeFileSync(cli, "{broken");
+assert.throws(() => keepTranscripts(cli));
+assert.equal(readFileSync(cli, "utf8"), "{broken");
 console.log("session-policy-check OK");

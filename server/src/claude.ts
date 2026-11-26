@@ -242,7 +242,9 @@ export function markerPathFor(conversationId: string): string {
  *  ground truth for create-vs-resume. The marker is only written after a
  *  turn's result, so a first turn killed mid-flight leaves jsonl-but-no-marker
  *  and every later spawn with --session-id fails "already in use" forever
- *  (this bricked makemepixels for 10 days). Path mirrors the CLI's project-dir
+ *  (this bricked makemepixels for 10 days). The marker alone never means resume:
+ *  it outlives a transcript the CLI cleaned up, and resuming that failed every
+ *  message on estherfell /recipes. Path mirrors the CLI's project-dir
  *  convention (cwd, non-alnum → "-"); cwds are fixed per site so it's stable. */
 export function sessionFileExists(cwd: string, sessionId: string): boolean {
   const proj = cwd.replace(/[^a-zA-Z0-9]/g, "-");
@@ -886,7 +888,7 @@ export async function* runMessageJob(
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
-    let resume = existsSync(marker) || sessionFileExists(dir, sessionId);
+    let resume = sessionFileExists(dir, sessionId);
     const prompt = handoff + stopNote(`${site.id}/${pageSlug}`) + buildPrompt(site, opts);
 
     // Per-site harness settings (model / effort / permission mode — see
@@ -1199,7 +1201,7 @@ export async function* runStreamingSession(
     const sessionId = sessionIdFor(conversationId);
     const marker = markerPathFor(conversationId);
     mkdirSync(CONVERSATIONS_DIR, { recursive: true });
-    const resume = existsSync(marker) || sessionFileExists(dir, sessionId);
+    const resume = sessionFileExists(dir, sessionId);
     const prompt = handoff + stopNote(`${site.id}/${pageSlug}`) + buildPrompt(site, opts);
     console.log(
       `[harness] site=${site.id}${pageSlug ? `/${pageSlug}` : ""} streaming-session model=${harness.settings.model ?? "default"} effort=${harness.settings.effort ?? "default"}${site.guest ? " guest" : ""}`,

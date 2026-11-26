@@ -83,7 +83,9 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   The widget hand-rolls GoTrue REST (no supabase-js) and stores its session under
   `localStorage['agent-keyboard-auth']`.
 - **Durability** — Fly volume mounted at `/data` (= `HOME`) holds the per-site checkouts (fixed cwd
-  paths so Claude Code session hashes stay stable) and the session JSONLs (memory + compaction). One
+  paths so Claude Code session hashes stay stable) and the session JSONLs (memory + compaction; boot sets the CLI's
+  `cleanupPeriodDays` to 3650 so it stops deleting them after 30 idle days, and a session is resumed only when
+  its JSONL exists, never from the marker alone). One
   machine holds the in-process job registry + per-site mutex. With `IDLE_STOP_MINUTES` set (15 in
   `server/fly.toml`) the server exits after that long with no request and no queued or running job
   (`startIdleStop`), the machine stops, and Fly starts it on the next request. Fly's own auto-stop

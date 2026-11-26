@@ -45,7 +45,7 @@ import { mintRealtimeToken } from "./realtime.js";
 import { browserTasksRouter, closeAllBrowserTasks } from "./browser.js";
 import { ringRouter } from "./ring.js";
 import { runChecks, setupRouter } from "./setup.js";
-import { seedCodexConfig, seedSkills } from "./skills.js";
+import { keepTranscripts, seedCodexConfig, seedSkills } from "./skills.js";
 import {
   startJob,
   tail,
@@ -1534,6 +1534,11 @@ const httpServer = app.listen(port, () => {
         .catch((e) => console.error(`[boot] requeue ${row.job_id} failed`, String(e)));
     }
   })().catch((e) => console.error("[boot] job sweep failed", e));
+  try {
+    keepTranscripts();
+  } catch (e) {
+    console.error("[boot] could not set transcript retention", e);
+  }
   void seedSkills().catch((e) => console.error("[boot] skill seed failed", e));
   void seedCodexConfig().catch((e) => console.error("[boot] codex config seed failed", e));
   // "Update yourself" pushes to the fork: warn now, not mid-request, if GH_TOKEN can't.

@@ -4,7 +4,7 @@
 // skills the agent installs itself persist across deploys.
 
 import { copyFile, cp, mkdir, readdir, rm } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CLAUDE_HOME } from "./claude.js";
 
@@ -39,6 +39,24 @@ function inRelayRegistry(): boolean {
   } catch {
     return false;
   }
+}
+
+// The CLI deletes transcripts idle for 30 days (its cleanupPeriodDays default), and
+// a conversation's memory is its transcript: a page left alone for a month lost its
+// chat. Keep them, unless the instance's owner set their own value. Sync, so it is
+// in place before the first CLI process of this boot can run the cleanup.
+export function keepTranscripts(path = join(CLAUDE_HOME, ".claude", "settings.json")): void {
+  if (!existsSync(SKILLS_SRC)) return; // local dev: leave the developer's own Claude settings alone
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(readFileSync(path, "utf8"));
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; // unreadable: don't overwrite it
+  }
+  if (settings.cleanupPeriodDays) return;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, JSON.stringify({ ...settings, cleanupPeriodDays: 3650 }, null, 2) + "\n");
+  console.log(`[boot] transcripts kept: cleanupPeriodDays=3650 in ${path}`);
 }
 
 // The headless Codex CLI config is repo-owned too: server/codex-config.toml
