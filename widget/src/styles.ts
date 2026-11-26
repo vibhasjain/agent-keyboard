@@ -254,6 +254,12 @@ button::-moz-focus-inner{ border:0; }
   border:1px solid var(--ak-line); border-radius:8px; padding:4px 10px;
 }
 .ak-owner-foot{ display:flex; justify-content:flex-end; }
+.ak-managed-foot{ display:flex; flex-direction:column; align-items:center; gap:6px; padding:8px 0; text-align:center; }
+.ak-managed-go{
+  padding:9px 16px; border-radius:999px; text-decoration:none; transition:color .2s ease, border-color .2s ease;
+  font-family:var(--ak-mono); font-size:13px; color:var(--ak-ink); border:1px solid var(--ak-line);
+}
+.ak-managed-go:hover, .ak-managed-go:focus-visible{ color:var(--ak-accent); border-color:var(--ak-accent); }
 .ak-ov-foot > .ak-auth-footer{ box-shadow:none; background:transparent; }
 
 /* ---- composer (Claude Code terminal input box) ---- */

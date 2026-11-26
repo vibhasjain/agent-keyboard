@@ -589,13 +589,27 @@ export function mountBar(shadow: ShadowRoot): void {
     ),
   )
 
+  // Managed (hosted) instances: owners sign in from the dashboard's Your sites
+  // (it opens the site signed in) and teammates from their join link, so no form.
+  const managedFooter = el('div', 'ak-managed-foot', (n) =>
+    n.append(
+      el('a', 'ak-managed-go', (a) => {
+        a.href = RECOVER_URL
+        a.target = '_blank'
+        a.rel = 'noopener'
+        a.textContent = 'Sign in from Your sites'
+      }),
+      el('div', 'ak-setpw-label', (d) => (d.textContent = 'Teammate? Ask the owner for a new invite link.')),
+    ),
+  )
+
   pill.append(shimmer, streamRow)
   bar.append(pill)
   zone.append(miniBtn, bar, stash)
   shadow.appendChild(zone)
 
   const composer = makeComposer(() => chat.refresh())
-  stash.append(composer.el, loginFooter, setpwFooter, ownerFooter)
+  stash.append(composer.el, loginFooter, setpwFooter, ownerFooter, managedFooter)
 
   // Back to the corner. A hidden-but-focused composer keeps :host(.ak-kbd) on after
   // the transcript closes, which strands the rectangle mid-screen — release focus
@@ -807,11 +821,12 @@ export function mountBar(shadow: ShadowRoot): void {
   const footerControl = (): HTMLElement => {
     if (getState().auth === 'authed') return composer.el
     if (getPendingInvite()) return setpwFooter
+    if (RECOVER_URL) return managedFooter
     return isGuestDemo() && !ownerLogin ? ownerFooter : loginFooter
   }
   const placeFooter = (view: View) => {
     const active = view === 'expanded' ? footerControl() : null
-    for (const node of [composer.el, loginFooter, setpwFooter, ownerFooter]) {
+    for (const node of [composer.el, loginFooter, setpwFooter, ownerFooter, managedFooter]) {
       const target = node === active ? chat.footerEl : stash
       if (node.parentNode === target) continue
       const wasFocused = !!shadow.activeElement && node.contains(shadow.activeElement)
