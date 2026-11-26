@@ -275,6 +275,7 @@ export interface GitSummary {
   headSha: string;
   branch: string;
   dirty: boolean; // uncommitted changes left in the tree
+  subject?: string; // HEAD's commit title, when HEAD moved
 }
 
 /**
@@ -301,8 +302,11 @@ export async function gitSummary(
   const status = (await git(dir, ["status", "--porcelain"]).catch(() => "")).trim();
   // Ignore our own staging dir when judging "dirty".
   const dirtyLines = status.split("\n").filter((l) => l.trim() && !/\s\.tmp\//.test(l));
+  const changed = headSha !== preJobSha;
+  const subject = changed ? (await git(dir, ["log", "-1", "--format=%s"]).catch(() => "")).trim() : "";
   return {
-    changed: headSha !== preJobSha,
+    changed,
+    ...(subject ? { subject } : {}),
     pushed: ahead === "",
     headSha,
     branch: pushBranch,

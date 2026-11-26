@@ -70,6 +70,7 @@ import {
   type JobRow,
 } from "./jobstore.js";
 import { openSse, startKeepalive, writeFrame } from "./sse.js";
+import { readEvents, setOnHookDisabled, setWebhook } from "./events.js";
 import { startBrowserDetection, streamScreen, withBrowserStatus } from "./screen.js";
 
 const SERVER_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -627,6 +628,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
     conversationId,
     sessionId,
     resumeCount: 0,
+    sender: cron ? "cron" : sender,
   });
   await streamJobTail(req, res, job);
 });
@@ -678,6 +680,41 @@ app.post("/sites/:siteId/sandboxes", authed, async (req, res) => {
 });
 
 /** A live site's open sandboxes, for the bar's switcher (empty inside a sandbox). */
+/** The site's events after `after` (Notes spec 21); `wait` (0–50 s) long-polls for the next one.
+ *  Owners, the internal secret and the Cloud relay only: events carry asks and replies. */
+function eventsSite(req: Request, res: Response) {
+  const site = getSite(req.params.siteId ?? "");
+  if (!site) {
+    res.status(404).json({ error: "unknown site" });
+    return null;
+  }
+  if (denySite(req, res, site.id)) return null;
+  const user = authedUser(req);
+  if (!user || !(user.id === "internal" || user.id === "relay" || isOwnerEmail(user.email))) {
+    res.status(403).json({ error: "only the site's owner can use its events and webhooks" });
+    return null;
+  }
+  return site;
+}
+app.get("/sites/:siteId/events", authed, async (req, res) => {
+  const site = eventsSite(req, res);
+  if (!site) return;
+  const wait = Math.max(0, Math.min(50, Number(req.query.wait) || 0));
+  res.json(await readEvents(site.id, String(req.query.after ?? ""), wait));
+});
+/** Add or remove one webhook (`{url, events?, remove?}`); a new hook's secret is returned once. */
+app.post("/sites/:siteId/webhooks", authed, async (req, res) => {
+  const site = eventsSite(req, res);
+  if (!site) return;
+  const { url, events, remove } = (req.body ?? {}) as { url?: unknown; events?: unknown; remove?: unknown };
+  if (typeof url !== "string" || !url) {
+    res.status(400).json({ error: "url required" });
+    return;
+  }
+  const out = await setWebhook(site.id, url, Array.isArray(events) && events.length ? events.map(String) : ["*"], remove === true);
+  res.status(out.error ? 400 : 200).json(out);
+});
+
 app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
   if (!site) {
@@ -787,7 +824,7 @@ app.post("/sites/:siteId/archive", authed, async (req, res) => {
     res.status(403).json({ error: `only the sandbox's creator (${sb.createdBy ?? "unknown"}) or the site owner can archive it` });
     return;
   }
-  await archiveSandbox(site);
+  await archiveSandbox(site, by);
   void acquireSiteLock(site.id).then((release) => removeCheckout(site.id).catch(() => {}).finally(release));
   res.json({ archived: sb.id });
 });
@@ -1028,6 +1065,7 @@ app.post("/sites/:siteId/jobs/:jobId/messages", authed, async (req, res) => {
   const ok = appendToJob(
     req.params.jobId ?? "",
     buildPrompt(site, { text: text + notesNote(site.id, text) + pathScopeNote(user, site.id), page: "/", attachmentPaths, sender: user?.email }),
+    { ask: text, sender: user?.email },
   );
   if (!ok) {
     res.status(409).json({ error: "job not accepting messages" });
@@ -1533,6 +1571,16 @@ const httpServer = app.listen(port, () => {
     ).catch((e) => console.error("[sandbox] prune failed", e));
   sandboxPrune();
   setInterval(sandboxPrune, 6 * 3_600_000).unref();
+  setOnHookDisabled(async (siteId, url) =>
+    addTeamNote(siteId, await conversationIdFor(siteId, ""), {
+      id: randomUUID(),
+      role: "user",
+      text: `The webhook ${url} failed 20 times in a row, so it was turned off ("disabled": true in settings). Remove that key to turn it back on.`,
+      tools: [],
+      ts: new Date().toISOString(),
+      sender: "Agent Keyboard",
+    }).catch(() => {}),
+  );
   // Purge stale staged uploads, then reconcile any jobs the last process left
   // "running" (machine slept / crashed mid-job). Both tolerate an unreachable
   // Supabase / missing checkouts — log and continue, never block serving.
