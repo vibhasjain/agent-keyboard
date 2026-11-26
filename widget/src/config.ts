@@ -115,15 +115,15 @@ function luminance(rgb: ArrayLike<number>): number {
  *  background is dark, plus its accent: data-accent, else the host's brand
  *  colour (common CSS custom properties, then <meta name="theme-color">),
  *  pushed toward white (dark bar) or black (light bar) until it reads at 4.5:1.
- *  accent '' = keep the neutral default. */
-export function resolveTheme(): { light: boolean; accent: string } {
+ *  accent '' = keep the neutral default. `dark` resolves for a dark surface (Notes). */
+export function resolveTheme(dark = false): { light: boolean; accent: string } {
   const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
   if (!ctx) return { light: false, accent: '' }
   const root = getComputedStyle(document.documentElement)
   const body = getComputedStyle(document.body)
   // First opaque background of body/html; transparent all the way = browser white.
   const bg = [body.backgroundColor, root.backgroundColor].map((c) => toRgba(ctx, c)).find((c) => c && c[3] >= 128)
-  const light = CONFIG.theme ? CONFIG.theme === 'light' : !!bg && luminance(bg) < 0.18
+  const light = !dark && (CONFIG.theme ? CONFIG.theme === 'light' : !!bg && luminance(bg) < 0.18)
   const barLum = light ? luminance([247, 245, 240]) : luminance([10, 10, 10]) // --ak-bg
   const target = light ? 0 : 255
   const vars = ['--brand', '--primary', '--color-primary', '--accent', '--color-accent']

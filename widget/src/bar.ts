@@ -7,7 +7,7 @@
 
 import { api, HttpError } from './api'
 import { getPendingInvite, getToken, login, requestRecovery, setPasswordWithToken } from './auth'
-import { CONFIG, RECOVER_URL, lsKey } from './config'
+import { CONFIG, RECOVER_URL, lsKey, resolveTheme } from './config'
 import { isGuestDemo } from './guest-demo'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
@@ -75,7 +75,7 @@ function filesFromTransfer(dt: DataTransfer | null): File[] {
 
 // The notes editor is its own bundle (Milkdown, ~240 KB gzip) — fetched from the
 // server the first time Notes opens, never on page load.
-type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void; note?: string }) => Promise<void> }
+type NotesApi = { open: (o: { api: string; site: string; getToken: typeof getToken; onClose?: () => void; note?: string; accent?: string }) => Promise<void> }
 
 let notesBundle: Promise<NotesApi> | null = null
 function loadNotes(): Promise<NotesApi> {
@@ -341,6 +341,8 @@ function makeComposer(onTeamNote: () => void): Composer {
           site: CONFIG.site,
           getToken,
           note,
+          // Notes is always dark, so resolve the accent for a dark surface ('' = the bar's neutral white).
+          accent: CONFIG.accent === 'rainbow' ? 'rainbow' : resolveTheme(true).accent || '#fff',
           onClose: () => {
             host.style.visibility = ''
             // Not on phones: a programmatic focus there pops the keyboard (or half-focuses

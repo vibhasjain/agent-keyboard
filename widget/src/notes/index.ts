@@ -33,6 +33,8 @@ export interface NotesOptions {
   onClose?: () => void
   /** Open straight to this note (a shared ?ak-note= link). */
   note?: string
+  /** The bar's accent, resolved for a dark surface ('rainbow' = cycling; unset = amber). */
+  accent?: string
 }
 
 const SAVE_DELAY_MS = 300
@@ -254,6 +256,8 @@ export async function open(opts: NotesOptions): Promise<void> {
 
   // -- DOM --
   const root = h('div', 'akn')
+  if (opts.accent === 'rainbow') root.classList.add('akn-rainbow')
+  if (opts.accent) root.style.setProperty('--ak-accent', opts.accent === 'rainbow' ? '#3d93ff' : opts.accent)
   root.setAttribute('role', 'dialog')
   root.setAttribute('aria-label', 'Notes')
   // Keep Escape (Milkdown's menus use it) from reaching the bar's own Esc handling.
