@@ -20,6 +20,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { v5 as uuidv5 } from "uuid";
 import { SITES, getSite, type Site } from "./sites.js";
+import { isOwnerEmail } from "./auth.js";
 import { randomUUID } from "node:crypto";
 import {
   DATA_DIR,
@@ -82,6 +83,13 @@ const SESSION_MAX_MS = envInt("AK_SESSION_MAX_MS", 3_600_000); // absolute sessi
 export const CLAUDE_HOME = process.env.HOME ?? DATA_DIR;
 
 const STATE_ROOT = join(DATA_DIR, "agent-keyboard");
+
+// Spec 16: a managed Sprite whose owner turned on "use your other sites" gets
+// ~/ak-mcp.json (the Agent Keyboard MCP; the Sprite's egress adds the token).
+// Only owners' turns load it: teammates' and cron turns spawn without it.
+export const AK_MCP = join(CLAUDE_HOME, "ak-mcp.json");
+export const mcpFor = (sender?: string, cron?: boolean): boolean =>
+  !!sender && !cron && isOwnerEmail(sender) && existsSync(AK_MCP);
 
 // ─── guest fence ─────────────────────────────────────────────────────────────
 // A site marked guest:true in SITES is shared with invited people. Its agent
@@ -380,6 +388,7 @@ function streamArgs(
   usage: TurnUsage | null,
   streaming: boolean,
   cron = false,
+  mcp = false,
 ): string[] {
   return [
     ...(resume ? ["--resume", sessionId] : ["--session-id", sessionId]),
@@ -402,6 +411,7 @@ function streamArgs(
     // load user-level settings/skills: ~/.claude/skills on the volume holds the
     // seeded skills (server/skills/) plus anything the agent installs itself.
     "--strict-mcp-config",
+    ...(mcp ? ["--mcp-config", AK_MCP] : []),
     "--setting-sources",
     "user,project",
     "--append-system-prompt",
@@ -916,7 +926,7 @@ export async function* runMessageJob(
       const subagents = makeSubagentTracker();
 
       const { child: c, done } = spawnClaude(
-        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT, opts.cron),
+        streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, STREAMING_INPUT, opts.cron, mcpFor(opts.sender, opts.cron)),
         dir,
         (e) => {
           if (stopReason) return;
@@ -1290,7 +1300,7 @@ export async function* runStreamingSession(
     const checklist = makeTaskChecklist();
     const subagents = makeSubagentTracker();
     const spawned = spawnClaude(
-      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true, opts.cron),
+      streamArgs(prompt, sessionId, resume, site, pushBranch, harness, lastUsage, true, opts.cron, mcpFor(opts.sender, opts.cron)),
       dir,
       (e) => {
         if (stopReason) return;
