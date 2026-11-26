@@ -191,5 +191,5 @@
   -webkit-background-clip: text, padding-box; background-clip: text, padding-box; -webkit-text-fill-color: transparent;
   animation: akn-rainbow-wide 30s linear infinite;
 }
-@keyframes akn-rainbow-wide { to { background-position: -1200px 0, 0 0; } }
+@keyframes akn-rainbow-wide { to { background-position: 1200px 0, 0 0; } }
 @media (prefers-reduced-motion: reduce) { .akn.akn-rainbow, .akn-rainbow .akn-new, .akn-rainbow .akn-ref, .akn-rainbow .akn-mention-opt, .akn-rainbow .milkdown .ProseMirror :is(a, code) { animation: none; } }
