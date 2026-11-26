@@ -253,6 +253,7 @@ button::-moz-focus-inner{ border:0; }
   background:color-mix(in srgb,var(--ak-bg) 96%,transparent);
   border:1px solid var(--ak-line); border-radius:8px; padding:4px 10px;
 }
+.ak-owner-foot{ display:flex; justify-content:flex-end; }
 .ak-ov-foot > .ak-auth-footer{ box-shadow:none; background:transparent; }
 
 /* ---- composer (Claude Code terminal input box) ---- */

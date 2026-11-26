@@ -8,6 +8,7 @@
 import { api, HttpError } from './api'
 import { getPendingInvite, getToken, login, requestRecovery, setPasswordWithToken } from './auth'
 import { CONFIG, RECOVER_URL, lsKey } from './config'
+import { isGuestDemo } from './guest-demo'
 import { clear as clearNode, el, icon, on, show } from './dom'
 import { getQueued, start } from './jobstore'
 import { attachMentions } from './mentions'
@@ -571,6 +572,22 @@ export function mountBar(shadow: ShadowRoot): void {
   // has in that slot.
   const loginFooter = el('div', 'ak-auth-footer', (n) => n.appendChild(loginRow))
   const setpwFooter = el('div', 'ak-auth-footer', (n) => n.appendChild(setpwRow))
+  // On a tour bar (agentkeyboard.com) visitors can't sign in, so the form hides
+  // behind this link; the owner taps it to get the form.
+  let ownerLogin = false
+  const ownerFooter = el('div', 'ak-owner-foot', (n) =>
+    n.appendChild(
+      el('button', 'ak-lg-forgot', (b) => {
+        b.type = 'button'
+        b.textContent = 'Owner sign-in'
+        b.onclick = () => {
+          ownerLogin = true
+          render()
+          emailInput.focus()
+        }
+      }),
+    ),
+  )
 
   pill.append(shimmer, streamRow)
   bar.append(pill)
@@ -578,7 +595,7 @@ export function mountBar(shadow: ShadowRoot): void {
   shadow.appendChild(zone)
 
   const composer = makeComposer(() => chat.refresh())
-  stash.append(composer.el, loginFooter, setpwFooter)
+  stash.append(composer.el, loginFooter, setpwFooter, ownerFooter)
 
   // Back to the corner. A hidden-but-focused composer keeps :host(.ak-kbd) on after
   // the transcript closes, which strands the rectangle mid-screen — release focus
@@ -783,11 +800,12 @@ export function mountBar(shadow: ShadowRoot): void {
   // landing); signed in, the composer.
   const footerControl = (): HTMLElement => {
     if (getState().auth === 'authed') return composer.el
-    return getPendingInvite() ? setpwFooter : loginFooter
+    if (getPendingInvite()) return setpwFooter
+    return isGuestDemo() && !ownerLogin ? ownerFooter : loginFooter
   }
   const placeFooter = (view: View) => {
     const active = view === 'expanded' ? footerControl() : null
-    for (const node of [composer.el, loginFooter, setpwFooter]) {
+    for (const node of [composer.el, loginFooter, setpwFooter, ownerFooter]) {
       const target = node === active ? chat.footerEl : stash
       if (node.parentNode === target) continue
       const wasFocused = !!shadow.activeElement && node.contains(shadow.activeElement)
@@ -825,7 +843,7 @@ export function mountBar(shadow: ShadowRoot): void {
     if (job.phase === 'error') return job.message
     if (ui.voice === 'live') return 'Listening…'
     if (ui.voice === 'connecting') return 'Connecting mic…'
-    return getState().auth === 'authed' ? 'Whatsup?' : 'Log in'
+    return getState().auth === 'authed' ? 'Whatsup?' : isGuestDemo() ? 'Try it' : 'Log in'
   }
 
   const render = () => {

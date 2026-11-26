@@ -85,7 +85,7 @@ export function loadGuestDemo(): Promise<void> {
         {
           id: id(),
           role: 'assistant',
-          text: 'The scripted tour could not load. Open the top-left menu to sign in as the owner, or refresh to try the tour again.',
+          text: 'The scripted tour could not load. Owners can tap Owner sign-in below, or refresh to try the tour again.',
         },
       ]
       emit()
