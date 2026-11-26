@@ -89,6 +89,7 @@ headers).
 | `GET /jobs/:jobId/stream` | Re-attach to a running or finished job; replays current state, then live frames. |
 | `GET /jobs?siteId=` | List active jobs plus a short finished window for a site. |
 | `GET /sites/:id/screen` | View-only live browser screencast. The authenticated SSE stream stays open while Chromium is absent and is torn down when the viewer closes. |
+| `GET /sites/:id/events` | Site events after `?after=<id>` (`job.done`, `job.failed`, `push`, `sandbox.created`/`published`/`archived`; envelope `{id,type,site,at,data}`, the id is the cursor); `?wait=0..50` long-polls → `{events, cursor}`. Owners, the internal secret and the Cloud relay only. `POST /sites/:id/webhooks` `{url, events?, remove?}` adds or removes one webhook (the secret is returned once). Not used by the bar itself. |
 | `POST /sites/:id/restart` | Clean slate: stop active work, discard local checkout changes, reset to latest `origin/<branch>`, and rotate to a fresh conversation. |
 | `POST /sites/:id/uploads` | Upload one attachment (multipart, field `photo` or `file`, ≤15 MB) → `{id, path}` to attach. |
 | `GET /sites/:id/conversation` | Chat history (`?limit`, `?before`) from the agent's durable session. User turns carry `sender` (the email that typed them, parsed from the server's `[Sent from … by <email>]` prompt header); the widget renders it as a color-coded name tag. |

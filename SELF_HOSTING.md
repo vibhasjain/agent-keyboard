@@ -379,6 +379,28 @@ and the provision-user flow and @mentions send branded emails.
 
 ---
 
+## Webhooks: tell other apps when something happens
+
+Ask the bar "send push events to https://…" and the agent adds a `webhooks` entry to the site's settings
+(up to 5 public https URLs; events `job.done`, `job.failed`, `push`, `sandbox.created`, `sandbox.published`,
+`sandbox.archived`, or `"*"`). Each event is a signed `POST` of `{ id, type, site, at, data }` with headers
+`X-AK-Event`, `X-AK-Delivery` (dedupe on it) and `X-AK-Signature: t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">`.
+The server generates the secret on the first event and the agent tells you. Failed deliveries are retried after 30 s,
+2 min and 10 min; after 20 failures in a row the hook is turned off. A `hooks.slack.com` URL gets a one-line
+Slack message instead. The payload carries the ask and a reply excerpt. Owners can also read events with
+`GET /sites/:id/events?after=<id>&wait=<0..50>` (it long-polls).
+
+```js
+import { createHmac, timingSafeEqual } from "node:crypto";
+// header = req.headers["x-ak-signature"], body = the raw request body (string)
+function verifyAk(secret, header, body, toleranceS = 300) {
+  const { t, v1 = "" } = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+  const want = createHmac("sha256", secret).update(`${t}.${body}`).digest("hex");
+  const fresh = Math.abs(Date.now() / 1000 - Number(t)) <= toleranceS;
+  return fresh && v1.length === want.length && timingSafeEqual(Buffer.from(v1), Buffer.from(want));
+}
+```
+
 ## A review step instead of straight-to-main
 
 By default the agent pushes to your deploy `branch`, so an accepted change goes live on the next

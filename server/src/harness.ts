@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { DATA_DIR, readDataFile, writeDataFile } from "./checkouts.js";
 import { slugifyPage } from "./sites.js";
 import { parentId } from "./sandboxes.js";
+import { isIP } from "node:net";
 
 export type PermissionMode = "bypassPermissions" | "plan" | "acceptEdits" | "default";
 
@@ -53,6 +54,7 @@ export interface HarnessSettings extends ContextSettings {
   env?: Record<string, string>;
   cron?: CronSettings | CronSettings[];
   sandbox?: "off" | "offer" | "always";
+  webhooks?: Webhook[];
 }
 
 export interface ResolvedHarness {
@@ -162,9 +164,69 @@ KNOBS.push({
   describe: `"sandbox": "off" | "offer" | "always" (default "offer"; only on sites with sandboxes enabled) — whether you offer a sandbox for bigger changes, never do, or build every change in one so nothing reaches the live branch without a review`,
 });
 
+// Site events and webhooks (events.ts): defined here so events.ts can import harness without a cycle.
+export const EVENT_TYPES = ["job.done", "job.failed", "push", "sandbox.created", "sandbox.published", "sandbox.archived"] as const;
+export type EventType = (typeof EVENT_TYPES)[number];
+export interface Webhook {
+  url: string;
+  events: string[];
+  secret?: string;
+  disabled?: boolean;
+}
+
+/** A host we may POST to: not loopback, private, link-local or otherwise internal. */
+export function isPublicHost(host: string): boolean {
+  const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!h || h === "localhost" || h.endsWith(".localhost") || h.endsWith(".internal") || h.endsWith(".local")) return false;
+  if (isIP(h) === 4) {
+    const [a, b] = h.split(".").map(Number) as [number, number];
+    return !(a === 0 || a === 10 || a === 127 || (a === 100 && b >= 64 && b < 128) || (a === 169 && b === 254) || (a === 172 && b >= 16 && b < 32) || (a === 192 && b === 168) || a >= 224);
+  }
+  if (isIP(h) === 6) return !(h === "::" || h === "::1" || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || h.startsWith("::ffff:"));
+  return true;
+}
+
+KNOBS.push({
+  key: "webhooks",
+  validate: (v, warn) => {
+    if (v === undefined || v === null) return undefined;
+    if (!Array.isArray(v)) {
+      warn(`webhooks must be an array of {"url","events"} — ignored`);
+      return undefined;
+    }
+    const out: Webhook[] = [];
+    for (const raw of v as unknown[]) {
+      const h = (raw ?? {}) as Record<string, unknown>;
+      let url: URL | null = null;
+      try {
+        url = new URL(String(h.url));
+      } catch {
+        /* rejected below */
+      }
+      if (!url || url.protocol !== "https:" || !isPublicHost(url.hostname)) {
+        warn(`webhooks: ${JSON.stringify(h.url)} must be a public https:// URL — dropped`);
+        continue;
+      }
+      const events = Array.isArray(h.events) ? h.events.map(String) : [];
+      const bad = events.filter((e) => e !== "*" && !(EVENT_TYPES as readonly string[]).includes(e));
+      if (!events.length || bad.length) {
+        warn(`webhooks[${JSON.stringify(h.url)}].events must list ${EVENT_TYPES.join(", ")} or "*"${bad.length ? ` (unknown: ${bad.join(", ")})` : ""} — dropped`);
+        continue;
+      }
+      if (out.length === 5) {
+        warn("webhooks: at most 5 — the rest are ignored");
+        break;
+      }
+      out.push({ url: url.href, events, ...(typeof h.secret === "string" && h.secret ? { secret: h.secret } : {}), ...(h.disabled === true ? { disabled: true } : {}) });
+    }
+    return out.length ? out : undefined;
+  },
+  describe: `"webhooks": [{"url": "https://…", "events": ["job.done", "push"], "secret"?: "…", "disabled"?: true}] — up to 5 public https URLs that get a signed POST for each event (${EVENT_TYPES.join(", ")}, or "*"); a hooks.slack.com URL gets a one-line Slack message instead. Payloads carry the ask and a reply excerpt, so only add one when a site owner asks (on a guest site, never from a teammate's message). Leave "secret" out: the server generates it on the first event and writes it here — read it back and tell the owner once (receivers verify X-AK-Signature "t=<unix>,v1=<hex HMAC-SHA256 of "<t>.<body>">"). A hook failing 20 times in a row is set "disabled": true; delete that key to turn it back on`,
+});
+
 // The page knob reuses the site-level validators verbatim, so an override can
 // never accept a model or effort the site knob would reject.
-function knobValidate(key: string, v: unknown, warn: (w: string) => void): unknown {
+export function knobValidate(key: string, v: unknown, warn: (w: string) => void): unknown {
   return KNOBS.find((k) => k.key === key)!.validate(v, warn);
 }
 

@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { DATA_DIR, checkoutPath, createRemoteBranch, ensureCheckout, git, lastUsed, removeCheckout, tryAcquireSiteLock, writeDataFile } from "./checkouts.js";
 import type { Site } from "./config.js";
 import { NOTES_BASE, mergeNotes } from "./notes.js";
+import { emit } from "./events.js";
 
 export interface Sandbox {
   id: string; // `<parent>--sb-<slug>`
@@ -87,7 +88,7 @@ const save = () => writeDataFile(FILE, JSON.stringify([...registry.values()], nu
 /** Close a sandbox: delete its branch, archive its notes on live, and when it
  *  was published merge them into live's notes too. Returns the notes that
  *  conflicted (live's copy kept; the sandbox's is in the archive). */
-async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>): Promise<string[]> {
+async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>, by: string, commit?: string): Promise<string[]> {
   await gh(parent.repo, `/git/refs/heads/${sb.branch}`, { method: "DELETE" }).catch(() => {});
   const slug = sb.id.split(SEP)[1]!;
   await cp(join(checkoutPath(sb.id), ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", slug), { recursive: true }).catch(() => {});
@@ -98,12 +99,19 @@ async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>): Promis
   if (conflicts.length) console.log(`[sandbox] ${sb.id}: notes kept live's copy on conflict: ${conflicts.join(", ")}`);
   Object.assign(sb, mark);
   await save();
+  void emit(sb.id, mark.publishedAt ? "sandbox.published" : "sandbox.archived", {
+    site: parent.id,
+    branch: sb.branch,
+    by,
+    ...(mark.pr ? { pr: mark.pr } : {}),
+    ...(commit ? { commit } : {}),
+  }).catch(() => {});
   return conflicts;
 }
 
 /** Archive a sandbox by hand (its creator or an owner asked): same as an idle archive. */
-export async function archiveSandbox(site: Site): Promise<void> {
-  await retire(registry.get(site.id)!, site.sandboxOf!, { abandonedAt: new Date().toISOString() });
+export async function archiveSandbox(site: Site, by: string): Promise<void> {
+  await retire(registry.get(site.id)!, site.sandboxOf!, { abandonedAt: new Date().toISOString() }, by);
 }
 
 const IDLE_DAYS = 14;
@@ -145,7 +153,7 @@ export async function pruneSandboxes(
       const release = tryAcquireSiteLock(sb.id);
       if (!release) continue;
       try {
-        await retire(sb, parent, { publishedAt: new Date(now).toISOString() });
+        await retire(sb, parent, { publishedAt: new Date(now).toISOString() }, "merged by hand");
         await removeCheckout(sb.id);
         console.log(`[sandbox] ${sb.id}: retired, its branch is already in ${parent.branch}`);
       } finally {
@@ -159,7 +167,7 @@ export async function pruneSandboxes(
       const release = tryAcquireSiteLock(sb.id);
       if (!release) continue;
       try {
-        await retire(sb, parent, { abandonedAt: new Date(now).toISOString() });
+        await retire(sb, parent, { abandonedAt: new Date(now).toISOString() }, "idle");
         await removeCheckout(sb.id);
         console.log(`[sandbox] ${sb.id}: archived after ${IDLE_DAYS} idle days`);
       } finally {
@@ -209,6 +217,7 @@ export async function createSandbox(
   };
   registry.set(sb.id, sb);
   await save();
+  void emit(sb.id, "sandbox.created", { site: parent.id, branch, by: opts.createdBy ?? "", preview_url: sb.url }).catch(() => {});
   await ensureCheckout(sandboxSite(sb.id, () => parent)!);
   const notes = (dir: string) => join(dir, ".tmp", "notes");
   await cp(notes(checkoutPath(parent.id)), notes(checkoutPath(sb.id)), { recursive: true }).catch(() => {});
@@ -293,7 +302,7 @@ export async function publishSandbox(
     const err = (await res.json().catch(() => null)) as { message?: string } | null;
     throw new Error(`GitHub couldn't merge ${pr.html_url}: ${err?.message ?? res.status} — if ${parent.branch} moved, rebase and publish again`);
   }
-  const conflicts = await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: pr.html_url });
+  const conflicts = await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: pr.html_url }, by, ((await res.json().catch(() => null)) as { sha?: string } | null)?.sha ?? sha);
   let live = false;
   for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
     const now = await liveBody(parent);

@@ -20,6 +20,8 @@ import { insertJob, updateJob, type JobStatus } from "./jobstore.js";
 import { tryAcquireSiteLock } from "./checkouts.js";
 import { withBrowserStatus } from "./screen.js";
 import { takeSandboxRedirect } from "./sandboxes.js";
+import { emit } from "./events.js";
+import { getSite } from "./sites.js";
 
 const TERMINAL = new Set<JobStatus>(["done", "error", "interrupted"]);
 const DB_THROTTLE_MS = 2_000;
@@ -70,6 +72,38 @@ interface Job {
   sessionId: string | null; //     "
   prompt: string; //               the user intent (short-form persisted for resume)
   resumeCount: number; //          how many times this lineage has auto-resumed (loop cap)
+  ask: string; //    this turn's request and who sent it ("cron" for scheduled runs), for site events
+  sender: string; //  "
+  turnStart: number; // when this turn began (duration_ms)
+}
+
+/** Site events for a finished or failed turn (Notes spec 21). Never throws. */
+function emitTurn(job: Job, failed: boolean): void {
+  const base = { job_id: job.jobId, site: job.siteId, sender: job.sender, ask: job.ask.slice(0, 300) };
+  if (failed) {
+    void emit(job.siteId, "job.failed", { ...base, error: String(job.error?.detail ?? job.error?.kind ?? "failed").slice(0, 500) }).catch(() => {});
+    return;
+  }
+  const r = job.result ?? {};
+  void emit(job.siteId, "job.done", {
+    ...base,
+    page: job.pageSlug ? `/${job.pageSlug}` : "/",
+    reply: String(r.reply ?? "").slice(0, 1000),
+    duration_ms: Date.now() - job.turnStart,
+  }).catch(() => {});
+  const git = r.git as { changed?: boolean; pushed?: boolean; headSha?: string; branch?: string; subject?: string } | undefined;
+  if (git?.changed && git.pushed && git.headSha) {
+    const repo = getSite(job.siteId)?.repo ?? "";
+    void emit(job.siteId, "push", {
+      job_id: job.jobId,
+      site: job.siteId,
+      branch: git.branch,
+      commit: git.headSha,
+      message: git.subject ?? "",
+      ...(repo.includes("github.com") ? { url: `${repo.replace(/\.git$/, "")}/commit/${git.headSha}` } : {}),
+      ask: job.ask.slice(0, 300),
+    }).catch(() => {});
+  }
 }
 
 // ─── a subscriber's frame queue (null = closed) ───────────────────────────
@@ -132,7 +166,7 @@ function schedule(): void {
       // Admission has begun but no agent-side work has happened yet. `syncing`
       // is both non-queued for API adoption and safe for boot requeue.
       job.statusLine = { phase: "syncing", detail: "Preparing the site" };
-      job.updatedAt = Date.now();
+      job.updatedAt = job.turnStart = Date.now();
       activeWorkers++;
       admitted = true;
       picked = true;
@@ -241,11 +275,13 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
         job.error = payload as Record<string, unknown>;
         job.status = "error";
         publish(job, event, payload);
+        emitTurn(job, true);
         break;
       } else if (event === "result") {
         const sandboxUrl = takeSandboxRedirect(job.siteId, job.pageSlug);
         job.result = { ...(payload as Record<string, unknown>), ...(sandboxUrl ? { sandbox_url: sandboxUrl } : {}) };
         publish(job, event, job.result);
+        emitTurn(job, false);
         if (!job.streaming) {
           job.status = "done";
           break;
@@ -261,6 +297,7 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
     job.error = { kind: "job_failed", detail: `${String((exc as Error)?.message ?? exc)}`.slice(0, 300) };
     job.status = "error";
     publish(job, "error", job.error);
+    emitTurn(job, true);
   } finally {
     // Run the generator's own finally (kills the CLI child, releases the site lock).
     try {
@@ -277,6 +314,7 @@ async function drain(job: Job, gen: AsyncGenerator<Frame>): Promise<void> {
         job.error = { kind: "job_failed", detail: "The job ended without producing a result." };
         job.status = "error";
         publish(job, "error", job.error);
+        emitTurn(job, true);
       }
     }
     closeSubscribers(job);
@@ -313,6 +351,7 @@ export async function startJob(opts: {
   conversationId?: string | null;
   sessionId?: string | null;
   resumeCount?: number;
+  sender?: string;
 }): Promise<Job> {
   const now = Date.now();
   const jobId = `job-${now}${randomBytes(2).toString("hex")}`;
@@ -344,6 +383,9 @@ export async function startJob(opts: {
     sessionId: opts.sessionId ?? null,
     prompt: opts.prompt,
     resumeCount: opts.resumeCount ?? 0,
+    ask: opts.prompt,
+    sender: opts.sender ?? "",
+    turnStart: now,
   };
   registry.set(jobId, job);
   if (opts.idemKey) idem.set(opts.idemKey, { jobId, at: now });
@@ -411,13 +453,14 @@ export function getJob(jobId: string): Job | null {
 
 /** Inject a follow-up message into a running streaming session's CLI. Returns
  *  false if the job is unknown, already terminal, or not a streaming session. */
-export function appendToJob(jobId: string, text: string): boolean {
+export function appendToJob(jobId: string, text: string, turn?: { ask: string; sender?: string }): boolean {
   const job = registry.get(jobId);
   if (!job || TERMINAL.has(job.status) || !job.input) return false;
   const ok = job.input.push(text);
   if (ok) {
-    job.updatedAt = Date.now();
+    job.updatedAt = job.turnStart = Date.now();
     job.idle = false;
+    if (turn) Object.assign(job, { ask: turn.ask, sender: turn.sender ?? "" });
   }
   return ok;
 }
