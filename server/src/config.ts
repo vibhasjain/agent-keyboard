@@ -30,9 +30,6 @@ export interface Site {
    *  [a-z0-9-] as "-", {domain} = this site's domain). Default preview
    *  "https://{branch}.{domain}" (branch subdomains, e.g. Netlify's). */
   sandbox?: { preview: string };
-  /** This server also hosts the site: GETs no route matched serve its checkout as
-   *  static files (dotfiles hidden) when the Host is `domain`. For starter sites on a Sprite. */
-  serve?: boolean;
   // Set only on a sandbox's virtual site (sandboxes.ts), never from SITES:
   /** Parent session to fork on the sandbox's first turn. */
   forkFrom?: string;
@@ -98,7 +95,7 @@ export function loadSites(raw = process.env.SITES ?? ""): Site[] {
     if (typeof entry !== "object" || entry === null) {
       throw new Error(`${at} must be an object, e.g. ${SITES_EXAMPLE}`);
     }
-    const { id, repo, branch, domain, pushBranch, sessionScope, guest, sessionIdleMs, sandbox, serve } = entry as Record<string, unknown>;
+    const { id, repo, branch, domain, pushBranch, sessionScope, guest, sessionIdleMs, sandbox } = entry as Record<string, unknown>;
     if (typeof id !== "string" || !ID_RE.test(id)) {
       throw new Error(`${at}.id ${JSON.stringify(id)} must be a slug like "blog" (letters, digits, hyphens)`);
     }
@@ -118,9 +115,6 @@ export function loadSites(raw = process.env.SITES ?? ""): Site[] {
       throw new Error(
         `${at}.domain must be a bare host with no scheme or path (e.g. "blog.example.com"), got ${JSON.stringify(domain)}`,
       );
-    }
-    if (serve !== undefined && typeof serve !== "boolean") {
-      throw new Error(`${at}.serve, if set, must be true or false, got ${JSON.stringify(serve)}`);
     }
     if (guest !== undefined && typeof guest !== "boolean") {
       throw new Error(`${at}.guest, if set, must be true or false, got ${JSON.stringify(guest)}`);
@@ -179,7 +173,6 @@ export function loadSites(raw = process.env.SITES ?? ""): Site[] {
       ...(guest === true ? { guest: true } : {}),
       ...(typeof sessionIdleMs === "number" ? { sessionIdleMs } : {}),
       ...(preview ? { sandbox: { preview } } : {}),
-      ...(serve === true ? { serve: true } : {}),
     });
   });
   return sites;
