@@ -661,7 +661,13 @@ export function mountBar(shadow: ShadowRoot): void {
     goBtn.appendChild(el('div', 'ak-spin')) // signing-in spinner (was just a silent disable)
     try {
       await login(emailInput.value.trim(), pwInput.value)
-      pwInput.value = ''
+      // Safari/iOS offers "Save Password" when a filled login form leaves the page
+      // after a JS sign-in — so detach it still filled, wipe it after.
+      loginRow.remove()
+      setTimeout(() => {
+        pwInput.value = ''
+        loginFooter.appendChild(loginRow)
+      }, 500)
       chat.resetConversation() // drop stale/empty history so it reloads authed — no manual refresh
       // Still expanded: render() swaps the footer from this form to the composer.
       composer.flashConfirm('Logged in ✓') // brief amber confirmation in the prompt placeholder
