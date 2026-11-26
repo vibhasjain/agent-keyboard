@@ -8,7 +8,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { CLAUDE_HOME } from "./claude.js";
 
-const SKILLS_SRC = process.env.SKILLS_SRC_DIR ?? "/app/skills";
+export const SKILLS_SRC = process.env.SKILLS_SRC_DIR ?? "/app/skills";
 
 export async function seedSkills(): Promise<void> {
   let entries: string[];
