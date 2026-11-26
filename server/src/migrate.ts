@@ -189,6 +189,10 @@ export async function importFrom(into: Site, origin: string, site: string, auth:
       if (typeof meta?.branch !== "string" || !/^ak\/[\w-]+$/.test(meta.branch)) continue;
       if (!(await git(live, ["ls-remote", "--heads", "origin", meta.branch]).catch(() => ""))) continue; // the branch is gone
       const sb = await createSandbox(into, name, { branch: meta.branch, createdBy: typeof meta.createdBy === "string" ? meta.createdBy : undefined });
+      // Its preview is how you get into it, so make this host build one now with an empty commit on its branch.
+      await git(checkoutPath(sb.id), ["commit", "--allow-empty", "-m", "Build this sandbox's preview on its new host"])
+        .then(() => git(checkoutPath(sb.id), ["push", "origin", `HEAD:${meta.branch}`]))
+        .catch((e) => console.error(`agent-keyboard: preview build for ${sb.id}: ${e}`));
       const notes = join(checkoutPath(sb.id), NOTES_REL);
       if (existsSync(join(from, "notes"))) {
         await rm(notes, { recursive: true, force: true });
