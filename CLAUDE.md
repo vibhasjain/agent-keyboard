@@ -80,7 +80,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   sealed to that key as `env.enc`), `.tmp/` working files (opt-in, 50 MB), runtime skills (owner-approved, non-guest only), the domain,
   origins and sandbox preview, and a conversation summary;
   `POST /sites/:id/import` (internal secret) makes the new instance pull that bundle and merge it without overwriting. The
-  managed control plane drives it from the dashboard's "Bring them over".
+  managed control plane drives it from the dashboard's "Bring them over": while the old bar is still on the site (setup keeps it until the import or "Start fresh", spec 25), `/export-consent` forwards to the site as `#ak_export=`, and the old, signed-in bar shows the dry run and opt-ins as a card in its transcript (`exportCard`, `widget/src/index.ts`).
 - **Events and webhooks** (spec 21, `server/src/events.ts`) — `emit(site, type, data)` records `job.done` / `job.failed` /
   `push` (from `jobs.ts` per turn) and `sandbox.created` / `published` / `archived` (from `sandboxes.ts`; a sandbox's go to its
   live site) as `{id, type, site, at, data}`: the last 200 per site in memory and in `/data/agent-keyboard/sites/<id>/events.jsonl`.

@@ -342,6 +342,36 @@ function mount(): void {
 // #ak_export=<return URL>. Signed in, approving is one tap; otherwise (or if it fails) the
 // server's password page takes over.
 let exportReturn = ''
+/** The dry run as a card at the end of the open transcript: its opt-ins as checkboxes, then
+ *  Approve or Cancel. Resolves to the ticked opt-in keys, or null on Cancel. */
+function exportCard(p: { summary: string; opts: { key: string; ask: string }[] }): Promise<string[] | null> {
+  const scroll = document.getElementById('agent-keyboard-host')?.shadowRoot?.querySelector('.ak-ov-scroll')
+  if (!scroll) return Promise.resolve(null)
+  const card = el('div', 'ak-ov-list ak-export', (n) => n.setAttribute('role', 'group'))
+  card.append(el('pre', 'ak-export-dry', (n) => (n.textContent = p.summary)))
+  const boxes = p.opts.map((o) => {
+    const c = el('input', undefined, (n) => ((n.type = 'checkbox'), (n.value = o.key)))
+    card.append(el('label', 'ak-export-opt', (n) => n.append(c, ` ${o.ask}`)))
+    return c
+  })
+  const row = el('div', 'ak-opts')
+  const approve = el('button', 'ak-opt ak-export-go', (n) => ((n.type = 'button'), (n.textContent = 'Approve the move')))
+  const cancel = el('button', 'ak-opt', (n) => ((n.type = 'button'), (n.textContent = 'Cancel')))
+  row.append(approve, cancel)
+  card.append(row)
+  scroll.append(card)
+  patchUi({ mode: 'expanded' })
+  card.scrollIntoView({ block: 'end' })
+  approve.focus()
+  return new Promise((done) => {
+    approve.onclick = () => {
+      for (const b of [approve, cancel, ...boxes]) b.disabled = true
+      approve.textContent = 'Approving…'
+      done(boxes.filter((c) => c.checked).map((c) => c.value))
+    }
+    cancel.onclick = () => (card.remove(), done(null))
+  })
+}
 async function approveExport(ret: string): Promise<void> {
   const site = encodeURIComponent(CONFIG.site)
   const to = new URL(ret)
@@ -349,11 +379,12 @@ async function approveExport(ret: string): Promise<void> {
   const form = `${CONFIG.api}/export-consent?form=1&site=${site}&return=${encodeURIComponent(ret)}`
   const token = await getToken()
   const h = { headers: { Authorization: `Bearer ${token}` } }
-  // The dry run and the opt-ins come from the server (spec 20 #7); Cancel on an opt-in keeps it here.
+  // The dry run and the opt-ins come from the server (spec 20 #7), shown in the transcript (exportCard).
   const p = token && (await fetch(`${CONFIG.api}/sites/${site}/export-preview?to=${to.host}`, h).then((r) => r.ok && r.json(), () => null))
-  if (!p || !confirm(p.summary)) return void (p || (location.href = form))
-  const q = new URLSearchParams()
-  for (const o of p.opts) if (confirm(o.ask)) q.set(o.key, '1')
+  if (!p) return void (location.href = form)
+  const keys = await exportCard(p)
+  if (!keys) return
+  const q = new URLSearchParams(keys.map((k) => [k, '1']))
   const r = await fetch(`${CONFIG.api}/sites/${site}/export-token?${q}`, { method: 'POST', ...h }).catch(() => null)
   const t = r && r.ok && ((await r.json()) as { token?: string }).token
   if (!t) return void (location.href = form)
