@@ -356,6 +356,26 @@ export async function tickAll(jobs: CronJob[]): Promise<void> {
   }));
 }
 
+/** Spec 30: a hosted Sprite sleeps when idle and its timer with it, so every cycle it tells the
+ *  control plane when its next slot is due; the control plane wakes it then. */
+async function reportWake(jobs: CronJob[]): Promise<void> {
+  const key = process.env.AK_FEEDBACK_KEY;
+  if (!key) return;
+  const dues = await Promise.all(jobs.map(async (job) => {
+    const last = await readLastRun(job.state);
+    if (job.everyHours !== undefined) return last === 0 ? Date.now() : last + job.everyHours * 3_600_000;
+    const today = scheduledInstant(job);
+    return last >= today ? scheduledInstant(job, 1) : today;
+  }));
+  const res = await fetch(process.env.AK_WAKE_URL || "https://agent-keyboard-cloud.fly.dev/cloud/wake-at", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-ak-feedback": key },
+    body: JSON.stringify({ at: dues.length ? new Date(Math.min(...dues)).toISOString() : null }),
+    signal: AbortSignal.timeout(20_000),
+  }).catch((err: Error) => ({ ok: false, status: err.message }));
+  if (!res.ok) console.error(`[jobs-cron] wake-at report failed: ${res.status}`);
+}
+
 export function startJobsCron(): void {
   if (!SECRET) {
     console.warn("[jobs-cron] AK_INTERNAL_SECRET unset — cron disabled");
@@ -387,7 +407,7 @@ export function startJobsCron(): void {
   // effective job list is recomputed fresh every cycle (env jobs are static).
   const runCycle = () =>
     void effectiveJobs(envJobs)
-      .then(tickAll)
+      .then(async (jobs) => { await tickAll(jobs); await reportWake(jobs); })
       .catch((err) => console.error("[jobs-cron] cycle error", String(err)));
   runCycle();
   const timer = setInterval(runCycle, TICK_MS);
