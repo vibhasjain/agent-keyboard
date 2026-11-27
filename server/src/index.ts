@@ -1405,8 +1405,30 @@ app.post("/sites/:siteId/teamnotes", authed, async (req, res) => {
     return;
   }
   if (denySite(req, res, site.id)) return;
-  const { text, page, notify } = (req.body ?? {}) as { text?: unknown; page?: unknown; notify?: unknown };
-  const from = authedUser(req)?.email ?? "";
+  const { text, page, notify, sender, noteId } = (req.body ?? {}) as { text?: unknown; page?: unknown; notify?: unknown; sender?: unknown; noteId?: unknown };
+  const internal = authedUser(req)?.id === "internal";
+  const from = internal && typeof sender === "string" ? sender : authedUser(req)?.email ?? "";
+  // The agent (internal secret) emails a note its sender already left but forgot to tick "Email them" on.
+  if (typeof noteId === "string") {
+    const path = typeof page === "string" && page.startsWith("/") ? page : "/";
+    const { messages } = await readConversation(site.id, { limit: 200, pageSlug: pageSlugFor(site, path) });
+    const i = messages.findIndex((m) => m.id === noteId);
+    const note = messages[i];
+    if (!internal || !note?.to?.length || !from || note.sender !== from) {
+      res.status(404).json({ error: "no note by that sender with that id on this page" });
+      return;
+    }
+    try {
+      const publicUrl = process.env.AK_PUBLIC_URL || `${req.protocol}://${req.get("host")}`;
+      await emailMention({ site, from, to: note.to, text: note.text, url: `https://${site.domain}${path}`, excerpt: messages.slice(Math.max(0, i - 5), i), publicUrl });
+    } catch (err) {
+      console.error("[teamnotes] email failed", err);
+      res.status(502).json({ error: "couldn't send the email" });
+      return;
+    }
+    res.json({ emailed: note.to });
+    return;
+  }
   const mentioned = new Set(typeof text === "string" ? [...text.matchAll(/(?:^|\s)@([\w.+-]+)/g)].map((m) => m[1]!.toLowerCase()) : []);
   const to = (await siteMembers(site.id)).filter((e) => mentioned.has(handleOf(e)) || mentioned.has(e));
   if (typeof text !== "string" || !text.trim() || text.length > 10_000 || !to.length) {
