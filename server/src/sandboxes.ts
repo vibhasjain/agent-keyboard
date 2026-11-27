@@ -328,8 +328,25 @@ async function fastForward(dir: string, parent: Site, sha: string) {
   return { url: `${web}/commit/${sha}`, merged: sha };
 }
 
-/** Where the live site is served (the menu's "Back to live", the post-publish redirect). */
-export const liveOrigin = (sb: Sandbox | undefined, parent: Site) => sb?.live ?? `https://${parent.domain}`;
+// The page origin each site's latest message came from: its real address, which on a hosted
+// Sprite isn't site.domain (that's the Sprite itself). On disk so a restart doesn't lose it.
+const ORIGINS = "agent-keyboard/page-origins.json";
+const origins: Record<string, string> = (() => {
+  try {
+    return JSON.parse(readFileSync(join(DATA_DIR, ORIGINS), "utf8")) as Record<string, string>;
+  } catch {
+    return {};
+  }
+})();
+export const pageOrigin = (siteId: string): string | undefined => origins[siteId];
+export function setPageOrigin(siteId: string, origin: string): void {
+  if (origins[siteId] === origin) return;
+  origins[siteId] = origin;
+  writeDataFile(ORIGINS, JSON.stringify(origins)).catch((e) => console.error("page-origins save failed", e));
+}
+
+/** Where the live site is served (the menu's "Back to live", the post-publish redirect, MCP sign-in return). */
+export const liveOrigin = (sb: Sandbox | undefined, parent: Site) => sb?.live ?? origins[parent.id] ?? `https://${parent.domain}`;
 
 /** The live home page's body, to notice when a new deploy is serving. */
 const liveBody = (origin: string) =>

@@ -33,7 +33,7 @@ import {
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES, type Site } from "./sites.js";
-import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, liveOrigin, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
+import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, liveOrigin, pageOrigin, pruneSandboxes, publishSandbox, sandboxForOrigin, setPageOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
 import { buildPrompt, mcpFor, isTeammate, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
@@ -602,7 +602,7 @@ app.post("/sites/:siteId/messages", authed, async (req, res) => {
   const sender = internal && typeof (body as { sender?: unknown }).sender === "string" ? String((body as { sender?: unknown }).sender) : authedUser(req)?.email;
   if (sender) lastSender.set(site.id, sender);
   const from = req.header("origin");
-  if (from && (STATIC_ORIGINS.has(from) || sandboxForOrigin(from))) lastOrigin.set(site.id, from);
+  if (from && (STATIC_ORIGINS.has(from) || sandboxForOrigin(from))) setPageOrigin(site.id, from);
   if (!internal) publicOrigin = `${/^(localhost|127\.)/.test(req.get("host") ?? "") ? "http" : "https"}://${req.get("host")}`;
   const cron = internal && body.cron === true;
   const freshCron = cron && body.freshCron === true;
@@ -665,7 +665,7 @@ app.post("/sites/:siteId/sandboxes", authed, async (req, res) => {
     const sb = await createSandbox(site, typeof body.name === "string" ? body.name : "", {
       forkFrom: sessionFileExists(checkoutPath(site.id), parentSession) ? parentSession : undefined,
       createdBy: sender,
-      live: lastOrigin.get(site.id),
+      live: pageOrigin(site.id),
     });
     const ready = await waitForPreview(sb.url);
     const task = typeof body.task === "string" ? body.task.trim() : "";
@@ -740,9 +740,6 @@ app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
 const lastSender = new Map<string, string>();
 // The origin the bar talks to this server on (the redirect URI for MCP sign-ins when AK_PUBLIC_URL is unset).
 let publicOrigin = "";
-// The page origin the site's latest message came from (its real address, which on a hosted
-// Sprite isn't site.domain), so an MCP sign-in returns there.
-const lastOrigin = new Map<string, string>();
 
 /**
  * Spec 22: the agent connects, lists and disconnects OAuth MCP servers for the
@@ -779,7 +776,7 @@ app.post("/sites/:siteId/mcp-servers", authed, async (req, res) => {
   const path = typeof page === "string" && page.startsWith("/") && !page.startsWith("//") ? page : "/";
   try {
     res.json(await startSignIn({
-      siteKey: o.key, siteId: o.site.id, url, name: name as string | undefined, origin, back: `${lastOrigin.get(o.site.id) ?? `https://${o.site.domain}`}${path}`,
+      siteKey: o.key, siteId: o.site.id, url, name: name as string | undefined, origin, back: `${liveOrigin(undefined, o.site)}${path}`,
       clientId: typeof client_id === "string" && client_id ? client_id : undefined,
       clientSecret: typeof client_secret === "string" && client_secret ? client_secret : undefined,
     }));
