@@ -481,6 +481,13 @@ button::-moz-focus-inner{ border:0; }
 .ak-overlay{ touch-action:pan-y; }
 .ak-ov-list{ max-width:860px; margin:0 auto; }
 .ak-ov-sentinel{ height:1px; }
+/* a move's dry run (#ak_export, index.ts exportCard) */
+.ak-export{ border-top:1px solid var(--ak-line); padding-top:12px; margin-top:8px; }
+.ak-export-dry{ white-space:pre-wrap; margin:0 0 10px; font:12.5px/1.6 var(--ak-mono); color:var(--ak-ink); }
+.ak-export-opt{ display:flex; gap:8px; align-items:baseline; font:12.5px/1.5 var(--ak-mono); color:var(--ak-ink2); margin:0 0 8px; cursor:pointer; }
+.ak-export-opt input{ flex-shrink:0; accent-color:var(--ak-accent); }
+.ak-export .ak-opts{ margin-top:12px; }
+.ak-export-go{ border-color:var(--ak-accent); color:var(--ak-accent); }
 .ak-ov-foot{ padding:6px 14px; padding-bottom:calc(10px + max(env(safe-area-inset-bottom,0px), var(--ak-kb))); max-width:888px; box-sizing:border-box; width:100%; margin:0 auto; }
 
 /* transcript lines: marker column + body, no bubbles */
