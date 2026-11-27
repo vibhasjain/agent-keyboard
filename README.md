@@ -151,6 +151,7 @@ listing any missing *required* var.
 | `AK_INTERNAL_SECRET` | Any random string (`openssl rand -hex 32`). The agent uses it to call its own server on 127.0.0.1 — needed for sandboxes and scheduled `cron`. Absent = both fail with "sign in required". Not passed to `guest` sites' agents. |
 | `TS_AUTHKEY` | Tailscale auth key (reusable, tagged, pre-approved). With `TS_EXIT_NODE` (fly.toml), boot starts a userspace `tailscaled` pinned to that exit node and exposes SOCKS5 `127.0.0.1:1055` — a residential egress a site's LinkedIn browser can opt into. Absent = nothing starts. |
 | `AK_RECOVER_URL` | Optional. Where the bar's "forgot password?" opens instead of sending a Supabase reset email back to the page (which needs that page in Supabase's redirect allow-list). |
+| `AK_LIVE_URL` | Optional, single-site only. The site's production address when its `SITES` domain isn't it (managed instances get it set); "Back to live" and MCP sign-in return there. |
 | `AK_PUBLIC_URL` | This server's public base URL; invite emails from user provisioning land on `$AK_PUBLIC_URL/welcome`. |
 | `FLY_API_TOKEN` | App-scoped Fly deploy token (`fly tokens create deploy -a <app>`). Enables the `self-ops` skill — the agent can read its own logs/status and set secrets. |
 | `SUPABASE_ACCESS_TOKEN` | Supabase personal access token. Lets the agent manage auth config (SMTP, email templates, redirect URLs) via the Management API. |

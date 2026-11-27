@@ -345,8 +345,11 @@ export function setPageOrigin(siteId: string, origin: string): void {
   writeDataFile(ORIGINS, JSON.stringify(origins)).catch((e) => console.error("page-origins save failed", e));
 }
 
+// AK_LIVE_URL: the production address of a single-site instance whose domain isn't it (a hosted Sprite;
+// the control plane sets it to the custom domain or Pages address).
+const LIVE_URL = process.env.AK_LIVE_URL?.replace(/\/+$/, "") || undefined;
 /** Where the live site is served (the menu's "Back to live", the post-publish redirect, MCP sign-in return). */
-export const liveOrigin = (sb: Sandbox | undefined, parent: Site) => sb?.live ?? origins[parent.id] ?? `https://${parent.domain}`;
+export const liveOrigin = (sb: Sandbox | undefined, parent: Site) => LIVE_URL ?? sb?.live ?? origins[parent.id] ?? `https://${parent.domain}`;
 
 /** The live home page's body, to notice when a new deploy is serving. */
 const liveBody = (origin: string) =>
