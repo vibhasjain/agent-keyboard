@@ -6,7 +6,7 @@
 // Uploads live under .git/info/exclude'd `.tmp/`, so they never get committed.
 // A boot sweep purges anything older than 24h across all checkouts.
 
-import { mkdir, writeFile, readdir, readFile, stat, rm, rename, appendFile } from "node:fs/promises";
+import { mkdir, writeFile, readdir, readFile, stat, rm, rename, appendFile, copyFile } from "node:fs/promises";
 import { basename, join, relative } from "node:path";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
@@ -126,18 +126,17 @@ export async function resolveAttachments(siteId: string, ids: string[]): Promise
   return out;
 }
 
-/** Post-job cleanup of staged uploads (repo-relative paths). Photos (<uuid>.jpg)
- *  move to the outputs dir so the chat history keeps their thumbnails (30 days);
- *  other files are deleted. */
+/** Post-job handling of staged uploads (repo-relative paths). Photos (<uuid>.jpg)
+ *  are copied to the outputs dir so the chat history keeps their thumbnails (30 days).
+ *  The staged files themselves stay until the 24h boot sweep, so a sandbox the turn
+ *  hands the task to (or a later message) can still read them. */
 export async function cleanupUploads(siteId: string, relPaths: string[]): Promise<void> {
   const base = checkoutPath(siteId);
   await mkdir(outputsDir(siteId), { recursive: true }).catch(() => {});
   await Promise.all(
-    relPaths.map((p) => {
-      const abs = join(base, p);
-      const name = basename(p);
-      return (SERVED_NAME_RE.test(name) ? rename(abs, join(outputsDir(siteId), name)) : rm(abs, { force: true })).catch(() => {});
-    }),
+    relPaths
+      .filter((p) => SERVED_NAME_RE.test(basename(p)))
+      .map((p) => copyFile(join(base, p), join(outputsDir(siteId), basename(p))).catch(() => {})),
   );
 }
 
