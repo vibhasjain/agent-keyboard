@@ -571,6 +571,13 @@ function onTurnComplete(data: Record<string, unknown>): void {
     // it idle so the bar shows the plain composer, not a spinner+timer "working" pill.
     idle: pendingUserTexts.length === 0,
   })
+  // A streaming session's turns end here, not in finishDone: swap the page in once a shipped turn is live
+  // (not when the turn redirects to a sandbox or back to live).
+  const git = (data.git ?? {}) as GitInfo
+  if (git.changed && git.pushed && typeof data.sandbox_url !== 'string') void showWhenLive(git.files, () => {
+    const j = getState().job
+    if (j.phase === 'streaming' && j.idle) setStreaming({ line: 'live — page updated', lineState: 'dim', idle: true })
+  })
 }
 
 // The streaming session closed (idle / lifetime cap / stop). Turns already landed
@@ -649,7 +656,7 @@ function finishDone(data: Record<string, unknown>): void {
     const j = getState().job
     if (j.phase === 'done' && j.jobId === finishedId) setJob({ phase: 'idle' })
   }, DONE_LINGER_MS)
-  if (shipped) void showWhenLive(git.files, () => {
+  if (shipped && typeof data.sandbox_url !== 'string') void showWhenLive(git.files, () => {
     const j = getState().job
     if (j.phase !== 'idle' && !(j.phase === 'done' && j.jobId === finishedId)) return // a newer job owns the pill
     setJob({ phase: 'done', jobId: finishedId!, summary: 'live — page updated', ok: true })
