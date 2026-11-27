@@ -977,10 +977,10 @@ app.get("/export-consent", async (req, res) => {
   h1{font-size:17px;font-weight:600;margin:0 0 6px}
   p{color:var(--ink2);margin:0 0 18px;font-size:13.5px} b{color:var(--ink)}
   label{display:block;color:var(--ink3);font-size:11px;letter-spacing:.06em;margin:14px 0 4px}
-  input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;padding:6px 2px;outline:none}
+  input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;font-size:16px;padding:6px 2px;outline:none}
   input:focus{border-bottom-color:var(--amber)}
   .opt{display:flex;gap:8px;align-items:center;color:var(--ink2);font-size:12.5px;letter-spacing:0;margin:12px 0 0}
-  .opt input{width:auto;accent-color:var(--amber)}
+  .opt input{width:auto;flex-shrink:0;accent-color:var(--amber)}
   pre{white-space:pre-wrap;color:var(--ink2);font:12.5px/1.6 inherit;border-top:1px solid var(--rule);padding-top:12px;margin:18px 0 0}
   button{margin-top:22px;background:var(--amber);color:#141310;border:none;border-radius:8px;padding:10px 18px;font:600 13.5px ui-monospace,monospace;cursor:pointer}
   button:disabled{opacity:.5;cursor:default}
