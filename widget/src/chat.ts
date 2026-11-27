@@ -631,31 +631,35 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     const hidden = (e: Element) => getComputedStyle(e).overflowY === 'hidden'
     return se.scrollHeight > se.clientHeight && !hidden(document.documentElement) && !hidden(document.body)
   }
+  let dockMargin = ''
   const applyDock = (animate = true) => {
     const expanded = getState().ui.mode === 'expanded'
     host.classList.toggle('ak-docked', wide.matches)
     const margin = expanded && wide.matches ? `${overlay.offsetWidth}px` : ''
-    if (root.marginRight !== margin) {
+    // agentbar.md rule 3: only touch <html> while we dock, and on undock clear only
+    // the margin we set — another docked bar's margin is not ours to wipe.
+    if (dockMargin !== margin) {
       // The page moves with the panel, on the panel's own clock. The transition
       // on <html> is borrowed for just that long, then handed back.
       const cs = getComputedStyle(overlay)
       const ms = animate ? parseFloat(cs.getPropertyValue(expanded ? '--panel-open-dur' : '--panel-close-dur')) || 0 : 0
       if (marginTimer != null) clearTimeout(marginTimer)
       root.transition = ms ? `margin-right ${ms}ms ${cs.getPropertyValue('--panel-ease')}` : ''
-      if (margin && !root.marginRight) {
+      if (margin && !dockMargin) {
         root.width = 'auto' // a page that pins html{width:100%} would just overflow the margin
         if (!pageScrolls()) {
           root.height = '100%'
           root.transform = 'translateX(0)'
         }
       }
-      root.marginRight = margin
+      if (margin || root.marginRight === dockMargin) root.marginRight = margin
+      dockMargin = margin
       window.dispatchEvent(new CustomEvent('agentbar:dock', { detail: { id: 'agentkeyboard', width: margin ? overlay.offsetWidth : 0 } }))
       // Undocking keeps the containment until the page has finished widening, so
       // a shell never jumps back to the viewport mid-slide.
       marginTimer = setTimeout(() => {
         root.transition = ''
-        if (!root.marginRight) root.width = root.height = root.transform = ''
+        if (!dockMargin) root.width = root.height = root.transform = ''
       }, ms)
     }
     if (expanded && !wide.matches) lockBody()

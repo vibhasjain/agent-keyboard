@@ -38,8 +38,8 @@ button::-moz-focus-inner{ border:0; }
   position:relative;
   width:100%;
   display:block;
-  padding:0 calc(14px + var(--ak-aside,0px)) calc(10px + env(safe-area-inset-bottom,0px)) 14px;
-  transition:padding-right var(--panel-open-dur) var(--panel-ease); /* --ak-aside: another bar's docked panel (agentbar:dock) */
+  padding:0 calc(14px + var(--ak-aside,0px)) calc(10px + env(safe-area-inset-bottom,0px) + var(--ak-below,0px)) 14px;
+  transition:padding-right var(--panel-open-dur) var(--panel-ease); /* --ak-aside: another bar's docked panel (agentbar:dock); --ak-below: earlier bars' pills (agentbar:pill) */
   font-family:var(--ak-mono);
   color:var(--ak-ink);
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
@@ -123,7 +123,7 @@ button::-moz-focus-inner{ border:0; }
 .ak-browser-label{ white-space:nowrap; }
 .ak-browser-corner{
   position:absolute; z-index:2;
-  right:calc(21px + var(--ak-aside,0px)); bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  right:calc(21px + var(--ak-aside,0px)); bottom:calc(20px + env(safe-area-inset-bottom,0px) + var(--ak-below,0px));
 }
 .ak-browser-header{
   position:absolute; z-index:3; left:50%; transform:translateX(-50%);
