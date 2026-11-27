@@ -961,7 +961,8 @@ app.get("/export-consent", async (req, res) => {
   // widget/src/index.ts; it comes back here with ?form=1 when it isn't). Only if the site is up
   // and its page carries the bar; otherwise sign in on this page.
   const page = req.query.form || !site.domain ? "" : await fetch(`https://${site.domain}/`, { signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.text() : ""), () => "");
-  if (page.includes("widget.js") && page.includes(site.id)) {
+  // Only if that bar is still this server's: after a move the page carries the new instance's bar.
+  if (page.includes(`${req.get("host")}/widget.js`) && page.includes(site.id)) {
     const bar = `https://${site.domain}/#ak_export=${encodeURIComponent(to.href)}`;
     res.type("html").send(`<!doctype html><meta charset="utf-8"><meta name="robots" content="noindex"><meta http-equiv="refresh" content="0;url=${esc(bar)}">
 <title>Agent Keyboard — move ${esc(site.id)}</title><p style="font:14px ui-monospace,monospace">Opening <a href="${esc(bar)}">${esc(site.domain)}</a>…</p>`);
@@ -988,7 +989,7 @@ app.get("/export-consent", async (req, res) => {
 </style></head>
 <body><main>
   <h1>Move ${esc(site.id)}</h1>
-  <p>Send this site's notes, memory and settings to <b>${esc(to.host)}</b>? Only approve if you started this move.</p>
+  <p>This is <b>${esc(req.get("host") ?? "")}</b>, the Agent Keyboard server ${esc(site.domain || site.id)} used before. Sign in with that account to send the site's notes, memory and settings to <b>${esc(to.host)}</b>. Only approve if you started this move.</p>
   <form id="f">
     <label for="em">email</label><input id="em" type="email" autocomplete="username" required>
     <label for="pw">password</label><input id="pw" type="password" autocomplete="current-password" required>
