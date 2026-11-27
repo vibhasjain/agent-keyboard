@@ -14,6 +14,7 @@ import { bootRehydrate, discoverJobs, start } from './jobstore'
 import { getState, patchUi, subscribe } from './state'
 import { STYLES } from './styles'
 import { initViewport } from './viewport'
+import { initLiveSwap } from './liveswap'
 
 declare global {
   interface Window {
@@ -231,6 +232,7 @@ function mount(): void {
   }
 
   initViewport(host)
+  initLiveSwap()
   initAuth() // synchronous: sets auth slice from localStorage, no network
   const signedIn = hasStoredSession() || hasPendingHandoff() // before redeemHandoff() clears it
   if (isGuestDemo()) void loadGuestDemo()

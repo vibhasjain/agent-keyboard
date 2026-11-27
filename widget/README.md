@@ -121,6 +121,16 @@ Over one job's stream you'll see:
 - **Transcript reconciliation** — turns completed this page load are deduped against fetched history
   by normalized user-turn text, and the tail is refetched on re-expand, so a turn never renders twice
   and ordering stays canonical.
+- **Live page swap** (`liveswap.ts`, spec 26) — a job's start snapshots this page's HTML (`fetch(location.href,
+  {cache:'no-store'})`) and its same-origin stylesheet and script files. After a result that pushed a change (its
+  `git.files`, from `git diff --name-only` in `gitSummary`, say what the turn touched), the bar polls every 5 s; a change
+  counts once it holds steady across two polls. **HTML/CSS/docs only** (plus dotfiles and server code: `functions/`,
+  `server/`, `api/`, host config): the smallest changed elements are replaced in place (head styles and `<title>`
+  synced, scroll kept, the page's JS state untouched; a changed stylesheet file is loaded fresh beside the old link) and
+  the pill reads "live — page updated"; up to 4 min, then nothing. It reloads instead when a `<script>` or own script
+  file changed, the `<body>` changed shape, or a changed element no longer matches the snapshot (the page's JS redrew
+  it). **Any other file** (JS, images, code the page loads): reload once a change is seen, or after 90 s if none is.
+  Never while a field on the page is focused. The draft and an open transcript survive a reload.
 
 Any site pipeline that launches Playwright can opt into the live view with the port the server injects
 into every agent spawn:

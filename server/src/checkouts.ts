@@ -276,6 +276,7 @@ export interface GitSummary {
   branch: string;
   dirty: boolean; // uncommitted changes left in the tree
   subject?: string; // HEAD's commit title, when HEAD moved
+  files?: string[]; // paths the turn's commits touched (first 100), so the bar knows whether it can swap the page in place
 }
 
 /**
@@ -304,9 +305,11 @@ export async function gitSummary(
   const dirtyLines = status.split("\n").filter((l) => l.trim() && !/\s\.tmp\//.test(l));
   const changed = headSha !== preJobSha;
   const subject = changed ? (await git(dir, ["log", "-1", "--format=%s"]).catch(() => "")).trim() : "";
+  const files = changed ? (await git(dir, ["diff", "--name-only", preJobSha, headSha]).catch(() => "")).split("\n").filter(Boolean).slice(0, 100) : [];
   return {
     changed,
     ...(subject ? { subject } : {}),
+    ...(files.length ? { files } : {}),
     pushed: ahead === "",
     headSha,
     branch: pushBranch,
