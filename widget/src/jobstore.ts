@@ -9,6 +9,7 @@ import { api, HttpError, SIGNED_OUT, type ConversationMessage, type Conversation
 import { hasStoredSession } from './auth'
 import { CONFIG, lsKey } from './config'
 import { uuid } from './dom'
+import { showWhenLive } from './liveswap'
 import { getState, patchUi, type LineState, type Subagent, type TodoItem, setJob } from './state'
 
 const BACKOFF = [1000, 2000, 5000, 10000]
@@ -626,7 +627,7 @@ function finishDone(data: Record<string, unknown>): void {
   // "pushed" only when the agent actually changed something; pushed=true alone
   // just means the checkout matches origin (e.g. a read-only question).
   const shipped = !!git.changed && !!git.pushed
-  const summary = shipped && sha7 ? `pushed ${sha7} — refresh to see it` : oneLine(reply) || 'Done'
+  const summary = shipped && sha7 ? `pushed ${sha7} — the page updates when it's live` : oneLine(reply) || 'Done'
   const finishedId = jobId
   markHandled(jobId!)
   clearPersist()
@@ -648,6 +649,16 @@ function finishDone(data: Record<string, unknown>): void {
     const j = getState().job
     if (j.phase === 'done' && j.jobId === finishedId) setJob({ phase: 'idle' })
   }, DONE_LINGER_MS)
+  if (shipped) void showWhenLive(git.files, () => {
+    const j = getState().job
+    if (j.phase !== 'idle' && !(j.phase === 'done' && j.jobId === finishedId)) return // a newer job owns the pill
+    setJob({ phase: 'done', jobId: finishedId!, summary: 'live — page updated', ok: true })
+    if (doneTimer != null) clearTimeout(doneTimer)
+    doneTimer = setTimeout(() => {
+      const k = getState().job
+      if (k.phase === 'done' && k.jobId === finishedId) setJob({ phase: 'idle' })
+    }, DONE_LINGER_MS)
+  })
   dispatchQueue()
 }
 

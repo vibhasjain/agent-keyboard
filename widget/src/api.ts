@@ -142,6 +142,7 @@ export interface GitInfo {
   headSha?: string
   branch?: string
   dirty?: boolean
+  files?: string[] // paths the turn's commits touched
 }
 
 export type ConversationPart = { type: 'text'; text: string } | { type: 'tools'; tools: string[] }

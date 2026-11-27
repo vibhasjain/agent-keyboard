@@ -1,9 +1,28 @@
-import { build } from 'esbuild'
+import { build, transform } from 'esbuild'
 import { gzipSync } from 'node:zlib'
 import { readFileSync } from 'node:fs'
 
 const dev = process.argv.includes('--dev')
 const kb = (n) => (n / 1024).toFixed(2)
+
+// esbuild can't see inside the CSS template strings in styles.ts, so minify
+// them at build time: evaluate the module and re-emit each string export as
+// minified CSS (drops comments and whitespace, ~2.3 KB gzip).
+const minifyStyles = {
+  name: 'minify-styles',
+  setup(b) {
+    b.onLoad({ filter: /styles\.ts$/ }, async ({ path }) => {
+      const { code } = await transform(readFileSync(path, 'utf8'), { loader: 'ts', format: 'esm' })
+      const mod = await import('data:text/javascript,' + encodeURIComponent(code))
+      let out = ''
+      for (const [k, v] of Object.entries(mod)) {
+        const css = (await transform(v, { loader: 'css', minify: true })).code.trim()
+        out += `export const ${k} = ${JSON.stringify(css)}\n`
+      }
+      return { contents: out, loader: 'js' }
+    })
+  },
+}
 
 /** Build one IIFE bundle and enforce its gzip budget. */
 async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
@@ -18,6 +37,7 @@ async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
     sourcemap: dev,
     legalComments: 'none',
     charset: 'utf8',
+    plugins: dev ? [] : [minifyStyles],
   })
 
   const buf = readFileSync(outfile)
@@ -38,7 +58,9 @@ async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
 // 35: iOS keyboard fixes (scroll snap-back, keep the latest message in view), 2026-10-01.
 // 39: keep expanded command groups open while a turn streams (2026-11-25).
 // 39.5: moving a site's one-tap approval with the dry run and opt-ins (spec 20, 2026-11-26).
-await bundle('src/index.ts', 'dist/widget.js', 39.5)
+// 41: the live page swap after a shipped change, stylesheet files too (spec 26, 2026-11-27).
+// 39: the CSS strings are minified at build time (−2.3 KB, 2026-11-27).
+await bundle('src/index.ts', 'dist/widget.js', 39)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)
 
 // The notes editor (Milkdown Crepe), lazy-loaded by the widget only when Notes
