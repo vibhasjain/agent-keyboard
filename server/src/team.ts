@@ -14,6 +14,7 @@ import { DATA_DIR, writeDataFile } from "./checkouts.js";
 import { sessionIdFor, spawnEnv } from "./claude.js";
 import type { ChatMessage } from "./conversation.js";
 import type { Site } from "./config.js";
+import { listNotes } from "./notes.js";
 
 /** The @handle for an email: its local part. */
 export const handleOf = (email: string) => email.split("@")[0]!.toLowerCase();
@@ -135,6 +136,20 @@ export async function emailMention(opts: {
   const label = "color:#6f6a61;font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;padding:0 0 6px;";
   const ask = s ? (s.ask.trim().toUpperCase() === "FYI" ? "Just an FYI, nothing to do." : s.ask) : null;
   const lines = [...excerpt.map((m) => ({ who: who(m), text: clip(m.text, 600) })), { who: handleOf(from), text }];
+  // #name mentions of the site's notes link to the note (?ak-note= opens it once signed in), longest name first.
+  const names = (await listNotes(site.id).catch(() => [])).map((n) => n.name).sort((a, b) => b.length - a.length);
+  const linked = new Map<string, string>();
+  const noteRe = names.length ? new RegExp(`#(${names.map((n) => esc(n).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "gi") : null;
+  const withLinks = (t: string) =>
+    noteRe
+      ? esc(t).replace(noteRe, (m, hit: string) => {
+          const name = names.find((n) => esc(n).toLowerCase() === hit.toLowerCase())!;
+          const u = new URL(url);
+          u.searchParams.set("ak-note", name);
+          linked.set(name, u.href);
+          return `<a href="${esc(u.href)}" style="color:#ffb86b;">${m}</a>`;
+        })
+      : esc(t);
   const body =
     `<div style="font-size:20px;line-height:1.35;color:#f5f1ea;padding-bottom:18px;"><span style="color:#ffb86b;">${esc(handleOf(from))}</span> mentioned you on ${esc(host)}</div>` +
     (ask ? `<div style="${label}">The ask</div><div style="color:#f5f1ea;padding-bottom:18px;">${esc(ask)}</div>` : "") +
@@ -143,10 +158,10 @@ export async function emailMention(opts: {
     lines
       .map(
         (l) =>
-          `<div style="border-left:2px solid #211f1c;padding:2px 0 2px 12px;margin:0 0 10px;font-size:13.5px;"><span style="color:#e7d3b8;">${esc(l.who)}</span><br><span style="white-space:pre-wrap;">${esc(l.text)}</span></div>`,
+          `<div style="border-left:2px solid #211f1c;padding:2px 0 2px 12px;margin:0 0 10px;font-size:13.5px;"><span style="color:#e7d3b8;">${esc(l.who)}</span><br><span style="white-space:pre-wrap;">${withLinks(l.text)}</span></div>`,
       )
       .join("");
-  const plain = [ask && `The ask: ${ask}`, s && `Context: ${s.summary}`, ...lines.map((l) => `${l.who}: ${l.text}`)].filter(Boolean).join("\n\n");
+  const plain = [ask && `The ask: ${ask}`, s && `Context: ${s.summary}`, ...lines.map((l) => `${l.who}: ${l.text}`), ...[...linked].map(([n, h]) => `#${n}: ${h}`)].filter(Boolean).join("\n\n");
   for (const email of to) {
     const notice: Notice = { id: randomUUID(), from, to: email, url, sentAt: new Date().toISOString() };
     const link = `${opts.publicUrl}/n/${notice.id}`;
