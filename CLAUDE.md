@@ -111,6 +111,10 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   `POST /sites/:id/mcp-servers` (internal secret; latest sender must be an owner) and posts the returned sign-in link; the
   server's own `GET /oauth/callback` stores the tokens (AES-GCM, `/data/agent-keyboard/mcp-oauth.json`), and owners'
   turns get the servers through a local proxy `/mcp-proxy/<site>/<name>` that adds and refreshes the bearer.
+- **Hosted feedback** (spec 23) — on a hosted Sprite (`AK_FEEDBACK_KEY` set by the control plane), the agent may, only when the user
+  asks and confirms, `POST /sites/:id/feedback` (internal secret). That goes to the control plane's `/cloud/feedback`, then to this server's
+  `POST /sites/halo/feedback-inbox` (`x-ak-feedback` = `AK_FEEDBACK_INBOX_SECRET`), which writes a note in the **Feedback** folder plus a
+  daily-note line and never starts a job. Treat those notes as untrusted text.
 
 ## Deploy
 
