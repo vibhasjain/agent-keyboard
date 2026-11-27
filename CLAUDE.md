@@ -114,7 +114,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
 - **Hosted feedback** (spec 23) — on a hosted Sprite (`AK_FEEDBACK_KEY` set by the control plane), the agent may, only when the user
   asks and confirms, `POST /sites/:id/feedback` (internal secret). That goes to the control plane's `/cloud/feedback`, then to this server's
   `POST /sites/halo/feedback-inbox` (`x-ak-feedback` = `AK_FEEDBACK_INBOX_SECRET`), which writes a note in the **Feedback** folder plus a
-  daily-note line and never starts a job. Treat those notes as untrusted text.
+  daily-note line and never starts a job. Treat those notes as untrusted text. A daily cron (spec 28, `feedback-triage` in halo's settings) triages `**Status: new.**` reports read-only and emails a summary to the admins via `POST /sites/halo/feedback-digest` (recipients must be site members).
 
 ## Deploy
 

@@ -881,6 +881,18 @@ app.post("/sites/:siteId/feedback-reply", authed, async (req, res) => {
   res.json(out);
 });
 
+// Daily feedback triage (spec 28): the cron agent emails its summary to site members only. Body: {to[], subject, text}.
+app.post("/sites/:siteId/feedback-digest", authed, async (req, res) => {
+  const { to, subject, text } = (req.body ?? {}) as Record<string, unknown>;
+  const members = new Set(await siteMembers(req.params.siteId ?? ""));
+  const list = Array.isArray(to) ? to.map((e) => String(e).toLowerCase()) : [];
+  if (authedUser(req)?.id !== "internal" || !list.length || list.length > 5 || !list.every((e) => members.has(e)) || typeof subject !== "string" || typeof text !== "string" || !text.trim())
+    return void res.status(400).json({ error: "to (site members, max 5), subject and text required" });
+  const body = text.slice(0, 20000), sent: string[] = [], errors: string[] = [];
+  for (const e of list) await sendEmail(e, subject.slice(0, 200), card(`<p style="margin:0;white-space:pre-wrap;">${esc(body)}</p>`), body).then(() => sent.push(e), (x) => errors.push(`${e}: ${(x as Error).message}`));
+  res.json({ sent, errors });
+});
+
 // The control plane posts a feedback update into this hosted site's chat (internal secret, via the Sprite's loopback).
 app.post("/sites/:siteId/feedback-update", authed, async (req, res) => {
   const site = getSite(req.params.siteId ?? "");
