@@ -77,6 +77,9 @@ The host page can drive the bar through `window.__agentKeyboard`:
 - `agentbar:open` (a `CustomEvent` on `window`, shared with other chat bars): the bar fires it with
   `detail: { id: 'agentkeyboard' }` when its transcript opens, and minimizes when another bar fires it
   with a different `id`, so two bars on one page take turns.
+- `agentbar:dock` (same channel): when the docked transcript (wide screens) opens or closes, the bar fires
+  `detail: { id: 'agentkeyboard', width }` (the panel's width, or 0); when another bar fires it, the corner
+  box moves left by that `width` (back on 0), so it sits beside that bar's docked panel.
 
 ## Protocol
 

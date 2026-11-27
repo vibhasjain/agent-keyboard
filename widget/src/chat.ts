@@ -650,6 +650,7 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
         }
       }
       root.marginRight = margin
+      window.dispatchEvent(new CustomEvent('agentbar:dock', { detail: { id: 'agentkeyboard', width: margin ? overlay.offsetWidth : 0 } }))
       // Undocking keeps the containment until the page has finished widening, so
       // a shell never jumps back to the viewport mid-slide.
       marginTimer = setTimeout(() => {

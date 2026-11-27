@@ -932,6 +932,13 @@ export function mountBar(shadow: ShadowRoot): void {
   window.addEventListener('agentbar:open', (e) => {
     if ((e as CustomEvent).detail?.id !== 'agentkeyboard' && getState().ui.mode === 'expanded') collapseToCorner()
   })
+  // Another bar docked its panel to the right: park the corner box beside it (chat.ts fires ours).
+  window.addEventListener('agentbar:dock', (e) => {
+    const d = (e as CustomEvent).detail
+    if (d?.id === 'agentkeyboard') return
+    const w = Number(d?.width)
+    host.style.setProperty('--ak-aside', w > 0 ? `${w}px` : '0px')
+  })
 
   const unsub = subscribe(render)
   void unsub // retained for the lifetime of the page
