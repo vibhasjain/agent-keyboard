@@ -74,6 +74,9 @@ The host page can drive the bar through `window.__agentKeyboard`:
 - `agentkeyboard:job` (a `CustomEvent` on `window`, fired when the job changes): `detail` is
   `{ working, phase, line }`, where `line` is the status line the pill shows. Enough for a button to
   show a busy state and what the agent is doing.
+- `agentbar:open` (a `CustomEvent` on `window`, shared with other chat bars): the bar fires it with
+  `detail: { id: 'agentkeyboard' }` when its transcript opens, and minimizes when another bar fires it
+  with a different `id`, so two bars on one page take turns.
 
 ## Protocol
 

@@ -918,6 +918,9 @@ export function mountBar(shadow: ShadowRoot): void {
       setpwLabel.textContent = inv?.email ? `Welcome — set a password for ${inv.email}` : 'Welcome — set a password'
     }
 
+    // Bars on one page take turns: announce opening, and minimize when another bar opens (listener below).
+    if (view === 'expanded' && lastView !== 'expanded') window.dispatchEvent(new CustomEvent('agentbar:open', { detail: { id: 'agentkeyboard' } }))
+
     placeFooter(view)
     // Leaving the transcript does NOT stop the mic: the owner minimizes to browse the
     // site while still talking; "over and out" sends, or re-open and tap stop. The
@@ -925,6 +928,10 @@ export function mountBar(shadow: ShadowRoot): void {
 
     lastView = view
   }
+
+  window.addEventListener('agentbar:open', (e) => {
+    if ((e as CustomEvent).detail?.id !== 'agentkeyboard' && getState().ui.mode === 'expanded') collapseToCorner()
+  })
 
   const unsub = subscribe(render)
   void unsub // retained for the lifetime of the page
