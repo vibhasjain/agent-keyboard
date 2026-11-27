@@ -33,7 +33,7 @@ import {
 } from "./auth.js";
 import { ASSET_TYPES, registerFeedRoutes } from "./feed.js";
 import { getSite, listSitesPublic, pageSlugFor, SITES, type Site } from "./sites.js";
-import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
+import { archiveSandbox, closedReason, createSandbox, getSandbox, listSandboxes, liveOrigin, pruneSandboxes, publishSandbox, sandboxForOrigin, setSandboxRedirect, waitForPreview } from "./sandboxes.js";
 import { buildPrompt, mcpFor, isTeammate, runMessageJob, runStreamingSession, InputChannel, STREAMING_SESSION, killAllChildren, rotateConversation, conversationIdFor, sessionIdFor, sessionFileExists, compactSession } from "./claude.js";
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
@@ -665,6 +665,7 @@ app.post("/sites/:siteId/sandboxes", authed, async (req, res) => {
     const sb = await createSandbox(site, typeof body.name === "string" ? body.name : "", {
       forkFrom: sessionFileExists(checkoutPath(site.id), parentSession) ? parentSession : undefined,
       createdBy: sender,
+      live: lastOrigin.get(site.id),
     });
     const ready = await waitForPreview(sb.url);
     const task = typeof body.task === "string" ? body.task.trim() : "";
@@ -728,7 +729,7 @@ app.get("/sites/:siteId/sandboxes", authed, async (req, res) => {
   if (denySite(req, res, site.id)) return;
   // Inside a sandbox: which one this is, and where live is (the menu's "Back to live").
   if (site.sandboxOf) {
-    res.json({ sandboxes: [], current: { name: site.id.split("--sb-")[1], liveUrl: `https://${site.sandboxOf.domain}` } });
+    res.json({ sandboxes: [], current: { name: site.id.split("--sb-")[1], liveUrl: liveOrigin(getSandbox(site.id), site.sandboxOf) } });
     return;
   }
   res.json({ sandboxes: site.sandbox ? await listSandboxes(site.id) : [] });
@@ -853,7 +854,7 @@ app.post("/sites/:siteId/publish", authed, async (req, res) => {
         ts: new Date().toISOString(),
         sender: by,
       }).catch(() => {});
-    setSandboxRedirect(site.id, pageSlugFor(site, "/"), `https://${live.domain}/`);
+    setSandboxRedirect(site.id, pageSlugFor(site, "/"), `${liveOrigin(sb, live)}/`);
     void acquireSiteLock(site.id).then((release) => removeCheckout(site.id).catch(() => {}).finally(release));
     res.json(out);
   } catch (e) {

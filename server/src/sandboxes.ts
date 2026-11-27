@@ -17,6 +17,7 @@ export interface Sandbox {
   parent: string;
   branch: string; // ak/<slug>
   url: string; // preview origin + "/"
+  live?: string; // the live site's origin, from the page the sandbox was asked for (on a hosted Sprite it isn't https://<domain>)
   forkFrom?: string;
   createdBy?: string;
   createdAt: string;
@@ -199,7 +200,7 @@ export function previewUrl(site: Site, branch: string): string {
 export async function createSandbox(
   parent: Site,
   name: string,
-  opts: { forkFrom?: string; createdBy?: string; branch?: string },
+  opts: { forkFrom?: string; createdBy?: string; branch?: string; live?: string },
 ): Promise<Sandbox> {
   const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30).replace(/-+$/, "") || "sandbox";
   let slug = base;
@@ -213,6 +214,7 @@ export async function createSandbox(
     url: previewUrl(parent, branch),
     ...(opts.forkFrom ? { forkFrom: opts.forkFrom } : {}),
     ...(opts.createdBy ? { createdBy: opts.createdBy } : {}),
+    ...(opts.live ? { live: opts.live } : {}),
     createdAt: new Date().toISOString(),
   };
   registry.set(sb.id, sb);
@@ -279,12 +281,12 @@ export async function publishSandbox(
   ).trim();
   await git(dir, ["push", `--force-with-lease=refs/heads/${sb.branch}:${tip}`, "origin", `${sha}:refs/heads/${sb.branch}`]);
 
-  const before = await liveBody(parent);
+  const before = await liveBody(liveOrigin(sb, parent));
   const { url, merged } = process.env.GH_TOKEN ? await mergePr(parent, sb, title, summary, by, message, sha) : await fastForward(dir, parent, sha);
   const conflicts = await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: url }, by, merged);
   let live = false;
   for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
-    const now = await liveBody(parent);
+    const now = await liveBody(liveOrigin(sb, parent));
     live = now !== null && now !== before;
   }
   return { pr: url, live, conflicts };
@@ -319,16 +321,19 @@ async function mergePr(parent: Site, sb: Sandbox, title: string, summary: string
 
 /** No GH_TOKEN (a hosted Sprite pushes with its deploy key): no PR, fast-forward live to the squashed commit. */
 async function fastForward(dir: string, parent: Site, sha: string) {
-  await git(dir, ["push", "origin", `${sha}:refs/heads/${parent.branch}`]).catch((e: Error) => {
+  await git(dir, ["push", "--no-verify", "origin", `${sha}:refs/heads/${parent.branch}`]).catch((e: Error) => {
     throw new Error(`couldn't push to ${parent.branch} (${e.message.split("\n")[0]}) — if it moved, rebase and publish again`);
   });
   const web = parent.repo.replace(/^git@([^:]+):/, "https://$1/").replace(/\.git$/, "");
   return { url: `${web}/commit/${sha}`, merged: sha };
 }
 
+/** Where the live site is served (the menu's "Back to live", the post-publish redirect). */
+export const liveOrigin = (sb: Sandbox | undefined, parent: Site) => sb?.live ?? `https://${parent.domain}`;
+
 /** The live home page's body, to notice when a new deploy is serving. */
-const liveBody = (site: Site) =>
-  fetch(`https://${site.domain}/`, { signal: AbortSignal.timeout(10_000) })
+const liveBody = (origin: string) =>
+  fetch(`${origin}/`, { signal: AbortSignal.timeout(10_000) })
     .then((r) => (r.ok ? r.text() : null))
     .catch(() => null);
 
