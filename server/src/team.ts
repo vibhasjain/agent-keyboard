@@ -65,7 +65,7 @@ const notices = new Map<string, Notice>(
 );
 const saveNotices = () => writeDataFile(NOTICES, JSON.stringify([...notices.values()], null, 1));
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);
 const who = (m: ChatMessage) => (m.role === "assistant" ? "Agent" : m.sender ? handleOf(m.sender) : "Owner");
 
@@ -92,7 +92,7 @@ async function summarize(site: Site, excerpt: ChatMessage[], note: string): Prom
   });
 }
 
-async function sendEmail(to: string, subject: string, html: string, text: string, replyTo?: string): Promise<void> {
+export async function sendEmail(to: string, subject: string, html: string, text: string, replyTo?: string): Promise<void> {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("RESEND_API_KEY is not set");
   const res = await fetch("https://api.resend.com/emails", {
@@ -111,7 +111,7 @@ async function sendEmail(to: string, subject: string, html: string, text: string
 }
 
 /** The brand's dark card (see email-templates/invite.html), with an optional amber button. */
-function card(body: string, cta?: { href: string; label: string }): string {
+export function card(body: string, cta?: { href: string; label: string }): string {
   const sans = "font-family:-apple-system,'Segoe UI',Helvetica,Arial,sans-serif;";
   const button = cta
     ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:26px"><tr><td bgcolor="#ffb86b" style="background-color:#ffb86b;border-radius:10px;"><a href="${esc(cta.href)}" style="display:inline-block;padding:13px 26px;${sans}font-size:15px;font-weight:600;line-height:1;color:#141310 !important;text-decoration:none;border-radius:10px;">${esc(cta.label)} &rarr;</a></td></tr></table>`

@@ -227,6 +227,11 @@ app you're using via its own git repo. When editing, describe the **shipped** pr
   check that no other site has a job running (`agent_keyboard_jobs` where `status='running'` and `site_id` is not this
   site, via the service key in the server env); if one is running, wait for it to finish (poll every 30 s, up to 20 min),
   then push. `site/`-only pushes don't restart the server and need no wait.
+- **Feedback replies** (spec 23) — when a **Feedback** note's fix ships (or it's declined or needs the requester), mark its status
+  line, then tell the requester: `curl -sS -X POST http://127.0.0.1:8080/sites/halo/feedback-reply -H "x-ak-internal: $AK_INTERNAL_SECRET"
+  -H "Content-Type: application/json" -d '{"note":"<note name>","message":"<what shipped / what we decided>"}'`. It emails the
+  sender (subject and body carry the `fb_` id) and posts the update, with the id, into the reporting site's chat via the control plane.
+  Every report also gets an acknowledgement email with its id when it arrives.
 - **Docs (Notes)** — product docs live in Notes (`.tmp/notes/`, folders in `.order.json`). **Living docs** describe how
   the product works today; **Incremental docs** hold one PRD/tech spec per change, with a status line on top (open /
   🟡 partly done / ✅ done + date + commit). When you implement an incremental doc, in the same job mark its status and

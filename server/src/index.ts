@@ -38,7 +38,7 @@ import { buildPrompt, mcpFor, isTeammate, runMessageJob, runStreamingSession, In
 import { acquireSiteLock, checkoutPath, commitFile, removeCheckout, ensureCheckout, resetCheckoutToOrigin, startCheckoutPruning, tryAcquireSiteLock } from "./checkouts.js";
 import { stageUpload, stageFileUpload, resolveAttachments, purgeStaleUploads, outputPath } from "./photos.js";
 import { readConversation } from "./conversation.js";
-import { addTeamNote, emailMention, handleOf, markClicked, noticeUrl } from "./team.js";
+import { addTeamNote, card, emailMention, esc, handleOf, markClicked, noticeUrl, sendEmail } from "./team.js";
 import { NOTE_IMAGE_TYPES, deleteNote, listNotes, noteImagePath, noteMeta, noteTree, notesNote, readNote, saveNoteImage, validNoteImage, validNoteName, validOrder, writeNote, writeOrder } from "./notes.js";
 import { startJobsCron } from "./cron.js";
 import { mintRealtimeToken } from "./realtime.js";
@@ -845,6 +845,50 @@ app.post("/sites/:siteId/feedback-inbox", async (req, res) => {
   const daily = (await readNote(site.id, date)) ?? "";
   await writeNote(site.id, date, `${daily}${daily && !daily.endsWith("\n") ? "\n" : ""}- Feedback from ${str(f.site, 100) || "a hosted site"}: [[${name}]]\n`);
   res.json({ ok: true, note: name });
+  const sender = str(f.sender, 200);
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sender) && process.env.RESEND_API_KEY)
+    feedbackEmail(sender, str(f.id, 60), str(f.title, 120), "We got your report and will look at it. We'll email you again when it's fixed or we've decided on it.").catch((e) => console.error("[feedback] ack email failed", e));
+});
+
+/** Email a feedback requester about their report; the subject and body carry its id for tracking. */
+function feedbackEmail(to: string, id: string, title: string, message: string): Promise<void> {
+  const subject = `[${id}] ${title}`;
+  const text = `${message}\n\nReport: ${title}\nRequest id: ${id}`;
+  const html = card(`<p style="margin:0 0 16px;color:#f5f1ea;font-size:17px;">${esc(title)}</p><p style="margin:0 0 16px;white-space:pre-wrap;">${esc(message)}</p><p style="margin:0;font-family:monospace;font-size:13px;color:#6f6a61;">Request id: ${esc(id)}</p>`);
+  return sendEmail(to, subject, html, text);
+}
+
+// Reply loop (spec 23): halo's agent tells a feedback requester what happened to their report,
+// by email and in the hosted site's chat (through the control plane). Body: {note, message}.
+app.post("/sites/:siteId/feedback-reply", authed, async (req, res) => {
+  const { note, message } = (req.body ?? {}) as Record<string, unknown>;
+  const md = authedUser(req)?.id === "internal" && typeof note === "string" && validNoteName(note) ? await readNote(req.params.siteId ?? "", note) : null;
+  const field = (k: string) => md?.match(new RegExp(`^- ${k}: (.+)$`, "m"))?.[1]?.trim() ?? "";
+  const id = field("Id"), sender = field("Sender"), title = md?.match(/^## (.+)$/m)?.[1]?.trim() ?? "";
+  if (!md || !/^fb_\w+$/.test(id) || typeof message !== "string" || !message.trim()) return void res.status(400).json({ error: "a Feedback note (with an Id line) and a message are required" });
+  const text = message.trim().slice(0, 4000);
+  const out: { id: string; emailed?: string; chat?: boolean; errors: string[] } = { id, errors: [] };
+  if (sender.includes("@"))
+    await feedbackEmail(sender, id, title, text).then(() => (out.emailed = sender), (e) => out.errors.push(`email: ${(e as Error).message}`));
+  const r = await fetch(process.env.AK_FEEDBACK_REPLY_URL || "https://agent-keyboard-cloud.fly.dev/cloud/feedback-reply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-ak-feedback": process.env.AK_FEEDBACK_INBOX_SECRET ?? "" },
+    body: JSON.stringify({ id, text: `Update on your Agent Keyboard report "${title}" (${id}):\n\n${text}` }),
+    signal: AbortSignal.timeout(90_000),
+  }).catch((e: Error) => ({ ok: false, status: e.message, text: async () => "" }));
+  if (r.ok) out.chat = true;
+  else out.errors.push(`chat: ${r.status} ${(await r.text()).slice(0, 200)}`);
+  res.json(out);
+});
+
+// The control plane posts a feedback update into this hosted site's chat (internal secret, via the Sprite's loopback).
+app.post("/sites/:siteId/feedback-update", authed, async (req, res) => {
+  const site = getSite(req.params.siteId ?? "");
+  const { text, page } = (req.body ?? {}) as Record<string, unknown>;
+  if (!site || authedUser(req)?.id !== "internal" || typeof text !== "string" || !text.trim()) return void res.status(400).json({ error: "text required" });
+  const path = typeof page === "string" && page.startsWith("/") ? page : "/";
+  await addTeamNote(site.id, await conversationIdFor(site.id, pageSlugFor(site, path)), { id: randomUUID(), role: "user", text: text.slice(0, 5000), tools: [], ts: new Date().toISOString(), sender: "Agent Keyboard" });
+  res.json({ ok: true });
 });
 
 /**
