@@ -89,7 +89,7 @@ const save = () => writeDataFile(FILE, JSON.stringify([...registry.values()], nu
  *  was published merge them into live's notes too. Returns the notes that
  *  conflicted (live's copy kept; the sandbox's is in the archive). */
 async function retire(sb: Sandbox, parent: Site, mark: Partial<Sandbox>, by: string, commit?: string): Promise<string[]> {
-  await gh(parent.repo, `/git/refs/heads/${sb.branch}`, { method: "DELETE" }).catch(() => {});
+  await git(checkoutPath(parent.id), ["push", "origin", "--delete", sb.branch]).catch(() => {});
   const slug = sb.id.split(SEP)[1]!;
   await cp(join(checkoutPath(sb.id), ".tmp", "notes"), join(checkoutPath(parent.id), ".tmp", "notes-archive", slug), { recursive: true }).catch(() => {});
   const conflicts =
@@ -279,6 +279,19 @@ export async function publishSandbox(
   ).trim();
   await git(dir, ["push", `--force-with-lease=refs/heads/${sb.branch}:${tip}`, "origin", `${sha}:refs/heads/${sb.branch}`]);
 
+  const before = await liveBody(parent);
+  const { url, merged } = process.env.GH_TOKEN ? await mergePr(parent, sb, title, summary, by, message, sha) : await fastForward(dir, parent, sha);
+  const conflicts = await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: url }, by, merged);
+  let live = false;
+  for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
+    const now = await liveBody(parent);
+    live = now !== null && now !== before;
+  }
+  return { pr: url, live, conflicts };
+}
+
+/** Open a PR for the squashed commit and merge it (rebase keeps its author; squash if rebase is off). */
+async function mergePr(parent: Site, sb: Sandbox, title: string, summary: string, by: string, message: string, sha: string) {
   const body = `${summary}\n\nPublished by ${by} from the Agent Keyboard sandbox ${sb.branch} (created by ${sb.createdBy ?? "unknown"}).`;
   let res = await gh(parent.repo, "/pulls", { method: "POST", body: JSON.stringify({ title, head: sb.branch, base: parent.branch, body }) });
   let pr = (await res.json().catch(() => null)) as { number?: number; html_url?: string } | null;
@@ -289,7 +302,6 @@ export async function publishSandbox(
     pr = ((await res.json().catch(() => [])) as (typeof pr)[])[0] ?? null;
   }
   if (!pr?.number) throw new Error(`couldn't open the PR (GitHub ${res.status})`);
-  const before = await liveBody(parent);
   res = await gh(parent.repo, `/pulls/${pr.number}/merge`, { method: "PUT", body: JSON.stringify({ merge_method: "rebase", sha }) });
   if (res.status === 405) {
     // Rebase merging is turned off on this repo: squash with our message instead.
@@ -302,13 +314,16 @@ export async function publishSandbox(
     const err = (await res.json().catch(() => null)) as { message?: string } | null;
     throw new Error(`GitHub couldn't merge ${pr.html_url}: ${err?.message ?? res.status} — if ${parent.branch} moved, rebase and publish again`);
   }
-  const conflicts = await retire(sb, parent, { publishedAt: new Date().toISOString(), pr: pr.html_url }, by, ((await res.json().catch(() => null)) as { sha?: string } | null)?.sha ?? sha);
-  let live = false;
-  for (const end = Date.now() + 3 * 60_000; !live && Date.now() < end; await new Promise((r) => setTimeout(r, 5000))) {
-    const now = await liveBody(parent);
-    live = now !== null && now !== before;
-  }
-  return { pr: pr.html_url!, live, conflicts };
+  return { url: pr.html_url!, merged: ((await res.json().catch(() => null)) as { sha?: string } | null)?.sha ?? sha };
+}
+
+/** No GH_TOKEN (a hosted Sprite pushes with its deploy key): no PR, fast-forward live to the squashed commit. */
+async function fastForward(dir: string, parent: Site, sha: string) {
+  await git(dir, ["push", "origin", `${sha}:refs/heads/${parent.branch}`]).catch((e: Error) => {
+    throw new Error(`couldn't push to ${parent.branch} (${e.message.split("\n")[0]}) — if it moved, rebase and publish again`);
+  });
+  const web = parent.repo.replace(/^git@([^:]+):/, "https://$1/").replace(/\.git$/, "");
+  return { url: `${web}/commit/${sha}`, merged: sha };
 }
 
 /** The live home page's body, to notice when a new deploy is serving. */

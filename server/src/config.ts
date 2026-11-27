@@ -225,7 +225,7 @@ export function assertServerConfig(): void {
     if (!process.env[name]?.trim()) process.stderr.write(`agent-keyboard: ${name} unset — ${effect}\n`);
   };
   warn("SUPABASE_SERVICE_KEY", "job persistence disabled — reloaded clients can't re-attach; user provisioning disabled too");
-  warn("GH_TOKEN", "https site repos can't be pushed (ssh repos use the machine's deploy key) and sandbox publish is disabled");
+  warn("GH_TOKEN", "https site repos can't be pushed (ssh repos use the machine's deploy key) (sandbox publish then pushes straight to the live branch, no PR)");
   warn("OPENAI_API_KEY", "voice dictation disabled");
   warn("CLAUDE_CODE_OAUTH_TOKEN", "Claude Code CLI has no auth — jobs will fail (run `claude setup-token`)");
   warn("AK_PUBLIC_URL", "user-provisioning invite links fall back to the Supabase project's Site URL instead of this server's /welcome page");
