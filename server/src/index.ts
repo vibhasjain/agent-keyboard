@@ -276,7 +276,7 @@ app.get("/welcome", (_req, res) => {
   h1 .k{margin-right:10px;vertical-align:-3px}
   p{color:var(--ink2);margin:0 0 22px;font-size:13.5px}
   label{display:block;color:var(--ink3);font-size:11px;letter-spacing:.06em;margin:14px 0 4px}
-  input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;padding:6px 2px;outline:none}
+  input{width:100%;box-sizing:border-box;background:transparent;border:none;border-bottom:1px solid var(--rule);color:var(--ink);font:inherit;font-size:16px;padding:6px 2px;outline:none}
   input:focus{border-bottom-color:var(--amber)}
   button{margin-top:24px;background:var(--amber);color:#141310;border:none;border-radius:8px;padding:10px 18px;font:600 13.5px ui-monospace,monospace;cursor:pointer}
   button:disabled{opacity:.5;cursor:default}

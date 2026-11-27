@@ -65,7 +65,7 @@
 .akn-list .akn-folder button:not(.akn-toggle):not(.akn-del) { display: flex; align-items: center; gap: 8px; padding-left: 5px; color: #f5f1ea; } /* name stays in line with its notes (30px) */
 .akn-folder button span { overflow: hidden; text-overflow: ellipsis; }
 .akn-folder-name {
-  flex: 1; min-width: 0; font: inherit; color: #f5f1ea; background: #0a0a0a;
+  flex: 1; min-width: 0; font: inherit; font-size: 16px; color: #f5f1ea; background: #0a0a0a;
   border: 1px solid var(--ak-accent); border-radius: 6px; padding: 6px 9px; outline: none;
 }
 .akn-newmenu {
