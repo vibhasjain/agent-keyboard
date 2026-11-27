@@ -273,6 +273,12 @@ export function resolvePushBranch(site: Site): string {
   return site.pushBranch.replace(/\{ts\}/g, timestampSlug());
 }
 
+// Hosted instances (the control plane sets AK_FEEDBACK_KEY) can send Agent Keyboard bug reports (spec 23).
+function feedbackNote(siteId: string): string {
+  if (!process.env.AK_FEEDBACK_KEY) return "";
+  return ` Only when the user explicitly asks to report something to Agent Keyboard (the team that runs this service), draft a short bug report, show it, and ask with the options "Send it" / "Don't send"; after "Send it", run \`curl -sS -X POST http://127.0.0.1:${process.env.PORT ?? 8080}/sites/${siteId}/feedback -H "x-ak-internal: $AK_INTERNAL_SECRET" -H "Content-Type: application/json" -d @- <<'EOF'\` with the JSON \`{"title":"<one line>","body":"<the report>","page":"<path you were sent from>","sender":"<requester email>"}\` (add \`"note":"<name>"\` to attach a note the user named) and tell them its id. Never send one unasked, and never include secrets, tokens, env values or anything the user didn't approve.`;
+}
+
 // ~6-line operating scope — the ONLY server-authored prompt text. Everything
 // else (how to make the change) is the agent's own judgment + the repo's files.
 // When pushBranch differs from the deploy branch, the push clause redirects the
@@ -430,7 +436,7 @@ function streamArgs(
     "--setting-sources",
     "user,project",
     "--append-system-prompt",
-    scopeNote(site, pushBranch, harness.settings.sandbox) + (oauth ? mcpOAuthNote(key, site.id) : "") + " " + harnessNote(site.id, harness, usage),
+    scopeNote(site, pushBranch, harness.settings.sandbox) + (oauth ? mcpOAuthNote(key, site.id) : "") + feedbackNote(site.id) + " " + harnessNote(site.id, harness, usage),
   ];
 }
 
