@@ -61,7 +61,7 @@ owner's site ──<script src="…/widget.js" data-site="mysite">──┐
   for any other host's pattern (`{branch}` = `ak/<slug>` with `/` → `-`). The agent offers one for bigger changes and
   creates it via `POST /sites/:id/sandboxes` (internal secret): pushes `ak/<slug>`, waits for the preview, starts the
   task in a fork of the conversation (`--resume <parent> --fork-session`), and the live bar redirects there with a
-  single-use sign-in handoff (`POST /auth/handoff` → GoTrue magic-link `token_hash` → `#ak_handoff=`). A sandbox is a
+  single-use sign-in handoff (`POST /auth/handoff` → GoTrue magic-link `token_hash` → `#ak_handoff=`; a hosted Sprite has no service key, so it asks the control plane's `POST /cloud/handoff`, which mints it from the caller's own verified session). A sandbox is a
   virtual site `<id>--sb-<slug>` (`server/src/sandboxes.ts`, registry in `/data/agent-keyboard/sandboxes.json`);
   calls from a preview origin are routed to it. **Publish (M2):** asked to publish, the sandbox's agent rebases onto
   live and force-pushes, shows a summary with a "Publish to live" option, then calls `POST /sites/<sandbox>/publish`

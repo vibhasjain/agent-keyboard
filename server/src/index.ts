@@ -1069,18 +1069,26 @@ app.post("/sites/:siteId/import", authed, async (req, res) => {
  */
 app.post("/auth/handoff", authed, async (req, res) => {
   const user = authedUser(req);
-  const key = process.env.SUPABASE_SERVICE_KEY ?? "";
-  if (!user?.email || user.agentKey || ["internal", "relay"].includes(user.id) || !key) {
+  const key = process.env.SUPABASE_SERVICE_KEY ?? "", cloud = process.env.AK_FEEDBACK_KEY ?? "";
+  if (!user?.email || user.agentKey || ["internal", "relay"].includes(user.id) || !(key || cloud)) {
     res.status(400).json({ error: "handoff needs a signed-in user and SUPABASE_SERVICE_KEY" });
     return;
   }
-  const r = await fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/generate_link`, {
-    method: "POST",
-    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "magiclink", email: user.email }),
-  }).catch(() => null);
-  const data = (await r?.json().catch(() => null)) as { hashed_token?: string; properties?: { hashed_token?: string } } | null;
-  const token = data?.hashed_token ?? data?.properties?.hashed_token;
+  // A hosted Sprite has no service key: the control plane mints it from the caller's own session (its key shows it's one of ours).
+  const r = await (key
+    ? fetch(`${process.env.SUPABASE_URL}/auth/v1/admin/generate_link`, {
+        method: "POST",
+        headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "magiclink", email: user.email }),
+      })
+    : fetch(process.env.AK_CLOUD_HANDOFF_URL || "https://agent-keyboard-cloud.fly.dev/cloud/handoff", {
+        method: "POST",
+        headers: { "x-ak-feedback": cloud, Authorization: req.header("authorization") ?? "" },
+        signal: AbortSignal.timeout(15e3),
+      })
+  ).catch(() => null);
+  const data = (await r?.json().catch(() => null)) as { hashed_token?: string; token_hash?: string; properties?: { hashed_token?: string } } | null;
+  const token = data?.hashed_token ?? data?.properties?.hashed_token ?? data?.token_hash;
   if (!token) {
     res.status(502).json({ error: "couldn't mint a handoff token" });
     return;
