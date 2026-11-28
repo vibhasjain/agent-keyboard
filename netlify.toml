@@ -30,6 +30,11 @@
   status = 200
   force = true
 [[redirects]]
+  from = "/anymcp"
+  to = "https://agent-keyboard-cloud.fly.dev/anymcp"
+  status = 200
+  force = true
+[[redirects]]
   from = "/cloud/*"
   to = "https://agent-keyboard-cloud.fly.dev/cloud/:splat"
   status = 200
