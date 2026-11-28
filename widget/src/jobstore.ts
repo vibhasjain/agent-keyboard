@@ -571,6 +571,9 @@ function onTurnComplete(data: Record<string, unknown>): void {
     // it idle so the bar shows the plain composer, not a spinner+timer "working" pill.
     idle: pendingUserTexts.length === 0,
   })
+  // Sends that queued client-side (before the session was streaming, or a failed append)
+  // go now, in order — start() injects them into this resting session.
+  if (pendingUserTexts.length === 0 && !queue[0]?.serverJob) dispatchQueue()
   // A streaming session's turns end here, not in finishDone: swap the page in once a shipped turn is live
   // (not when the turn redirects to a sandbox or back to live).
   const git = (data.git ?? {}) as GitInfo

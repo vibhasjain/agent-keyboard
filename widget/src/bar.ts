@@ -971,7 +971,8 @@ export function mountBar(shadow: ShadowRoot): void {
     if (!id || id === 'agentkeyboard') return
     if (!earlier.has(id)) later.add(id)
     firePill()
-    chat.announceDock()
+    // rule 4: while open as a full-screen sheet, a later bar must also hear our open (rule 1).
+    if (!chat.announceDock() && getState().ui.mode === 'expanded') window.dispatchEvent(new CustomEvent('agentbar:open', { detail: { id: 'agentkeyboard' } }))
   })
   window.addEventListener('agentbar:pill', (e) => {
     const d = (e as CustomEvent).detail
