@@ -62,7 +62,8 @@ async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
 // 39: the CSS strings are minified at build time (−2.3 KB, 2026-11-27).
 // 39.1: a closing bar leaves another docked bar's page margin alone (agentbar.md rule 3, 2026-11-28).
 // 39.25: yield the corner box to another bar's full-screen sheet; re-announce our dock on hello (agentbar.md rules 1 and 4, 2026-11-28).
-await bundle('src/index.ts', 'dist/widget.js', 39.25)
+// 39.4: the live swap also watches same-origin iframes and reloads just the changed frame (fb_fb04f2750583, 2026-11-28).
+await bundle('src/index.ts', 'dist/widget.js', 39.4)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)
 
 // The notes editor (Milkdown Crepe), lazy-loaded by the widget only when Notes
