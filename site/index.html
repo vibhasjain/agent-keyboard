@@ -117,6 +117,7 @@ a:hover{ color:var(--amber); }
 .acct-menu summary:focus-visible{ outline:2px solid rgba(255,184,107,.5); outline-offset:2px; }
 .acct-menu img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
 .acct-menu > div{ position:absolute; right:0; top:42px; z-index:10; display:flex; flex-direction:column; gap:8px; white-space:nowrap; background:var(--bg-2); border:1px solid var(--rule-2); border-radius:12px; padding:12px 16px; font-size:14px; color:var(--ink-3); }
+.acct-menu > div::before{ content:""; position:absolute; left:0; right:0; top:-11px; height:11px; } /* hover bridge across the gap */
 .acct-menu button{ border:0; background:none; padding:0; text-align:left; font:inherit; color:var(--ink); cursor:pointer; } .acct-menu a{ color:var(--ink); text-decoration:none; } .acct-menu a, .acct-menu button{ display:flex; align-items:center; gap:10px; } .acct-menu svg{ color:var(--ink-3); flex:none; } .acct-menu button:hover, .acct-menu a:hover{ color:var(--amber); }
 
 /* ---- hero ---- */
@@ -361,6 +362,10 @@ footer .meta a:hover{ color:var(--amber); }
           menu.querySelector('button').onclick = () => fetch('/cloud/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(() => location.reload());
           addEventListener('click', e => { if (!menu.contains(e.target)) menu.open = false; });
           addEventListener('keydown', e => { if (e.key === 'Escape') menu.open = false; });
+          if (matchMedia('(hover: hover)').matches) { // mouse: open on hover; touch keeps tap-to-open
+            addEventListener('mouseover', e => { menu.open = menu.contains(e.target); });
+            menu.querySelector('summary').addEventListener('click', e => { if (e.detail) e.preventDefault(); });
+          }
           acct.replaceWith(menu);
           menu.closest('.top').classList.add('signed-in');
         }
