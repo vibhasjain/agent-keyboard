@@ -61,6 +61,7 @@ const ICON_PATHS: Record<string, string> = {
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" fill="none"/>',
   chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" fill="none"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none"/><path d="m3.5 7 8.5 6 8.5-6" fill="none"/>',
+  copy: '<rect x="8" y="8" width="13" height="13" rx="2" fill="none"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" fill="none"/>',
   check: '<path d="M4.5 12.5 10 18 19.5 6.5" fill="none"/>',
   retry: '<path d="M20 12a8 8 0 1 1-2.5-5.8M20 3v4.5h-4.5" fill="none"/>',
   restart: '<path d="M3 12a9 9 0 1 0 3-6.7M3 4v5h5" fill="none"/><path d="M12 8v5l3 2" fill="none"/>',

@@ -297,7 +297,8 @@ export async function open(opts: NotesOptions): Promise<void> {
   const status = h('span', 'akn-status')
   status.setAttribute('aria-live', 'polite')
   const closeBtn = iconBtn('akn-close', 'x', 'Close notes')
-  top.append(back, closeBtn)
+  const copyBtn = iconBtn('akn-copy', 'copy', 'Copy note')
+  top.append(back, copyBtn, closeBtn)
   const page = h('div', 'akn-page')
   main.append(page)
   const body = h('div', 'akn-body')
@@ -1029,6 +1030,15 @@ export async function open(opts: NotesOptions): Promise<void> {
     if (!newMenu.hidden && !sideHead.contains(e.target as Node)) showMenu(false)
   })
   closeBtn.onclick = () => void close()
+  copyBtn.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(markdown)
+      copyBtn.replaceChildren(icon('check', 18))
+      setTimeout(() => copyBtn.replaceChildren(icon('copy', 18)), 1500)
+    } catch {
+      setStatus("Couldn't copy", true)
+    }
+  }
   const closeNote = () => {
     crepe?.destroy()
     crepe = null
