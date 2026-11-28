@@ -921,6 +921,7 @@ export function mountBar(shadow: ShadowRoot): void {
     // Bars on one page take turns: announce opening, and minimize when another bar opens (listener below).
     if (view === 'expanded' && lastView !== 'expanded') setYield(null)
     if (view === 'expanded' && lastView !== 'expanded') window.dispatchEvent(new CustomEvent('agentbar:open', { detail: { id: 'agentkeyboard' } }))
+    if (view !== 'expanded' && lastView === 'expanded') window.dispatchEvent(new CustomEvent('agentbar:close', { detail: { id: 'agentkeyboard' } }))
 
     placeFooter(view)
     // Leaving the transcript does NOT stop the mic: the owner minimizes to browse the
@@ -931,7 +932,7 @@ export function mountBar(shadow: ShadowRoot): void {
   }
 
   // agentbar.md rule 1: another bar opening a full-screen sheet (not docked) hides our
-  // corner box until that bar's pill is back or it docks. 0 = not yielding.
+  // corner box until that bar's pill is back, it docks, or it fires agentbar:close. 0 = not yielding.
   let yieldTo: string | null = null
   const setYield = (id: string | null) => {
     if (yieldTo === id) return
@@ -954,6 +955,10 @@ export function mountBar(shadow: ShadowRoot): void {
     docks.set(d.id, w)
     host.style.setProperty('--ak-aside', `${Math.max(0, ...docks.values())}px`)
     if (w > 0 && d.id === yieldTo) setYield(null)
+  })
+  // A bar whose sheet closed stops covering us even if its pill stays hidden (e.g. anymcp's "Don't show again").
+  window.addEventListener('agentbar:close', (e) => {
+    if ((e as CustomEvent).detail?.id === yieldTo) setYield(null)
   })
   // agentbar.md rule 4: corner boxes stack in load order. Bars that answer our hello
   // loaded earlier and we rise above each one's showing box; bars whose hello comes
