@@ -60,7 +60,8 @@ async function bundle(entry, outfile, gzipBudgetKB, extra = {}) {
 // 39.5: moving a site's one-tap approval with the dry run and opt-ins (spec 20, 2026-11-26).
 // 41: the live page swap after a shipped change, stylesheet files too (spec 26, 2026-11-27).
 // 39: the CSS strings are minified at build time (−2.3 KB, 2026-11-27).
-await bundle('src/index.ts', 'dist/widget.js', 39)
+// 39.1: a closing bar leaves another docked bar's page margin alone (agentbar.md rule 3, 2026-11-28).
+await bundle('src/index.ts', 'dist/widget.js', 39.1)
 await bundle('src/demo/index.ts', 'dist/demo.js', 45)
 
 // The notes editor (Milkdown Crepe), lazy-loaded by the widget only when Notes

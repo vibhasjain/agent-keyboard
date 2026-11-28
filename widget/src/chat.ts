@@ -632,6 +632,9 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     return se.scrollHeight > se.clientHeight && !hidden(document.documentElement) && !hidden(document.body)
   }
   let dockMargin = ''
+  // Another bar's docked panel (agentbar:dock, mirrored into --ak-aside by bar.ts) owns
+  // the page margin now, even when its width equals ours, so undocking must not clear it.
+  const otherDocked = () => parseFloat(host.style.getPropertyValue('--ak-aside')) > 0
   const applyDock = (animate = true) => {
     const expanded = getState().ui.mode === 'expanded'
     host.classList.toggle('ak-docked', wide.matches)
@@ -652,14 +655,18 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
           root.transform = 'translateX(0)'
         }
       }
-      if (margin || root.marginRight === dockMargin) root.marginRight = margin
+      const mine = dockMargin
+      if (margin) root.marginRight = margin
+      // On a switch the other bar may announce its dock just after it opens,
+      // so wait a tick before clearing what still looks like our margin.
+      else setTimeout(() => { if (!dockMargin && !otherDocked() && root.marginRight === mine) root.marginRight = '' })
       dockMargin = margin
       window.dispatchEvent(new CustomEvent('agentbar:dock', { detail: { id: 'agentkeyboard', width: margin ? overlay.offsetWidth : 0 } }))
       // Undocking keeps the containment until the page has finished widening, so
       // a shell never jumps back to the viewport mid-slide.
       marginTimer = setTimeout(() => {
         root.transition = ''
-        if (!dockMargin) root.width = root.height = root.transform = ''
+        if (!dockMargin && !otherDocked()) root.width = root.height = root.transform = ''
       }, ms)
     }
     if (expanded && !wide.matches) lockBody()
