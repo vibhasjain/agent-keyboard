@@ -76,10 +76,13 @@ The host page can drive the bar through `window.__agentKeyboard`:
   show a busy state and what the agent is doing.
 - `agentbar:open` (a `CustomEvent` on `window`, shared with other chat bars): the bar fires it with
   `detail: { id: 'agentkeyboard' }` when its transcript opens, and minimizes when another bar fires it
-  with a different `id`, so two bars on one page take turns.
+  with a different `id`, so two bars on one page take turns. If that bar isn't docked (a full-screen sheet),
+  the corner box also hides (`agentbar:pill` height 0) until that bar's pill or dock comes back.
 - `agentbar:dock` (same channel): when the docked transcript (wide screens) opens or closes, the bar fires
   `detail: { id: 'agentkeyboard', width }` (the panel's width, or 0); when another bar fires it, the corner
-  box moves left by that `width` (back on 0), so it sits beside that bar's docked panel.
+  box moves left by the widest such `width` (back on 0), so it sits beside that bar's docked panel. While
+  docked, the bar answers another bar's `agentbar:hello` with its `agentbar:dock` as well as its `agentbar:pill`.
+- The full convention (four rules, including pill stacking) is https://github.com/anymcp-chat/agentbar.md.
 
 ## Protocol
 

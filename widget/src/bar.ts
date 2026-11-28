@@ -919,6 +919,7 @@ export function mountBar(shadow: ShadowRoot): void {
     }
 
     // Bars on one page take turns: announce opening, and minimize when another bar opens (listener below).
+    if (view === 'expanded' && lastView !== 'expanded') setYield(null)
     if (view === 'expanded' && lastView !== 'expanded') window.dispatchEvent(new CustomEvent('agentbar:open', { detail: { id: 'agentkeyboard' } }))
 
     placeFooter(view)
@@ -929,15 +930,30 @@ export function mountBar(shadow: ShadowRoot): void {
     lastView = view
   }
 
+  // agentbar.md rule 1: another bar opening a full-screen sheet (not docked) hides our
+  // corner box until that bar's pill is back or it docks. 0 = not yielding.
+  let yieldTo: string | null = null
+  const setYield = (id: string | null) => {
+    if (yieldTo === id) return
+    yieldTo = id
+    host.classList.toggle('ak-yield', id != null)
+    firePill()
+  }
   window.addEventListener('agentbar:open', (e) => {
-    if ((e as CustomEvent).detail?.id !== 'agentkeyboard' && getState().ui.mode === 'expanded') collapseToCorner()
+    const id = (e as CustomEvent).detail?.id
+    if (!id || id === 'agentkeyboard') return
+    if (getState().ui.mode === 'expanded') collapseToCorner()
+    if (!((docks.get(id) ?? 0) > 0)) setYield(id)
   })
-  // Another bar docked its panel to the right: park the corner box beside it (chat.ts fires ours).
+  // Other bars' docked panels: park the corner box beside the widest (chat.ts fires ours).
+  const docks = new Map<string, number>()
   window.addEventListener('agentbar:dock', (e) => {
     const d = (e as CustomEvent).detail
-    if (d?.id === 'agentkeyboard') return
-    const w = Number(d?.width)
-    host.style.setProperty('--ak-aside', w > 0 ? `${w}px` : '0px')
+    if (!d?.id || d.id === 'agentkeyboard') return
+    const w = Math.max(0, Number(d.width) || 0)
+    docks.set(d.id, w)
+    host.style.setProperty('--ak-aside', `${Math.max(0, ...docks.values())}px`)
+    if (w > 0 && d.id === yieldTo) setYield(null)
   })
   // agentbar.md rule 4: corner boxes stack in load order. Bars that answer our hello
   // loaded earlier and we rise above each one's showing box; bars whose hello comes
@@ -955,10 +971,13 @@ export function mountBar(shadow: ShadowRoot): void {
     if (!id || id === 'agentkeyboard') return
     if (!earlier.has(id)) later.add(id)
     firePill()
+    chat.announceDock()
   })
   window.addEventListener('agentbar:pill', (e) => {
     const d = (e as CustomEvent).detail
-    if (!d?.id || d.id === 'agentkeyboard' || later.has(d.id)) return
+    if (!d?.id || d.id === 'agentkeyboard') return
+    if (d.id === yieldTo && Number(d.height) > 0) setYield(null)
+    if (later.has(d.id)) return
     earlier.set(d.id, Math.max(0, Number(d.height) || 0))
     const below = [...earlier.values()].reduce((sum, h) => (h > 0 ? sum + h + 12 : sum), 0)
     host.style.setProperty('--ak-below', `${below}px`)

@@ -17,6 +17,8 @@ export interface Chat {
   resetConversation: () => void
   /** Refetch the history tail (e.g. after a teammate note that never became a job). */
   refresh: () => void
+  /** Re-fire our agentbar:dock while docked (agentbar.md rule 4: reply to a later bar's hello). */
+  announceDock: () => void
 }
 
 export interface ChatDeps {
@@ -1121,5 +1123,8 @@ export function mountChat(shadow: ShadowRoot, deps: ChatDeps): Chat {
     if (st.ui.mode === 'expanded' && (st.job.phase === 'streaming' || st.job.phase === 'sending')) updateLive()
   }, 1000)
 
-  return { footerEl: footer, resetConversation, refresh: () => void loadHistory() }
+  const announceDock = () => {
+    if (dockMargin) window.dispatchEvent(new CustomEvent('agentbar:dock', { detail: { id: 'agentkeyboard', width: parseFloat(dockMargin) } }))
+  }
+  return { footerEl: footer, resetConversation, refresh: () => void loadHistory(), announceDock }
 }

@@ -45,6 +45,7 @@ button::-moz-focus-inner{ border:0; }
   touch-action:pan-y; /* no pinch-zoom / double-tap-zoom from the bar */
 }
 .ak-zone{ pointer-events:none; }
+:host(.ak-yield) :is(.ak-mini, .ak-bar, .ak-browser-corner){ display:none !important; } /* agentbar.md rule 1: another bar's full-screen sheet is up */
 .ak-pill, .ak-composer, .ak-overlay, .ak-lightbox, .ak-mini,
 .ak-browser-indicator, .ak-screen-lightbox{ pointer-events:auto; }
 /* The corner box: whichever of the rectangle / streaming pill is showing, parked
